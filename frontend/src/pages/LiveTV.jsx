@@ -378,7 +378,12 @@ const LiveTV = () => {
                     {index + 1}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h4 className="font-medium text-sm truncate">{channel.name}</h4>
+                    <h4 className="font-medium text-sm truncate flex items-center gap-1">
+                      {channel.name}
+                      {channel.random_play && (
+                        <Shuffle size={12} className="text-purple-400 flex-shrink-0" />
+                      )}
+                    </h4>
                     <p className="text-xs text-gray-500 truncate">{channel.category}</p>
                   </div>
                   {currentChannel?.id === channel.id && (
