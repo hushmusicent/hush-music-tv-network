@@ -146,6 +146,6 @@ Build a TV network app like Strimm for Hush Music TV Network with:
 - User requested to delete first 7 channels but only 1 channel existed in database (no action needed)
 
 ## Testing
-- Backend: 32/32 tests passed (pytest in /app/backend/tests/)
+- Backend: 39/39 tests passed (pytest in /app/backend/tests/)
 - Frontend: All features tested and working
-- Test report: /app/test_reports/iteration_9.json
+- Test report: /app/test_reports/iteration_10.json
