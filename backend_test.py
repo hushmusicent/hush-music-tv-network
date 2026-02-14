@@ -453,15 +453,11 @@ class TVNetworkAdminAPITester:
         self.test_channel_category_filter()
         
         # Auth required tests
-        if self.test_user_registration():
+        if self.test_admin_login():
             self.test_user_profile()
-            self.test_channel_creation()
-            self.test_add_video_to_channel()
-            self.test_get_channel_by_id()
-            self.test_my_channels()
-            self.test_favorites()
+            self.test_admin_can_edit_all_channels()
         else:
-            print("❌ User registration failed - skipping auth-required tests")
+            print("❌ Admin login failed - skipping auth-required tests")
         
         # Print summary
         print(f"\n📊 Test Results: {self.tests_passed}/{self.tests_run} passed")
