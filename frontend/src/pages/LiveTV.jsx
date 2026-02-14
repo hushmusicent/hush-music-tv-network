@@ -26,10 +26,35 @@ import { toast } from 'sonner';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 
+// Seeded random function for consistent shuffling across all viewers
+const seededRandom = (seed) => {
+  const x = Math.sin(seed) * 10000;
+  return x - Math.floor(x);
+};
+
+// Shuffle array using a seed (date-based so all viewers see same order)
+const shuffleWithSeed = (array, seed) => {
+  const shuffled = [...array];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(seededRandom(seed + i) * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+};
+
+// Get today's seed - changes daily so playlist order changes each day
+const getDailySeed = () => {
+  const now = new Date();
+  return now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
+};
+
 // Calculate the current position in a channel's playlist based on real time
 // This ensures all viewers see the same video at the same time
-const calculateLivePosition = (videos, baseTime = null) => {
-  if (!videos || videos.length === 0) return { videoIndex: 0, seekTime: 0 };
+const calculateLivePosition = (videos, randomPlay = false, baseTime = null) => {
+  if (!videos || videos.length === 0) return { videoIndex: 0, seekTime: 0, shuffledVideos: [] };
+  
+  // If random play is enabled, shuffle videos consistently for all viewers
+  const playlistVideos = randomPlay ? shuffleWithSeed(videos, getDailySeed()) : videos;
   
   const now = baseTime || new Date();
   const startOfDay = new Date(now);
@@ -40,29 +65,30 @@ const calculateLivePosition = (videos, baseTime = null) => {
   
   // Calculate total playlist duration
   let totalDuration = 0;
-  videos.forEach(v => {
+  playlistVideos.forEach(v => {
     totalDuration += v.duration || 300; // Default 5 min if no duration
   });
   
-  if (totalDuration === 0) return { videoIndex: 0, seekTime: 0 };
+  if (totalDuration === 0) return { videoIndex: 0, seekTime: 0, shuffledVideos: playlistVideos };
   
   // Find position in the looped playlist
   const positionInPlaylist = secondsSinceMidnight % totalDuration;
   
   // Find which video and at what time
   let accumulated = 0;
-  for (let i = 0; i < videos.length; i++) {
-    const videoDuration = videos[i].duration || 300;
+  for (let i = 0; i < playlistVideos.length; i++) {
+    const videoDuration = playlistVideos[i].duration || 300;
     if (accumulated + videoDuration > positionInPlaylist) {
       return {
         videoIndex: i,
-        seekTime: positionInPlaylist - accumulated
+        seekTime: positionInPlaylist - accumulated,
+        shuffledVideos: playlistVideos
       };
     }
     accumulated += videoDuration;
   }
   
-  return { videoIndex: 0, seekTime: 0 };
+  return { videoIndex: 0, seekTime: 0, shuffledVideos: playlistVideos };
 };
 
 // Generate schedule for a channel
