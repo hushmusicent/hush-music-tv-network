@@ -113,12 +113,13 @@ const Home = () => {
                 </Button>
 
                 <Button
+                  onClick={() => navigate('/live')}
                   variant="outline"
-                  onClick={() => navigate('/browse')}
-                  className="border-white/30 text-white hover:bg-white/10 px-8 py-6 text-lg"
-                  data-testid="browse-btn"
+                  className="border-red-500/50 text-white hover:bg-red-500/20 px-8 py-6 text-lg"
+                  data-testid="live-tv-btn"
                 >
-                  Browse All
+                  <Radio size={20} className="mr-2 text-red-500" />
+                  Live TV
                 </Button>
               </div>
             </div>
