@@ -782,6 +782,9 @@ async def health():
 # Include router and middleware
 app.include_router(api_router)
 
+# Serve uploaded videos
+app.mount("/api/videos", StaticFiles(directory=str(UPLOADS_DIR)), name="videos")
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
