@@ -12,6 +12,7 @@ Build a TV network app like Strimm for Hush Music TV Network with:
 - Dark theme (Netflix-style)
 - TV guide, scheduling, channel categories
 - Embeddable players for channels and full network
+- Random play option for channels (shuffle video order)
 
 ## User Personas
 1. **Admin/Content Curator**: The single administrator who manages all channels, uploads videos, and controls content
