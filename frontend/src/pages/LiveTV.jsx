@@ -20,7 +20,8 @@ import {
   Trash2,
   X,
   Save,
-  ExternalLink
+  ExternalLink,
+  Shuffle
 } from 'lucide-react';
 import { toast } from 'sonner';
 
