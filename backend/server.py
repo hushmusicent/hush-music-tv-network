@@ -54,7 +54,12 @@ class UserResponse(BaseModel):
     email: str
     username: str
     avatar: Optional[str] = None
+    is_admin: bool = False
     created_at: str
+
+# Admin credentials
+ADMIN_EMAIL = "Hushmusicent419@gmail.com"
+ADMIN_PASSWORD = "sstisdd419"
 
 class TokenResponse(BaseModel):
     access_token: str
@@ -163,35 +168,8 @@ async def require_user(credentials: HTTPAuthorizationCredentials = Depends(secur
 
 @api_router.post("/auth/register", response_model=TokenResponse)
 async def register(data: UserCreate):
-    # Check if email exists
-    existing = await db.users.find_one({"email": data.email})
-    if existing:
-        raise HTTPException(status_code=400, detail="Email already registered")
-    
-    # Check if username exists
-    existing_username = await db.users.find_one({"username": data.username})
-    if existing_username:
-        raise HTTPException(status_code=400, detail="Username already taken")
-    
-    user_id = str(uuid.uuid4())
-    now = datetime.now(timezone.utc).isoformat()
-    
-    user_doc = {
-        "id": user_id,
-        "email": data.email,
-        "username": data.username,
-        "password_hash": hash_password(data.password),
-        "avatar": None,
-        "favorites": [],
-        "created_at": now
-    }
-    
-    await db.users.insert_one(user_doc)
-    
-    token = create_token(user_id)
-    user_response = UserResponse(id=user_id, email=data.email, username=data.username, avatar=None, created_at=now)
-    
-    return TokenResponse(access_token=token, user=user_response)
+    # Registration is disabled - admin only system
+    raise HTTPException(status_code=403, detail="Registration is disabled. Admin only system.")
 
 @api_router.post("/auth/login", response_model=TokenResponse)
 async def login(data: UserLogin):
@@ -205,6 +183,7 @@ async def login(data: UserLogin):
         email=user["email"],
         username=user["username"],
         avatar=user.get("avatar"),
+        is_admin=user.get("is_admin", False),
         created_at=user["created_at"]
     )
     
@@ -217,6 +196,7 @@ async def get_me(user: dict = Depends(require_user)):
         email=user["email"],
         username=user["username"],
         avatar=user.get("avatar"),
+        is_admin=user.get("is_admin", False),
         created_at=user["created_at"]
     )
 
@@ -297,7 +277,8 @@ async def update_channel(channel_id: str, data: ChannelUpdate, user: dict = Depe
     channel = await db.channels.find_one({"id": channel_id}, {"_id": 0})
     if not channel:
         raise HTTPException(status_code=404, detail="Channel not found")
-    if channel["owner_id"] != user["id"]:
+    # Admin can edit any channel
+    if channel["owner_id"] != user["id"] and not user.get("is_admin", False):
         raise HTTPException(status_code=403, detail="Not authorized")
     
     update_data = {k: v for k, v in data.model_dump().items() if v is not None}
@@ -312,7 +293,8 @@ async def delete_channel(channel_id: str, user: dict = Depends(require_user)):
     channel = await db.channels.find_one({"id": channel_id})
     if not channel:
         raise HTTPException(status_code=404, detail="Channel not found")
-    if channel["owner_id"] != user["id"]:
+    # Admin can delete any channel
+    if channel["owner_id"] != user["id"] and not user.get("is_admin", False):
         raise HTTPException(status_code=403, detail="Not authorized")
     
     await db.channels.delete_one({"id": channel_id})
@@ -328,7 +310,8 @@ async def add_video_to_channel(channel_id: str, data: VideoCreate, user: dict = 
     channel = await db.channels.find_one({"id": channel_id}, {"_id": 0})
     if not channel:
         raise HTTPException(status_code=404, detail="Channel not found")
-    if channel["owner_id"] != user["id"]:
+    # Admin can add videos to any channel
+    if channel["owner_id"] != user["id"] and not user.get("is_admin", False):
         raise HTTPException(status_code=403, detail="Not authorized")
     
     video = VideoItem(
@@ -352,7 +335,8 @@ async def remove_video_from_channel(channel_id: str, video_id: str, user: dict =
     channel = await db.channels.find_one({"id": channel_id})
     if not channel:
         raise HTTPException(status_code=404, detail="Channel not found")
-    if channel["owner_id"] != user["id"]:
+    # Admin can remove videos from any channel
+    if channel["owner_id"] != user["id"] and not user.get("is_admin", False):
         raise HTTPException(status_code=403, detail="Not authorized")
     
     await db.channels.update_one(
@@ -367,7 +351,8 @@ async def reorder_videos(channel_id: str, video_ids: List[str], user: dict = Dep
     channel = await db.channels.find_one({"id": channel_id}, {"_id": 0})
     if not channel:
         raise HTTPException(status_code=404, detail="Channel not found")
-    if channel["owner_id"] != user["id"]:
+    # Admin can reorder videos in any channel
+    if channel["owner_id"] != user["id"] and not user.get("is_admin", False):
         raise HTTPException(status_code=403, detail="Not authorized")
     
     videos = channel.get("videos", [])
@@ -390,7 +375,8 @@ async def add_schedule_slot(channel_id: str, data: ScheduleSlotCreate, user: dic
     channel = await db.channels.find_one({"id": channel_id}, {"_id": 0})
     if not channel:
         raise HTTPException(status_code=404, detail="Channel not found")
-    if channel["owner_id"] != user["id"]:
+    # Admin can add schedule to any channel
+    if channel["owner_id"] != user["id"] and not user.get("is_admin", False):
         raise HTTPException(status_code=403, detail="Not authorized")
     
     slot = ScheduleSlot(
@@ -412,7 +398,8 @@ async def remove_schedule_slot(channel_id: str, slot_id: str, user: dict = Depen
     channel = await db.channels.find_one({"id": channel_id})
     if not channel:
         raise HTTPException(status_code=404, detail="Channel not found")
-    if channel["owner_id"] != user["id"]:
+    # Admin can remove schedule from any channel
+    if channel["owner_id"] != user["id"] and not user.get("is_admin", False):
         raise HTTPException(status_code=403, detail="Not authorized")
     
     await db.channels.update_one(
