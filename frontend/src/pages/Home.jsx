@@ -60,7 +60,7 @@ const Home = () => {
     'https://images.unsplash.com/photo-1576307302704-b6142d572612?w=1920';
 
   return (
-    <div className="min-h-screen" data-testid="home-page">
+    <div className="min-h-screen overflow-y-auto" data-testid="home-page">
       {/* Hero Section */}
       <section className="relative h-[70vh] min-h-[500px] overflow-hidden">
         {/* Background Image */}

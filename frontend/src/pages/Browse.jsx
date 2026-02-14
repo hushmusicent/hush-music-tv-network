@@ -88,7 +88,7 @@ const Browse = () => {
   const hasFilters = selectedCategory !== 'All' || searchParams.get('search');
 
   return (
-    <div className="min-h-screen px-6 md:px-12 lg:px-16 py-8" data-testid="browse-page">
+    <div className="min-h-screen overflow-y-auto px-6 md:px-12 lg:px-16 py-8" data-testid="browse-page">
       {/* Header */}
       <div className="mb-8">
         <h1 className="font-heading text-4xl md:text-5xl tracking-tight mb-2">

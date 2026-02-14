@@ -93,7 +93,7 @@ const TVGuide = () => {
   };
 
   return (
-    <div className="min-h-screen px-6 md:px-12 lg:px-16 py-8" data-testid="tv-guide-page">
+    <div className="min-h-screen overflow-y-auto px-6 md:px-12 lg:px-16 py-8" data-testid="tv-guide-page">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
         <div>
