@@ -32,6 +32,7 @@ Build a TV network app like Strimm for Hush Music TV Network with:
 - [x] Uploaded videos management (list, delete)
 - [x] Static file serving for uploaded videos
 - [x] Seed data with sample channels
+- [x] **Random Play feature** - channels can play videos in shuffled order
 
 #### Frontend
 - [x] Home page with hero section and featured channels
@@ -42,15 +43,20 @@ Build a TV network app like Strimm for Hush Music TV Network with:
   - Stats overview (Channels, Videos, Viewers, Favorites)
   - Expandable channel list showing all videos
   - Inline editing (name, description, category, thumbnail, toggles)
+  - **Random Play toggle** for shuffle mode
+  - **SHUFFLE badge** on channels with random play enabled
   - Remove videos from channels
   - Copy embed codes per channel
-- [x] Channel Creator/Editor with YouTube and Upload tabs
+- [x] **Channel Creator/Editor** with YouTube and Upload tabs
+  - **Random Play toggle** with "Shuffle video order daily" description
 - [x] Video upload UI with progress indicator
 - [x] Favorites page
 - [x] Admin-only Login page
 - [x] **Live TV page with synchronized playback**:
   - Channel sidebar with switching
+  - **Shuffle icon** next to channel names with random play enabled
   - **Live sync** - calculates video position based on current time
+  - **Seeded shuffle** - all viewers see same shuffled order on same day
   - All viewers see same content at same moment
   - Schedule bar showing current/upcoming with NOW indicator
   - Admin Panel sidebar (toggle with 'A' key or button)
