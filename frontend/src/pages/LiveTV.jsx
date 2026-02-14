@@ -144,6 +144,32 @@ const LiveTV = () => {
     }
   }, [currentChannel, currentTime]);
 
+  // Determine if current video is uploaded
+  const currentVideo = currentChannel?.videos?.[currentVideoIndex];
+  const isUploadedVideo = currentVideo && (currentVideo.video_url || !currentVideo.youtube_id);
+  
+  // Handle uploaded video playback
+  useEffect(() => {
+    if (isUploadedVideo && videoRef.current) {
+      videoRef.current.currentTime = seekTime;
+      videoRef.current.muted = isMuted;
+      videoRef.current.play().catch(() => {});
+    }
+  }, [currentVideoIndex, seekTime, isUploadedVideo, isMuted]);
+
+  const handleUploadedVideoEnd = () => {
+    // Move to next video in the channel
+    if (currentChannel?.videos?.length > 1) {
+      const nextIndex = (currentVideoIndex + 1) % currentChannel.videos.length;
+      setCurrentVideoIndex(nextIndex);
+      setSeekTime(0);
+    } else if (videoRef.current) {
+      // Loop the single video
+      videoRef.current.currentTime = 0;
+      videoRef.current.play().catch(() => {});
+    }
+  };
+
   const loadChannels = async () => {
     try {
       const response = await channelsAPI.getAll({});
