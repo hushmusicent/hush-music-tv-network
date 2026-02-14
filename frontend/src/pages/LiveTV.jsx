@@ -146,6 +146,7 @@ const LiveTV = () => {
   const [currentChannel, setCurrentChannel] = useState(null);
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
   const [seekTime, setSeekTime] = useState(0);
+  const [shuffledVideos, setShuffledVideos] = useState([]);
   const [schedule, setSchedule] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isMuted, setIsMuted] = useState(false);
