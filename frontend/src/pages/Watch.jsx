@@ -6,6 +6,7 @@ import VideoPlayer from '../components/VideoPlayer';
 import ChannelCard from '../components/ChannelCard';
 import { Button } from '../components/ui/button';
 import { Skeleton } from '../components/ui/skeleton';
+import { Input } from '../components/ui/input';
 import { 
   Heart, 
   Share2, 
@@ -13,19 +14,26 @@ import {
   Radio, 
   Calendar,
   ChevronRight,
-  ExternalLink
+  ExternalLink,
+  Code,
+  Copy,
+  Check
 } from 'lucide-react';
 import { toast } from 'sonner';
 
 const Watch = () => {
   const { channelId } = useParams();
   const navigate = useNavigate();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   
   const [channel, setChannel] = useState(null);
   const [relatedChannels, setRelatedChannels] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isFavorite, setIsFavorite] = useState(false);
+  const [showEmbedCode, setShowEmbedCode] = useState(false);
+  const [copiedEmbed, setCopiedEmbed] = useState(false);
+
+  const isAdmin = user?.is_admin === true;
 
   useEffect(() => {
     loadChannel();
