@@ -65,7 +65,10 @@ const ChannelCreator = () => {
   
   const [videos, setVideos] = useState([]);
   const [newVideoUrl, setNewVideoUrl] = useState('');
+  const [newVideoDuration, setNewVideoDuration] = useState('');
   const [addingVideo, setAddingVideo] = useState(false);
+  const [editingVideoId, setEditingVideoId] = useState(null);
+  const [editingDuration, setEditingDuration] = useState('');
 
   useEffect(() => {
     if (authLoading) return;
