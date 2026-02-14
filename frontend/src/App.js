@@ -13,12 +13,18 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import ChannelCreator from './pages/ChannelCreator';
 import Favorites from './pages/Favorites';
+import EmbedPlayer from './pages/EmbedPlayer';
+import EmbedNetwork from './pages/EmbedNetwork';
 
 function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
         <Routes>
+          {/* Embed pages - no layout, minimal UI */}
+          <Route path="/embed/:channelId" element={<EmbedPlayer />} />
+          <Route path="/embed" element={<EmbedNetwork />} />
+          
           {/* Auth page without layout */}
           <Route path="/login" element={<Login />} />
           
