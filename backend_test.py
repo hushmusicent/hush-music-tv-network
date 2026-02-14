@@ -445,6 +445,12 @@ class TVNetworkAdminAPITester:
             
         self.test_seed_data()
         
+        # Test registration is disabled first
+        self.test_registration_disabled()
+        
+        # Test invalid login
+        self.test_invalid_login()
+        
         # Public endpoints
         self.test_categories()
         self.test_channels_public()
