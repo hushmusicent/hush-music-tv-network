@@ -1,53 +1,48 @@
-import { useEffect } from "react";
+import React from 'react';
 import "@/App.css";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import axios from "axios";
+import { AuthProvider } from './context/AuthContext';
+import Layout from './components/Layout';
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
-
-const Home = () => {
-  const helloWorldApi = async () => {
-    try {
-      const response = await axios.get(`${API}/`);
-      console.log(response.data.message);
-    } catch (e) {
-      console.error(e, `errored out requesting / api`);
-    }
-  };
-
-  useEffect(() => {
-    helloWorldApi();
-  }, []);
-
-  return (
-    <div>
-      <header className="App-header">
-        <a
-          className="App-link"
-          href="https://emergent.sh"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <img src="https://avatars.githubusercontent.com/in/1201222?s=120&u=2686cf91179bbafbc7a71bfbc43004cf9ae1acea&v=4" />
-        </a>
-        <p className="mt-5">Building something incredible ~!</p>
-      </header>
-    </div>
-  );
-};
+// Pages
+import Home from './pages/Home';
+import Browse from './pages/Browse';
+import Watch from './pages/Watch';
+import TVGuide from './pages/TVGuide';
+import Login from './pages/Login';
+import Dashboard from './pages/Dashboard';
+import ChannelCreator from './pages/ChannelCreator';
+import Favorites from './pages/Favorites';
 
 function App() {
   return (
-    <div className="App">
+    <AuthProvider>
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Home />}>
-            <Route index element={<Home />} />
-          </Route>
+          {/* Auth page without layout */}
+          <Route path="/login" element={<Login />} />
+          
+          {/* All other pages with layout */}
+          <Route
+            path="/*"
+            element={
+              <Layout>
+                <Routes>
+                  <Route path="/" element={<Home />} />
+                  <Route path="/browse" element={<Browse />} />
+                  <Route path="/watch/:channelId" element={<Watch />} />
+                  <Route path="/guide" element={<TVGuide />} />
+                  <Route path="/dashboard" element={<Dashboard />} />
+                  <Route path="/create" element={<ChannelCreator />} />
+                  <Route path="/edit/:channelId" element={<ChannelCreator />} />
+                  <Route path="/favorites" element={<Favorites />} />
+                </Routes>
+              </Layout>
+            }
+          />
         </Routes>
       </BrowserRouter>
-    </div>
+    </AuthProvider>
   );
 }
 
