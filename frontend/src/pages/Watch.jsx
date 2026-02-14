@@ -196,6 +196,8 @@ const Watch = () => {
             videos={channel.videos || []}
             channelName={channel.name}
             isLive={channel.is_24_7}
+            startIndex={liveVideoIndex}
+            seekTime={liveSeekTime}
           />
         </div>
       </div>
