@@ -94,31 +94,29 @@ class TVNetworkAdminAPITester:
             self.log_test("Get Categories", False, f"Status: {response.status_code}")
         return success
 
-    def test_user_registration(self):
-        """Test user registration"""
-        print("\n🔍 Testing User Registration...")
-        timestamp = datetime.now().strftime('%H%M%S')
+    def test_registration_disabled(self):
+        """Test that user registration is disabled"""
+        print("\n🔍 Testing Registration Disabled...")
         user_data = {
-            "email": f"test_{timestamp}@tvnetwork.com",
-            "username": f"testuser_{timestamp}",
+            "email": "test@example.com",
+            "username": "testuser",
             "password": "testpass123"
         }
         
         response = self.make_request('POST', 'auth/register', user_data, auth=False)
         
         if isinstance(response, tuple):
-            self.log_test("User Registration", False, response[1])
+            self.log_test("Registration Disabled", False, response[1])
             return False
             
-        success = response.status_code == 200
+        # Registration should return 403 (Forbidden)
+        success = response.status_code == 403
         if success:
             data = response.json()
-            self.token = data.get('access_token')
-            self.user_id = data.get('user', {}).get('id')
-            success = bool(self.token and self.user_id)
-            self.log_test("User Registration", success, f"Got token: {bool(self.token)}")
+            success = "Registration is disabled" in data.get('detail', '')
+            self.log_test("Registration Disabled", success, f"Got expected 403 with message: {data.get('detail', '')}")
         else:
-            self.log_test("User Registration", False, f"Status: {response.status_code}, Response: {response.text}")
+            self.log_test("Registration Disabled", False, f"Expected 403, got {response.status_code}")
         return success
 
     def test_user_profile(self):
