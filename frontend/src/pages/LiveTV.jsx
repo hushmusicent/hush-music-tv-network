@@ -224,11 +224,45 @@ const LiveTV = () => {
   }
 
   const currentVideo = currentChannel?.videos?.[currentVideoIndex];
+  const isUploadedVideo = currentVideo && (currentVideo.video_url || !currentVideo.youtube_id);
   
   // Build YouTube URL with start time for live sync - removed controls=0 to ensure video shows
-  const embedUrl = currentVideo 
+  const embedUrl = currentVideo?.youtube_id 
     ? `https://www.youtube.com/embed/${currentVideo.youtube_id}?autoplay=1&mute=${isMuted ? 1 : 0}&start=${Math.floor(seekTime)}&rel=0&modestbranding=1&playsinline=1`
     : '';
+  
+  // Build uploaded video URL
+  const uploadedVideoUrl = currentVideo?.video_url 
+    ? `${BACKEND_URL}${currentVideo.video_url}`
+    : null;
+
+  const videoRef = useRef(null);
+
+  // Handle uploaded video playback
+  useEffect(() => {
+    if (isUploadedVideo && videoRef.current) {
+      videoRef.current.currentTime = seekTime;
+      if (!isMuted) {
+        videoRef.current.muted = false;
+      } else {
+        videoRef.current.muted = true;
+      }
+      videoRef.current.play().catch(() => {});
+    }
+  }, [currentVideoIndex, seekTime, isUploadedVideo, isMuted]);
+
+  const handleUploadedVideoEnd = () => {
+    // Move to next video in the channel
+    if (currentChannel?.videos?.length > 1) {
+      const nextIndex = (currentVideoIndex + 1) % currentChannel.videos.length;
+      setCurrentVideoIndex(nextIndex);
+      setSeekTime(0);
+    } else if (videoRef.current) {
+      // Loop the single video
+      videoRef.current.currentTime = 0;
+      videoRef.current.play().catch(() => {});
+    }
+  };
 
   return (
     <div className="px-4 md:px-8 py-4" data-testid="live-tv-page">
