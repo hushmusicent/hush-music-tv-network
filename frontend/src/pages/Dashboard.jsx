@@ -2,11 +2,24 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { channelsAPI, uploadAPI, categoriesAPI } from '../lib/api';
-import ChannelCard from '../components/ChannelCard';
 import { Button } from '../components/ui/button';
 import { Skeleton } from '../components/ui/skeleton';
 import { Input } from '../components/ui/input';
+import { Textarea } from '../components/ui/textarea';
+import { Switch } from '../components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../components/ui/select';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '../components/ui/collapsible';
 import { 
   Tv, 
   Plus, 
@@ -14,7 +27,6 @@ import {
   TrendingUp, 
   Heart,
   Settings,
-  User,
   Code,
   Copy,
   Check,
@@ -26,8 +38,13 @@ import {
   Edit,
   Eye,
   Clock,
-  LayoutGrid,
-  List
+  ChevronDown,
+  ChevronRight,
+  Save,
+  X,
+  Youtube,
+  ExternalLink,
+  GripVertical
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -51,9 +68,12 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [deleteChannelId, setDeleteChannelId] = useState(null);
   const [deleteVideoId, setDeleteVideoId] = useState(null);
+  const [deleteChannelVideoInfo, setDeleteChannelVideoInfo] = useState(null);
   const [copiedNetworkEmbed, setCopiedNetworkEmbed] = useState(false);
   const [activeTab, setActiveTab] = useState('channels');
-  const [viewMode, setViewMode] = useState('grid');
+  const [expandedChannels, setExpandedChannels] = useState({});
+  const [editingChannel, setEditingChannel] = useState(null);
+  const [savingChannel, setSavingChannel] = useState(null);
 
   useEffect(() => {
     if (authLoading) return;
@@ -74,12 +94,64 @@ const Dashboard = () => {
       ]);
       setChannels(channelsRes.data);
       setUploadedVideos(videosRes.data || []);
-      setCategories(categoriesRes.data);
+      setCategories(categoriesRes.data.filter(c => c.name !== 'All'));
     } catch (error) {
       console.error('Failed to load data:', error);
       toast.error('Failed to load data');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const toggleChannelExpanded = (channelId) => {
+    setExpandedChannels(prev => ({
+      ...prev,
+      [channelId]: !prev[channelId]
+    }));
+  };
+
+  const startEditingChannel = (channel) => {
+    setEditingChannel({
+      id: channel.id,
+      name: channel.name,
+      description: channel.description || '',
+      category: channel.category,
+      thumbnail: channel.thumbnail || '',
+      is_public: channel.is_public,
+      is_24_7: channel.is_24_7
+    });
+  };
+
+  const cancelEditingChannel = () => {
+    setEditingChannel(null);
+  };
+
+  const saveChannelChanges = async () => {
+    if (!editingChannel) return;
+    
+    setSavingChannel(editingChannel.id);
+    try {
+      await channelsAPI.update(editingChannel.id, {
+        name: editingChannel.name,
+        description: editingChannel.description,
+        category: editingChannel.category,
+        thumbnail: editingChannel.thumbnail,
+        is_public: editingChannel.is_public,
+        is_24_7: editingChannel.is_24_7
+      });
+      
+      setChannels(prev => prev.map(ch => 
+        ch.id === editingChannel.id 
+          ? { ...ch, ...editingChannel }
+          : ch
+      ));
+      
+      toast.success('Channel updated successfully');
+      setEditingChannel(null);
+    } catch (error) {
+      toast.error('Failed to update channel');
+    } finally {
+      setSavingChannel(null);
     }
   };
 
@@ -97,7 +169,7 @@ const Dashboard = () => {
     }
   };
 
-  const handleDeleteVideo = async () => {
+  const handleDeleteUploadedVideo = async () => {
     if (!deleteVideoId) return;
 
     try {
@@ -108,6 +180,26 @@ const Dashboard = () => {
       toast.error('Failed to delete video');
     } finally {
       setDeleteVideoId(null);
+    }
+  };
+
+  const handleRemoveVideoFromChannel = async () => {
+    if (!deleteChannelVideoInfo) return;
+    
+    const { channelId, videoId } = deleteChannelVideoInfo;
+    
+    try {
+      await channelsAPI.removeVideo(channelId, videoId);
+      setChannels(prev => prev.map(ch => 
+        ch.id === channelId 
+          ? { ...ch, videos: ch.videos.filter(v => v.id !== videoId) }
+          : ch
+      ));
+      toast.success('Video removed from channel');
+    } catch (error) {
+      toast.error('Failed to remove video');
+    } finally {
+      setDeleteChannelVideoInfo(null);
     }
   };
 
@@ -132,6 +224,16 @@ const Dashboard = () => {
       setCopiedNetworkEmbed(true);
       toast.success('Network embed code copied!');
       setTimeout(() => setCopiedNetworkEmbed(false), 2000);
+    } catch (error) {
+      toast.error('Failed to copy embed code');
+    }
+  };
+
+  const copyChannelEmbed = async (channelId) => {
+    const code = `<iframe src="${window.location.origin}/embed/${channelId}" width="640" height="360" frameborder="0" allowfullscreen allow="autoplay; encrypted-media"></iframe>`;
+    try {
+      await navigator.clipboard.writeText(code);
+      toast.success('Channel embed code copied!');
     } catch (error) {
       toast.error('Failed to copy embed code');
     }
@@ -216,134 +318,318 @@ const Dashboard = () => {
 
       {/* Main Content Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <div className="flex items-center justify-between mb-6">
-          <TabsList className="bg-surface border border-white/10">
-            <TabsTrigger value="channels" className="flex items-center gap-2" data-testid="tab-channels">
-              <Tv size={16} />
-              Channels
-            </TabsTrigger>
-            <TabsTrigger value="videos" className="flex items-center gap-2" data-testid="tab-videos">
-              <Upload size={16} />
-              Uploaded Videos
-            </TabsTrigger>
-            <TabsTrigger value="embed" className="flex items-center gap-2" data-testid="tab-embed">
-              <Code size={16} />
-              Embed
-            </TabsTrigger>
-          </TabsList>
+        <TabsList className="bg-surface border border-white/10 mb-6">
+          <TabsTrigger value="channels" className="flex items-center gap-2" data-testid="tab-channels">
+            <Tv size={16} />
+            Channels & Videos
+          </TabsTrigger>
+          <TabsTrigger value="uploads" className="flex items-center gap-2" data-testid="tab-videos">
+            <Upload size={16} />
+            Uploaded Videos
+          </TabsTrigger>
+          <TabsTrigger value="embed" className="flex items-center gap-2" data-testid="tab-embed">
+            <Code size={16} />
+            Embed
+          </TabsTrigger>
+        </TabsList>
 
-          {activeTab === 'channels' && (
-            <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setViewMode('grid')}
-                className={viewMode === 'grid' ? 'bg-white/10' : ''}
-              >
-                <LayoutGrid size={18} />
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setViewMode('list')}
-                className={viewMode === 'list' ? 'bg-white/10' : ''}
-              >
-                <List size={18} />
-              </Button>
-            </div>
-          )}
-        </div>
-
-        {/* Channels Tab */}
+        {/* Channels & Videos Tab */}
         <TabsContent value="channels">
           {loading ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {Array(4).fill(0).map((_, i) => (
-                <div key={i} className="space-y-3">
-                  <Skeleton className="aspect-video rounded-lg bg-white/10" />
-                  <Skeleton className="h-5 w-3/4 bg-white/10" />
-                  <Skeleton className="h-4 w-1/2 bg-white/10" />
-                </div>
+            <div className="space-y-4">
+              {Array(3).fill(0).map((_, i) => (
+                <Skeleton key={i} className="h-32 w-full bg-white/10 rounded-lg" />
               ))}
             </div>
           ) : channels.length > 0 ? (
-            viewMode === 'grid' ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                {channels.map((channel, index) => (
+            <div className="space-y-4">
+              {channels.map((channel) => {
+                const isExpanded = expandedChannels[channel.id];
+                const isEditing = editingChannel?.id === channel.id;
+                const isSaving = savingChannel === channel.id;
+                
+                return (
                   <div
                     key={channel.id}
-                    className="animate-slide-up"
-                    style={{ animationDelay: `${index * 0.05}s` }}
+                    className="glass rounded-lg overflow-hidden"
+                    data-testid={`channel-item-${channel.id}`}
                   >
-                    <ChannelCard
-                      channel={channel}
-                      showMenu={true}
-                      onDelete={setDeleteChannelId}
-                    />
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {channels.map((channel) => (
-                  <div
-                    key={channel.id}
-                    className="glass rounded-lg p-4 flex items-center gap-4 hover:bg-white/5 transition-colors"
-                  >
-                    <div className="w-32 h-20 bg-black rounded-lg overflow-hidden flex-shrink-0">
-                      <img
-                        src={channel.thumbnail || channel.videos?.[0]?.thumbnail || 'https://images.unsplash.com/photo-1576307302704-b6142d572612?w=400'}
-                        alt={channel.name}
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold truncate">{channel.name}</h3>
-                      <p className="text-sm text-gray-400">{channel.category} • {channel.videos?.length || 0} videos</p>
-                      <div className="flex items-center gap-4 mt-1 text-xs text-gray-500">
-                        <span className="flex items-center gap-1">
-                          <Eye size={12} /> {channel.viewers_count || 0}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Heart size={12} /> {channel.favorites_count || 0}
-                        </span>
-                        {channel.is_24_7 && (
-                          <span className="text-red-400">24/7</span>
+                    {/* Channel Header */}
+                    <div className="p-4 flex items-center gap-4">
+                      <button
+                        onClick={() => toggleChannelExpanded(channel.id)}
+                        className="p-1 hover:bg-white/10 rounded transition-colors"
+                        data-testid={`expand-channel-${channel.id}`}
+                      >
+                        {isExpanded ? (
+                          <ChevronDown size={20} className="text-gray-400" />
+                        ) : (
+                          <ChevronRight size={20} className="text-gray-400" />
+                        )}
+                      </button>
+                      
+                      <div className="w-24 h-16 bg-black rounded-lg overflow-hidden flex-shrink-0">
+                        <img
+                          src={channel.thumbnail || channel.videos?.[0]?.thumbnail || 'https://images.unsplash.com/photo-1576307302704-b6142d572612?w=400'}
+                          alt={channel.name}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                      
+                      <div className="flex-1 min-w-0">
+                        {isEditing ? (
+                          <Input
+                            value={editingChannel.name}
+                            onChange={(e) => setEditingChannel({...editingChannel, name: e.target.value})}
+                            className="bg-black/50 border-white/20 h-8 text-lg font-semibold"
+                            data-testid="edit-channel-name"
+                          />
+                        ) : (
+                          <h3 className="font-semibold text-lg truncate">{channel.name}</h3>
+                        )}
+                        <div className="flex items-center gap-3 mt-1 text-sm text-gray-400">
+                          <span className="flex items-center gap-1">
+                            <Film size={14} /> {channel.videos?.length || 0} videos
+                          </span>
+                          <span>{channel.category}</span>
+                          {channel.is_24_7 && (
+                            <span className="text-red-400 text-xs font-bold">24/7</span>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center gap-2">
+                        {isEditing ? (
+                          <>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={cancelEditingChannel}
+                              className="text-gray-400 hover:text-white"
+                            >
+                              <X size={16} />
+                            </Button>
+                            <Button
+                              size="sm"
+                              onClick={saveChannelChanges}
+                              disabled={isSaving}
+                              className="bg-green-600 hover:bg-green-700"
+                              data-testid="save-channel-btn"
+                            >
+                              <Save size={16} className="mr-1" />
+                              {isSaving ? 'Saving...' : 'Save'}
+                            </Button>
+                          </>
+                        ) : (
+                          <>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => navigate(`/watch/${channel.id}`)}
+                              className="text-gray-400 hover:text-white"
+                              title="Watch"
+                            >
+                              <Eye size={16} />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => copyChannelEmbed(channel.id)}
+                              className="text-gray-400 hover:text-primary"
+                              title="Copy Embed"
+                            >
+                              <Code size={16} />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => startEditingChannel(channel)}
+                              className="text-gray-400 hover:text-primary"
+                              title="Edit"
+                              data-testid={`edit-channel-${channel.id}`}
+                            >
+                              <Edit size={16} />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => navigate(`/edit/${channel.id}`)}
+                              className="text-gray-400 hover:text-blue-400"
+                              title="Full Editor"
+                            >
+                              <ExternalLink size={16} />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => setDeleteChannelId(channel.id)}
+                              className="text-gray-400 hover:text-red-500"
+                              title="Delete"
+                              data-testid={`delete-channel-${channel.id}`}
+                            >
+                              <Trash2 size={16} />
+                            </Button>
+                          </>
                         )}
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => navigate(`/watch/${channel.id}`)}
-                        className="text-gray-400 hover:text-white"
-                      >
-                        <Eye size={16} />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => navigate(`/edit/${channel.id}`)}
-                        className="text-gray-400 hover:text-primary"
-                        data-testid={`edit-channel-${channel.id}`}
-                      >
-                        <Edit size={16} />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setDeleteChannelId(channel.id)}
-                        className="text-gray-400 hover:text-red-500"
-                        data-testid={`delete-channel-${channel.id}`}
-                      >
-                        <Trash2 size={16} />
-                      </Button>
-                    </div>
+                    
+                    {/* Expanded Content */}
+                    {isExpanded && (
+                      <div className="border-t border-white/10 p-4 bg-black/20">
+                        {/* Edit Form */}
+                        {isEditing && (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 p-4 bg-black/30 rounded-lg">
+                            <div>
+                              <label className="text-xs text-gray-400 mb-1 block">Description</label>
+                              <Textarea
+                                value={editingChannel.description}
+                                onChange={(e) => setEditingChannel({...editingChannel, description: e.target.value})}
+                                className="bg-black/50 border-white/20 h-20 resize-none"
+                                placeholder="Channel description..."
+                              />
+                            </div>
+                            <div className="space-y-3">
+                              <div>
+                                <label className="text-xs text-gray-400 mb-1 block">Category</label>
+                                <Select
+                                  value={editingChannel.category}
+                                  onValueChange={(value) => setEditingChannel({...editingChannel, category: value})}
+                                >
+                                  <SelectTrigger className="bg-black/50 border-white/20">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent className="bg-surface border-white/10">
+                                    {categories.map((cat) => (
+                                      <SelectItem key={cat.name} value={cat.name}>
+                                        {cat.name}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div>
+                                <label className="text-xs text-gray-400 mb-1 block">Thumbnail URL</label>
+                                <Input
+                                  value={editingChannel.thumbnail}
+                                  onChange={(e) => setEditingChannel({...editingChannel, thumbnail: e.target.value})}
+                                  className="bg-black/50 border-white/20"
+                                  placeholder="https://..."
+                                />
+                              </div>
+                              <div className="flex items-center gap-6">
+                                <label className="flex items-center gap-2 text-sm">
+                                  <Switch
+                                    checked={editingChannel.is_public}
+                                    onCheckedChange={(checked) => setEditingChannel({...editingChannel, is_public: checked})}
+                                  />
+                                  Public
+                                </label>
+                                <label className="flex items-center gap-2 text-sm">
+                                  <Switch
+                                    checked={editingChannel.is_24_7}
+                                    onCheckedChange={(checked) => setEditingChannel({...editingChannel, is_24_7: checked})}
+                                  />
+                                  24/7
+                                </label>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* Videos List */}
+                        <div>
+                          <div className="flex items-center justify-between mb-3">
+                            <h4 className="text-sm font-medium text-gray-400">
+                              Videos ({channel.videos?.length || 0})
+                            </h4>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => navigate(`/edit/${channel.id}`)}
+                              className="border-white/20 text-xs"
+                            >
+                              <Plus size={14} className="mr-1" />
+                              Add Video
+                            </Button>
+                          </div>
+                          
+                          {channel.videos && channel.videos.length > 0 ? (
+                            <div className="space-y-2">
+                              {channel.videos.map((video, index) => (
+                                <div
+                                  key={video.id}
+                                  className="flex items-center gap-3 p-2 bg-black/30 rounded-lg group hover:bg-black/40 transition-colors"
+                                  data-testid={`video-item-${video.id}`}
+                                >
+                                  <span className="w-6 text-center text-gray-500 text-sm font-mono">
+                                    {index + 1}
+                                  </span>
+                                  <div className="w-20 h-12 bg-black rounded overflow-hidden flex-shrink-0">
+                                    {video.youtube_id ? (
+                                      <img
+                                        src={video.thumbnail || `https://img.youtube.com/vi/${video.youtube_id}/mqdefault.jpg`}
+                                        alt={video.title}
+                                        className="w-full h-full object-cover"
+                                      />
+                                    ) : (
+                                      <div className="w-full h-full flex items-center justify-center">
+                                        <FileVideo size={20} className="text-gray-500" />
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium truncate">{video.title}</p>
+                                    <div className="flex items-center gap-2 text-xs text-gray-500">
+                                      {video.youtube_id ? (
+                                        <span className="flex items-center gap-1 text-red-400">
+                                          <Youtube size={10} /> YouTube
+                                        </span>
+                                      ) : (
+                                        <span className="flex items-center gap-1 text-primary">
+                                          <Upload size={10} /> Uploaded
+                                        </span>
+                                      )}
+                                      <span className="flex items-center gap-1">
+                                        <Clock size={10} /> {Math.floor((video.duration || 300) / 60)}min
+                                      </span>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    {video.youtube_id && (
+                                      <a
+                                        href={`https://youtube.com/watch?v=${video.youtube_id}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="p-1.5 text-gray-400 hover:text-white rounded transition-colors"
+                                      >
+                                        <ExternalLink size={14} />
+                                      </a>
+                                    )}
+                                    <button
+                                      onClick={() => setDeleteChannelVideoInfo({ channelId: channel.id, videoId: video.id })}
+                                      className="p-1.5 text-gray-400 hover:text-red-500 rounded transition-colors"
+                                      data-testid={`remove-video-${video.id}`}
+                                    >
+                                      <Trash2 size={14} />
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="text-center py-6 text-gray-500 text-sm">
+                              <Film size={24} className="mx-auto mb-2 opacity-50" />
+                              <p>No videos in this channel</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                ))}
-              </div>
-            )
+                );
+              })}
+            </div>
           ) : (
             <div className="text-center py-16 glass rounded-lg">
               <Radio size={64} className="mx-auto mb-4 text-gray-600" />
@@ -363,7 +649,7 @@ const Dashboard = () => {
         </TabsContent>
 
         {/* Uploaded Videos Tab */}
-        <TabsContent value="videos">
+        <TabsContent value="uploads">
           <div className="glass rounded-lg p-6 mb-6">
             <div className="flex items-center justify-between">
               <div>
@@ -554,7 +840,7 @@ const Dashboard = () => {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Delete Video Dialog */}
+      {/* Delete Uploaded Video Dialog */}
       <AlertDialog open={!!deleteVideoId} onOpenChange={() => setDeleteVideoId(null)}>
         <AlertDialogContent className="bg-surface border-white/10">
           <AlertDialogHeader>
@@ -567,11 +853,34 @@ const Dashboard = () => {
           <AlertDialogFooter>
             <AlertDialogCancel className="border-white/20">Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={handleDeleteVideo}
+              onClick={handleDeleteUploadedVideo}
               className="bg-red-600 hover:bg-red-700"
               data-testid="confirm-delete-video-btn"
             >
               Delete Video
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Remove Video from Channel Dialog */}
+      <AlertDialog open={!!deleteChannelVideoInfo} onOpenChange={() => setDeleteChannelVideoInfo(null)}>
+        <AlertDialogContent className="bg-surface border-white/10">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove Video from Channel</AlertDialogTitle>
+            <AlertDialogDescription className="text-gray-400">
+              Are you sure you want to remove this video from the channel?
+              The video will be removed from the playlist but not deleted from the server.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="border-white/20">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleRemoveVideoFromChannel}
+              className="bg-red-600 hover:bg-red-700"
+              data-testid="confirm-remove-video-btn"
+            >
+              Remove Video
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
