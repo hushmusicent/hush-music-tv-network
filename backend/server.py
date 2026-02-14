@@ -491,28 +491,37 @@ async def get_tv_guide():
 
 @api_router.post("/seed")
 async def seed_data():
-    """Seed some sample channels for demo"""
-    # Check if already seeded
-    existing = await db.channels.count_documents({})
-    if existing > 0:
-        return {"message": "Data already seeded"}
+    """Seed admin user and sample channels"""
+    # Create or update admin user
+    admin_user = await db.users.find_one({"email": ADMIN_EMAIL})
+    if not admin_user:
+        admin_user_id = str(uuid.uuid4())
+        now = datetime.now(timezone.utc).isoformat()
+        admin_doc = {
+            "id": admin_user_id,
+            "email": ADMIN_EMAIL,
+            "username": "Admin",
+            "password_hash": hash_password(ADMIN_PASSWORD),
+            "avatar": None,
+            "favorites": [],
+            "is_admin": True,
+            "created_at": now
+        }
+        await db.users.insert_one(admin_doc)
+        admin_user = admin_doc
+    else:
+        admin_user_id = admin_user["id"]
+        # Ensure admin flag is set
+        await db.users.update_one({"email": ADMIN_EMAIL}, {"$set": {"is_admin": True}})
     
-    # Create a demo user
-    demo_user_id = str(uuid.uuid4())
+    # Check if channels already seeded
+    existing_channels = await db.channels.count_documents({})
+    if existing_channels > 0:
+        return {"message": "Admin user created/updated, channels already seeded"}
+    
     now = datetime.now(timezone.utc).isoformat()
     
-    demo_user = {
-        "id": demo_user_id,
-        "email": "demo@tvnetwork.com",
-        "username": "TVNetwork",
-        "password_hash": hash_password("demo123"),
-        "avatar": None,
-        "favorites": [],
-        "created_at": now
-    }
-    await db.users.insert_one(demo_user)
-    
-    # Sample channels with YouTube video IDs
+    # Sample channels owned by admin
     sample_channels = [
         {
             "id": str(uuid.uuid4()),
@@ -522,8 +531,8 @@ async def seed_data():
             "thumbnail": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=800",
             "is_public": True,
             "is_24_7": True,
-            "owner_id": demo_user_id,
-            "owner_username": "TVNetwork",
+            "owner_id": admin_user_id,
+            "owner_username": "Admin",
             "videos": [
                 {"id": str(uuid.uuid4()), "youtube_id": "jfKfPfyJRdk", "title": "lofi hip hop radio - beats to relax/study to", "thumbnail": "https://img.youtube.com/vi/jfKfPfyJRdk/maxresdefault.jpg", "duration": 0, "order": 0},
             ],
@@ -540,8 +549,8 @@ async def seed_data():
             "thumbnail": "https://images.unsplash.com/photo-1518770660439-4636190af475?w=800",
             "is_public": True,
             "is_24_7": True,
-            "owner_id": demo_user_id,
-            "owner_username": "TVNetwork",
+            "owner_id": admin_user_id,
+            "owner_username": "Admin",
             "videos": [
                 {"id": str(uuid.uuid4()), "youtube_id": "WmVLcj-XKnM", "title": "Our Planet | One Planet", "thumbnail": "https://img.youtube.com/vi/WmVLcj-XKnM/maxresdefault.jpg", "duration": 2940, "order": 0},
                 {"id": str(uuid.uuid4()), "youtube_id": "TGvPNz5IvvA", "title": "Planet Earth II - Mountains", "thumbnail": "https://img.youtube.com/vi/TGvPNz5IvvA/maxresdefault.jpg", "duration": 2880, "order": 1},
@@ -559,8 +568,8 @@ async def seed_data():
             "thumbnail": "https://images.unsplash.com/photo-1518770660439-4636190af475?w=800",
             "is_public": True,
             "is_24_7": True,
-            "owner_id": demo_user_id,
-            "owner_username": "TVNetwork",
+            "owner_id": admin_user_id,
+            "owner_username": "Admin",
             "videos": [
                 {"id": str(uuid.uuid4()), "youtube_id": "GpMj7njxzHs", "title": "AI News Update", "thumbnail": "https://img.youtube.com/vi/GpMj7njxzHs/maxresdefault.jpg", "duration": 600, "order": 0},
             ],
@@ -577,8 +586,8 @@ async def seed_data():
             "thumbnail": "https://images.unsplash.com/photo-1542751371-adc38448a05e?w=800",
             "is_public": True,
             "is_24_7": True,
-            "owner_id": demo_user_id,
-            "owner_username": "TVNetwork",
+            "owner_id": admin_user_id,
+            "owner_username": "Admin",
             "videos": [
                 {"id": str(uuid.uuid4()), "youtube_id": "dQw4w9WgXcQ", "title": "Epic Gaming Moments", "thumbnail": "https://img.youtube.com/vi/dQw4w9WgXcQ/maxresdefault.jpg", "duration": 300, "order": 0},
             ],
@@ -595,8 +604,8 @@ async def seed_data():
             "thumbnail": "https://images.unsplash.com/photo-1527224857830-43a7acc85260?w=800",
             "is_public": True,
             "is_24_7": True,
-            "owner_id": demo_user_id,
-            "owner_username": "TVNetwork",
+            "owner_id": admin_user_id,
+            "owner_username": "Admin",
             "videos": [
                 {"id": str(uuid.uuid4()), "youtube_id": "unkIVvjZc9Y", "title": "Best Comedy Moments", "thumbnail": "https://img.youtube.com/vi/unkIVvjZc9Y/maxresdefault.jpg", "duration": 480, "order": 0},
             ],
@@ -613,8 +622,8 @@ async def seed_data():
             "thumbnail": "https://images.unsplash.com/photo-1503676260728-1c00da094a0b?w=800",
             "is_public": True,
             "is_24_7": True,
-            "owner_id": demo_user_id,
-            "owner_username": "TVNetwork",
+            "owner_id": admin_user_id,
+            "owner_username": "Admin",
             "videos": [
                 {"id": str(uuid.uuid4()), "youtube_id": "8jvoTV54nXw", "title": "How the Internet Works", "thumbnail": "https://img.youtube.com/vi/8jvoTV54nXw/maxresdefault.jpg", "duration": 720, "order": 0},
             ],
@@ -627,7 +636,7 @@ async def seed_data():
     
     await db.channels.insert_many(sample_channels)
     
-    return {"message": "Data seeded successfully", "channels_created": len(sample_channels)}
+    return {"message": "Admin and data seeded successfully", "channels_created": len(sample_channels)}
 
 # ===================== HEALTH CHECK =====================
 
