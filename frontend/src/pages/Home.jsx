@@ -11,7 +11,6 @@ import {
   TrendingUp, 
   Sparkles, 
   ChevronRight,
-  Plus,
   Radio
 } from 'lucide-react';
 import { toast } from 'sonner';
