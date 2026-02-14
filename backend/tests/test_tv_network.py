@@ -459,6 +459,111 @@ class TestTVGuide:
         print(f"SUCCESS: TV Guide retrieved - {len(data)} channels")
 
 
+class TestRandomPlay:
+    """Random Play feature tests"""
+    
+    @pytest.fixture
+    def auth_token(self):
+        response = requests.post(f"{BASE_URL}/api/auth/login", json={
+            "email": ADMIN_EMAIL,
+            "password": ADMIN_PASSWORD
+        })
+        return response.json()["access_token"]
+    
+    def test_create_channel_with_random_play_true(self, auth_token):
+        """Create channel with random_play enabled"""
+        response = requests.post(
+            f"{BASE_URL}/api/channels",
+            headers={"Authorization": f"Bearer {auth_token}"},
+            json={
+                "name": "TEST_RandomPlayOn",
+                "category": "Music",
+                "random_play": True
+            }
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["random_play"] == True
+        print(f"SUCCESS: Created channel with random_play=True")
+        
+        # Cleanup
+        requests.delete(
+            f"{BASE_URL}/api/channels/{data['id']}",
+            headers={"Authorization": f"Bearer {auth_token}"}
+        )
+    
+    def test_create_channel_random_play_default_false(self, auth_token):
+        """Verify random_play defaults to False"""
+        response = requests.post(
+            f"{BASE_URL}/api/channels",
+            headers={"Authorization": f"Bearer {auth_token}"},
+            json={
+                "name": "TEST_RandomPlayDefault",
+                "category": "Entertainment"
+            }
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["random_play"] == False
+        print(f"SUCCESS: random_play defaults to False")
+        
+        # Cleanup
+        requests.delete(
+            f"{BASE_URL}/api/channels/{data['id']}",
+            headers={"Authorization": f"Bearer {auth_token}"}
+        )
+    
+    def test_update_channel_random_play(self, auth_token):
+        """Update channel random_play field"""
+        # Create channel
+        create_resp = requests.post(
+            f"{BASE_URL}/api/channels",
+            headers={"Authorization": f"Bearer {auth_token}"},
+            json={"name": "TEST_RandomPlayUpdate", "category": "Gaming", "random_play": False}
+        )
+        channel_id = create_resp.json()["id"]
+        
+        # Update to True
+        update_resp = requests.put(
+            f"{BASE_URL}/api/channels/{channel_id}",
+            headers={"Authorization": f"Bearer {auth_token}"},
+            json={"random_play": True}
+        )
+        assert update_resp.status_code == 200
+        assert update_resp.json()["random_play"] == True
+        print(f"SUCCESS: Updated random_play to True")
+        
+        # Verify persistence
+        get_resp = requests.get(f"{BASE_URL}/api/channels/{channel_id}")
+        assert get_resp.json()["random_play"] == True
+        print(f"SUCCESS: random_play persisted in database")
+        
+        # Update back to False
+        update_resp2 = requests.put(
+            f"{BASE_URL}/api/channels/{channel_id}",
+            headers={"Authorization": f"Bearer {auth_token}"},
+            json={"random_play": False}
+        )
+        assert update_resp2.json()["random_play"] == False
+        print(f"SUCCESS: Updated random_play to False")
+        
+        # Cleanup
+        requests.delete(
+            f"{BASE_URL}/api/channels/{channel_id}",
+            headers={"Authorization": f"Bearer {auth_token}"}
+        )
+    
+    def test_get_channel_returns_random_play(self, auth_token):
+        """Verify GET channel includes random_play field"""
+        channels = requests.get(f"{BASE_URL}/api/channels").json()
+        if len(channels) > 0:
+            channel = channels[0]
+            assert "random_play" in channel
+            print(f"SUCCESS: GET channel returns random_play field (value: {channel['random_play']})")
+        else:
+            pytest.skip("No channels to test")
+
+
 class TestFavorites:
     """Favorites functionality tests"""
     
