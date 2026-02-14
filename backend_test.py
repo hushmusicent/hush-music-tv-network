@@ -475,7 +475,7 @@ class TVNetworkAdminAPITester:
         return self.tests_passed == self.tests_run
 
 def main():
-    tester = TVNetworkAPITester()
+    tester = TVNetworkAdminAPITester()
     success = tester.run_all_tests()
     
     # Return results for external processing
