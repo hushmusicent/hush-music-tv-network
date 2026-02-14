@@ -554,13 +554,56 @@ const Dashboard = () => {
                                 </Select>
                               </div>
                               <div>
-                                <label className="text-xs text-gray-400 mb-1 block">Thumbnail URL</label>
-                                <Input
-                                  value={editingChannel.thumbnail}
-                                  onChange={(e) => setEditingChannel({...editingChannel, thumbnail: e.target.value})}
-                                  className="bg-black/50 border-white/20"
-                                  placeholder="https://..."
-                                />
+                                <label className="text-xs text-gray-400 mb-1 block">Channel Thumbnail</label>
+                                <div className="flex gap-2">
+                                  <Input
+                                    value={editingChannel.thumbnail}
+                                    onChange={(e) => setEditingChannel({...editingChannel, thumbnail: e.target.value})}
+                                    className="bg-black/50 border-white/20 flex-1"
+                                    placeholder="https://... or upload"
+                                  />
+                                  <input
+                                    ref={imageInputRef}
+                                    type="file"
+                                    accept="image/jpeg,image/png,image/webp,image/gif"
+                                    onChange={handleImageUpload}
+                                    className="hidden"
+                                    id="thumbnail-upload"
+                                    data-testid="thumbnail-upload-input"
+                                  />
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => imageInputRef.current?.click()}
+                                    disabled={uploadingImage}
+                                    className="border-white/20 px-3"
+                                    data-testid="upload-thumbnail-btn"
+                                  >
+                                    {uploadingImage ? (
+                                      <Loader2 size={16} className="animate-spin" />
+                                    ) : (
+                                      <Upload size={16} />
+                                    )}
+                                  </Button>
+                                </div>
+                                {editingChannel.thumbnail && (
+                                  <div className="mt-2 relative w-24 h-16 rounded overflow-hidden group">
+                                    <img
+                                      src={editingChannel.thumbnail}
+                                      alt="Thumbnail preview"
+                                      className="w-full h-full object-cover"
+                                      onError={(e) => { e.target.style.display = 'none'; }}
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => setEditingChannel({...editingChannel, thumbnail: ''})}
+                                      className="absolute top-1 right-1 p-1 bg-black/70 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                                    >
+                                      <X size={12} />
+                                    </button>
+                                  </div>
+                                )}
                               </div>
                               <div className="flex items-center gap-6">
                                 <label className="flex items-center gap-2 text-sm">
