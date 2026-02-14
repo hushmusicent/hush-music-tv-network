@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { channelsAPI } from '../lib/api';
 import { Play, ChevronLeft, ChevronRight } from 'lucide-react';
+import '../embed.css';
 
 const EmbedNetwork = () => {
   const [searchParams] = useSearchParams();
@@ -76,7 +77,7 @@ const EmbedNetwork = () => {
     : '';
 
   return (
-    <div className="w-full h-full bg-[#0A0A0A] flex overflow-hidden" data-testid="embed-network">
+    <div className="embed-container flex" data-testid="embed-network">
       {/* Main Player */}
       <div className={`flex-1 flex flex-col ${showSidebar ? '' : 'w-full'}`}>
         {/* Video */}
