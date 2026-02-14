@@ -43,6 +43,7 @@ Build a TV network app like Strimm for Hush Music TV Network with:
   - Stats overview (Channels, Videos, Viewers, Favorites)
   - Expandable channel list showing all videos
   - Inline editing (name, description, category, thumbnail, toggles)
+  - **Thumbnail upload** - upload images from local drive for channel preview
   - **Random Play toggle** for shuffle mode
   - **SHUFFLE badge** on channels with random play enabled
   - Remove videos from channels
@@ -52,6 +53,12 @@ Build a TV network app like Strimm for Hush Music TV Network with:
 - [x] Video upload UI with progress indicator
 - [x] Favorites page
 - [x] Admin-only Login page
+- [x] **Home page** (visitor-facing):
+  - Hero section with featured channel
+  - "Watch Now" and "Live TV" buttons (no Create Channel for visitors)
+  - Categories section
+  - Featured channels grid
+  - CTA section with "Watch Live TV" button
 - [x] **Live TV page with synchronized playback**:
   - Channel sidebar with switching
   - **Shuffle icon** next to channel names with random play enabled
@@ -67,11 +74,12 @@ Build a TV network app like Strimm for Hush Music TV Network with:
 - [x] Top navigation bar on all pages
 - [x] Scrollbars on all pages
 
-#### Video Support
+#### Video & Image Support
 - [x] YouTube video embeds
 - [x] Local MP4 file uploads (max 2GB)
 - [x] VideoPlayer component handles both video types
 - [x] Live sync for both YouTube and uploaded videos
+- [x] **Image uploads** for channel thumbnails (JPEG, PNG, WebP, GIF - max 10MB)
 
 ## Architecture
 - **Frontend**: React with Tailwind CSS, Shadcn UI components
