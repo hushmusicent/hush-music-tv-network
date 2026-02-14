@@ -8,6 +8,7 @@ import Layout from './components/Layout';
 import Home from './pages/Home';
 import Browse from './pages/Browse';
 import Watch from './pages/Watch';
+import LiveTV from './pages/LiveTV';
 import TVGuide from './pages/TVGuide';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
@@ -24,6 +25,9 @@ function App() {
           {/* Embed pages - no layout, minimal UI */}
           <Route path="/embed/:channelId" element={<EmbedPlayer />} />
           <Route path="/embed" element={<EmbedNetwork />} />
+          
+          {/* Live TV - full screen experience */}
+          <Route path="/live" element={<LiveTV />} />
           
           {/* Auth page without layout */}
           <Route path="/login" element={<Login />} />
