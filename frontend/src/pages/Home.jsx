@@ -221,10 +221,11 @@ const Home = () => {
             <Radio size={48} className="mx-auto mb-4 text-gray-500" />
             <p className="text-gray-400 mb-4">No channels available yet</p>
             <Button
-              onClick={() => isAuthenticated ? navigate('/create') : navigate('/login')}
+              onClick={() => navigate('/live')}
               className="bg-primary hover:bg-primary-hover"
             >
-              Create First Channel
+              <Radio size={18} className="mr-2" />
+              Watch Live TV
             </Button>
           </div>
         )}
