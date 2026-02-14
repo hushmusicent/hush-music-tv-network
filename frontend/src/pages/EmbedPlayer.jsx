@@ -4,6 +4,40 @@ import { channelsAPI } from '../lib/api';
 import { Play, Pause, Volume2, VolumeX, SkipForward, SkipBack } from 'lucide-react';
 import '../embed.css';
 
+// Calculate the current position in a channel's playlist based on real time
+const calculateLivePosition = (videos) => {
+  if (!videos || videos.length === 0) return { videoIndex: 0, seekTime: 0 };
+  
+  const now = new Date();
+  const startOfDay = new Date(now);
+  startOfDay.setHours(0, 0, 0, 0);
+  
+  const secondsSinceMidnight = Math.floor((now - startOfDay) / 1000);
+  
+  let totalDuration = 0;
+  videos.forEach(v => {
+    totalDuration += v.duration || 300;
+  });
+  
+  if (totalDuration === 0) return { videoIndex: 0, seekTime: 0 };
+  
+  const positionInPlaylist = secondsSinceMidnight % totalDuration;
+  
+  let accumulated = 0;
+  for (let i = 0; i < videos.length; i++) {
+    const videoDuration = videos[i].duration || 300;
+    if (accumulated + videoDuration > positionInPlaylist) {
+      return {
+        videoIndex: i,
+        seekTime: positionInPlaylist - accumulated
+      };
+    }
+    accumulated += videoDuration;
+  }
+  
+  return { videoIndex: 0, seekTime: 0 };
+};
+
 const EmbedPlayer = () => {
   const { channelId } = useParams();
   const [searchParams] = useSearchParams();
@@ -12,6 +46,7 @@ const EmbedPlayer = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [seekTime, setSeekTime] = useState(0);
   const [isPlaying, setIsPlaying] = useState(true);
   const [isMuted, setIsMuted] = useState(searchParams.get('muted') === '1');
   const [showControls, setShowControls] = useState(false);
@@ -21,6 +56,7 @@ const EmbedPlayer = () => {
   const autoplay = searchParams.get('autoplay') !== '0';
   const showInfo = searchParams.get('info') !== '0';
   const showBranding = searchParams.get('branding') !== '0';
+  const liveSync = searchParams.get('live') !== '0'; // Default to live sync
 
   useEffect(() => {
     loadChannel();
@@ -30,6 +66,14 @@ const EmbedPlayer = () => {
     try {
       const response = await channelsAPI.getById(channelId);
       setChannel(response.data);
+      
+      // Calculate live position if live sync enabled
+      if (liveSync && response.data.videos?.length > 0) {
+        const { videoIndex, seekTime: newSeekTime } = calculateLivePosition(response.data.videos);
+        setCurrentIndex(videoIndex);
+        setSeekTime(newSeekTime);
+      }
+      
       setIsPlaying(autoplay);
     } catch (err) {
       setError('Channel not found');
@@ -37,6 +81,21 @@ const EmbedPlayer = () => {
       setLoading(false);
     }
   };
+
+  // Sync to live position periodically
+  useEffect(() => {
+    if (!liveSync || !channel?.videos?.length) return;
+    
+    const syncInterval = setInterval(() => {
+      const { videoIndex, seekTime: newSeekTime } = calculateLivePosition(channel.videos);
+      if (videoIndex !== currentIndex) {
+        setCurrentIndex(videoIndex);
+        setSeekTime(newSeekTime);
+      }
+    }, 5000);
+    
+    return () => clearInterval(syncInterval);
+  }, [liveSync, channel, currentIndex]);
 
   const currentVideo = channel?.videos?.[currentIndex];
 
@@ -89,7 +148,7 @@ const EmbedPlayer = () => {
     );
   }
 
-  const embedUrl = `https://www.youtube.com/embed/${currentVideo.youtube_id}?autoplay=${isPlaying ? 1 : 0}&mute=${isMuted ? 1 : 0}&rel=0&modestbranding=1&controls=0&enablejsapi=1`;
+  const embedUrl = `https://www.youtube.com/embed/${currentVideo.youtube_id}?autoplay=${isPlaying ? 1 : 0}&mute=${isMuted ? 1 : 0}&start=${liveSync ? Math.floor(seekTime) : 0}&rel=0&modestbranding=1&controls=0&enablejsapi=1`;
 
   return (
     <div 
