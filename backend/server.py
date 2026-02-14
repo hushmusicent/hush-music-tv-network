@@ -132,6 +132,7 @@ class ChannelResponse(ChannelBase):
     viewers_count: int = 0
     favorites_count: int = 0
     created_at: str
+    random_play: bool = False
 
 class CategoryResponse(BaseModel):
     name: str
