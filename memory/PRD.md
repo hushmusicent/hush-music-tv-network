@@ -1,64 +1,110 @@
-# StreamTV - Personal TV Network App
+# Hush Music TV Network - Product Requirements Document
 
 ## Original Problem Statement
-Build a TV network app like Strimm with:
+Build a TV network app like Strimm for Hush Music TV Network with:
+- Admin-only system (single admin user)
 - YouTube videos as content source
+- Local video file uploads (MP4, max 2GB)
 - Custom channels with scheduled programming
-- 24/7 continuous playback with auto-loop
+- 24/7 continuous playback with live sync
 - Multiple channels with different themes/genres
-- Guest viewing + user accounts with favorites
-- User-created channels (community features)
+- Guest viewing + admin account for management
 - Dark theme (Netflix-style)
 - TV guide, scheduling, channel categories
+- Embeddable players for channels and full network
+
+## User Personas
+1. **Admin/Content Curator**: The single administrator who manages all channels, uploads videos, and controls content
+2. **Casual Viewer**: Browses and watches channels without an account
+
+## Core Requirements
+
+### Implemented Features (Feb 14, 2026)
+
+#### Backend
+- [x] User auth (admin-only login, JWT tokens)
+- [x] Channel management (CRUD, videos, schedule)
+- [x] Categories with counts (10 categories)
+- [x] Favorites system
+- [x] TV Guide API
+- [x] Video upload endpoint (MP4 only, max 2GB)
+- [x] Uploaded videos management (list, delete)
+- [x] Static file serving for uploaded videos
+- [x] Seed data with sample channels
+
+#### Frontend
+- [x] Home page with hero section and featured channels
+- [x] Browse page with search and category filters
+- [x] Watch page with YouTube/uploaded video player
+- [x] TV Guide with time-based schedule
+- [x] Dashboard for admin user
+- [x] Channel Creator/Editor with YouTube and Upload tabs
+- [x] Video upload UI with progress indicator
+- [x] Favorites page
+- [x] Admin-only Login page
+- [x] Live TV page with:
+  - Channel sidebar with switching
+  - Synchronized video player
+  - Schedule bar showing current/upcoming
+  - Support for both YouTube and uploaded videos
+- [x] Embeddable player for single channel
+- [x] Embeddable network player
+- [x] Top navigation bar on all pages
+- [x] Scrollbars on all pages
+
+#### Video Support
+- [x] YouTube video embeds
+- [x] Local MP4 file uploads (max 2GB)
+- [x] VideoPlayer component handles both video types
+- [x] Live sync for both YouTube and uploaded videos
 
 ## Architecture
 - **Frontend**: React with Tailwind CSS, Shadcn UI components
 - **Backend**: FastAPI with MongoDB
-- **Authentication**: JWT-based auth
-- **Video Playback**: YouTube iframe embeds
+- **Authentication**: JWT-based auth (admin-only)
+- **Video Playback**: YouTube iframe embeds + HTML5 video for uploads
+- **File Storage**: Local uploads directory with static file serving
 
-## User Personas
-1. **Content Curator**: Creates themed channels with YouTube playlists
-2. **Casual Viewer**: Browses and watches channels without account
-3. **Engaged User**: Registers to create channels and save favorites
+## API Endpoints
 
-## Core Requirements (Static)
-- [x] YouTube video integration via iframe embeds
-- [x] Channel CRUD operations
-- [x] User authentication (register/login)
-- [x] 24/7 continuous playback
-- [x] TV guide with schedule view
-- [x] Category-based browsing
-- [x] Favorites system
-- [x] Dark Netflix-style theme
+### Auth
+- POST /api/auth/login - Admin login
+- GET /api/auth/me - Get current user
 
-## What's Been Implemented (Feb 14, 2026)
-### Backend
-- User auth (register, login, JWT tokens)
-- Channel management (CRUD, videos, schedule)
-- Categories with counts
-- Favorites system
-- TV Guide API
-- Seed data with sample channels
+### Channels
+- GET /api/channels - List all public channels
+- GET /api/channels/featured - Get featured channels
+- GET /api/channels/my - Get admin's channels
+- GET /api/channels/:id - Get channel by ID
+- POST /api/channels - Create channel
+- PUT /api/channels/:id - Update channel
+- DELETE /api/channels/:id - Delete channel
 
-### Frontend
-- Home page with hero section and featured channels
-- Browse page with search and category filters
-- Watch page with YouTube player
-- TV Guide with time-based schedule
-- Dashboard for logged-in users
-- Channel Creator/Editor
-- Favorites page
-- Login/Register pages
+### Videos
+- POST /api/channels/:id/videos - Add video to channel
+- DELETE /api/channels/:id/videos/:videoId - Remove video
+- PUT /api/channels/:id/videos/reorder - Reorder videos
+
+### Upload
+- POST /api/upload/video - Upload video file (MP4, max 2GB)
+- GET /api/upload/videos - List uploaded videos
+- DELETE /api/upload/video/:id - Delete uploaded video
+
+### Other
+- GET /api/categories - List categories
+- GET /api/tv-guide - Get TV guide data
+- POST /api/seed - Seed initial data
+
+## Admin Credentials
+- Email: Hushmusicent419@gmail.com
+- Password: sstisdd419
 
 ## Prioritized Backlog
-### P0 (Critical)
-- All completed
 
 ### P1 (High Priority)
 - [ ] YouTube API integration for auto-fetching video metadata
 - [ ] Real-time viewer count updates
-- [ ] User profile customization
+- [ ] Video thumbnail generation for uploaded videos
 
 ### P2 (Medium Priority)
 - [ ] Drag-and-drop video reordering
@@ -71,7 +117,11 @@ Build a TV network app like Strimm with:
 - [ ] Channel subscriptions/notifications
 - [ ] Mobile app version
 
-## Next Tasks
-1. Add YouTube Data API for video metadata
-2. Implement real-time viewer counts with WebSockets
-3. Add channel analytics
+## Known Issues
+- Some channel thumbnails may show as broken if using invalid URLs
+- Duplicate channels issue has been fixed (cleanup script applied)
+
+## Testing
+- Backend: 28/28 tests passed (pytest in /app/backend/tests/)
+- Frontend: All features tested and working
+- Test report: /app/test_reports/iteration_7.json
