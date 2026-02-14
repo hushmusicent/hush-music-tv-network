@@ -801,7 +801,43 @@ const ChannelCreator = () => {
                             </span>
                           )}
                           <span className="text-xs text-gray-500 flex items-center gap-1">
-                            <Clock size={10} /> {Math.floor(video.duration / 60)}min
+                            <Clock size={10} />
+                            {editingVideoId === video.id ? (
+                              <Input
+                                value={editingDuration}
+                                onChange={(e) => setEditingDuration(e.target.value)}
+                                onBlur={() => {
+                                  if (editingDuration.trim()) {
+                                    handleUpdateVideoDuration(video.id, editingDuration);
+                                  } else {
+                                    setEditingVideoId(null);
+                                  }
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    handleUpdateVideoDuration(video.id, editingDuration);
+                                  } else if (e.key === 'Escape') {
+                                    setEditingVideoId(null);
+                                    setEditingDuration('');
+                                  }
+                                }}
+                                className="w-16 h-5 text-xs bg-black/50 border-white/20 px-1"
+                                placeholder="3:45"
+                                autoFocus
+                              />
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingVideoId(video.id);
+                                  setEditingDuration(formatDuration(video.duration || 300));
+                                }}
+                                className="hover:text-primary transition-colors"
+                                title="Click to edit duration"
+                              >
+                                {formatDuration(video.duration || 300)}
+                              </button>
+                            )}
                           </span>
                         </div>
                       </div>
