@@ -3,7 +3,7 @@ import sys
 import json
 from datetime import datetime
 
-class TVNetworkAPITester:
+class TVNetworkAdminAPITester:
     def __init__(self, base_url="https://broadcaster.preview.emergentagent.com"):
         self.base_url = base_url
         self.token = None
@@ -13,6 +13,9 @@ class TVNetworkAPITester:
         self.tests_run = 0
         self.tests_passed = 0
         self.errors = []
+        # Admin credentials
+        self.admin_email = "Hushmusicent419@gmail.com"
+        self.admin_password = "sstisdd419"
 
     def log_test(self, name, success, details=""):
         """Log test results"""
