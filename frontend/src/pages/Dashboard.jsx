@@ -198,6 +198,52 @@ const Dashboard = () => {
     }
   };
 
+  const formatDuration = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const parseDuration = (str) => {
+    const durationStr = str.trim();
+    if (durationStr.includes(':')) {
+      const parts = durationStr.split(':').map(Number);
+      if (parts.length === 2) {
+        return parts[0] * 60 + parts[1];
+      } else if (parts.length === 3) {
+        return parts[0] * 3600 + parts[1] * 60 + parts[2];
+      }
+    }
+    return parseInt(durationStr, 10) || 300;
+  };
+
+  const handleUpdateVideoDuration = async (channelId, videoId, newDuration) => {
+    const durationSeconds = parseDuration(newDuration);
+    
+    try {
+      await channelsAPI.updateVideo(channelId, videoId, { duration: durationSeconds });
+      
+      // Update local state
+      setChannels(prev => prev.map(ch => {
+        if (ch.id === channelId) {
+          return {
+            ...ch,
+            videos: ch.videos.map(v => 
+              v.id === videoId ? { ...v, duration: durationSeconds } : v
+            )
+          };
+        }
+        return ch;
+      }));
+      
+      toast.success('Duration updated');
+    } catch (error) {
+      toast.error('Failed to update duration');
+    } finally {
+      setEditingVideoDuration({ channelId: null, videoId: null, value: '' });
+    }
+  };
+
   const handleDeleteChannel = async () => {
     if (!deleteChannelId) return;
 
