@@ -92,12 +92,15 @@ const calculateLivePosition = (videos, randomPlay = false, baseTime = null) => {
 };
 
 // Generate schedule for a channel
-const generateSchedule = (videos, hoursAhead = 4) => {
+const generateSchedule = (videos, randomPlay = false, hoursAhead = 4) => {
   if (!videos || videos.length === 0) return [];
   
   const schedule = [];
   const now = new Date();
-  const { videoIndex, seekTime } = calculateLivePosition(videos);
+  const { videoIndex, seekTime, shuffledVideos } = calculateLivePosition(videos, randomPlay);
+  
+  // Use shuffled videos if random play is enabled
+  const playlistVideos = shuffledVideos.length > 0 ? shuffledVideos : videos;
   
   let currentTime = new Date(now);
   let currentVideoIndex = videoIndex;
@@ -109,7 +112,7 @@ const generateSchedule = (videos, hoursAhead = 4) => {
   endTime.setHours(endTime.getHours() + hoursAhead);
   
   while (currentTime < endTime && schedule.length < 20) {
-    const video = videos[currentVideoIndex % videos.length];
+    const video = playlistVideos[currentVideoIndex % playlistVideos.length];
     const duration = video.duration || 300;
     
     const startTime = new Date(currentTime);
