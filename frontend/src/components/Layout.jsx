@@ -62,8 +62,8 @@ const Layout = ({ children }) => {
               <div className="p-2 bg-primary rounded-lg glow-primary group-hover:scale-110 transition-transform">
                 <Tv size={24} className="text-white" />
               </div>
-              <span className="font-heading text-3xl tracking-wider hidden sm:block">
-                STREAM<span className="text-primary">TV</span>
+              <span className="font-heading text-2xl tracking-wider hidden sm:block">
+                HUSH MUSIC <span className="text-primary">TV</span>
               </span>
             </Link>
           </div>

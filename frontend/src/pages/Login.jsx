@@ -84,7 +84,7 @@ const Login = () => {
             <div className="p-2 bg-primary rounded-lg">
               <Tv size={24} />
             </div>
-            <span className="font-heading text-3xl tracking-wider">STREAMTV</span>
+            <span className="font-heading text-3xl tracking-wider">HUSH MUSIC TV</span>
           </Link>
           
           <div>
@@ -99,7 +99,7 @@ const Login = () => {
           </div>
           
           <p className="text-gray-500 text-sm">
-            © 2025 StreamTV. All rights reserved.
+            © 2025 Hush Music TV Network. All rights reserved.
           </p>
         </div>
       </div>
@@ -113,7 +113,7 @@ const Login = () => {
               <div className="p-2 bg-primary rounded-lg">
                 <Tv size={24} />
               </div>
-              <span className="font-heading text-2xl tracking-wider">STREAMTV</span>
+              <span className="font-heading text-2xl tracking-wider">HUSH MUSIC TV</span>
             </Link>
           </div>
 
