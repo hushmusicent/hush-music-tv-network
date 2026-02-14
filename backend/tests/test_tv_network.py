@@ -564,6 +564,227 @@ class TestRandomPlay:
             pytest.skip("No channels to test")
 
 
+class TestImageUpload:
+    """Image upload functionality tests (new feature for thumbnail upload)"""
+    
+    @pytest.fixture
+    def auth_token(self):
+        response = requests.post(f"{BASE_URL}/api/auth/login", json={
+            "email": ADMIN_EMAIL,
+            "password": ADMIN_PASSWORD
+        })
+        return response.json()["access_token"]
+    
+    def test_upload_image_requires_auth(self):
+        """Verify image upload requires authentication"""
+        response = requests.post(f"{BASE_URL}/api/upload/image")
+        assert response.status_code == 401
+        print("SUCCESS: Image upload endpoint requires authentication")
+    
+    def test_upload_image_admin_only(self, auth_token):
+        """Test image upload with a small test image"""
+        # Create a small valid PNG image (1x1 pixel)
+        import io
+        # PNG header for 1x1 pixel image
+        png_data = bytes([
+            0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,  # PNG signature
+            0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,  # IHDR chunk
+            0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,  # width=1, height=1
+            0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53,  # bit depth, color type, etc
+            0xDE, 0x00, 0x00, 0x00, 0x0C, 0x49, 0x44, 0x41,  # IDAT chunk
+            0x54, 0x08, 0xD7, 0x63, 0xF8, 0xFF, 0xFF, 0x3F,
+            0x00, 0x05, 0xFE, 0x02, 0xFE, 0xDC, 0xCC, 0x59,
+            0xE7, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E,  # IEND chunk
+            0x44, 0xAE, 0x42, 0x60, 0x82
+        ])
+        
+        files = {'file': ('test_thumbnail.png', io.BytesIO(png_data), 'image/png')}
+        response = requests.post(
+            f"{BASE_URL}/api/upload/image",
+            headers={"Authorization": f"Bearer {auth_token}"},
+            files=files
+        )
+        assert response.status_code == 200, f"Upload failed: {response.text}"
+        
+        data = response.json()
+        assert "id" in data
+        assert "filename" in data
+        assert "url" in data
+        assert data["url"].startswith("/api/images/")
+        print(f"SUCCESS: Image uploaded - URL: {data['url']}")
+        
+        # Cleanup - delete the uploaded image
+        requests.delete(
+            f"{BASE_URL}/api/upload/image/{data['id']}",
+            headers={"Authorization": f"Bearer {auth_token}"}
+        )
+        return data
+    
+    def test_list_uploaded_images(self, auth_token):
+        """List all uploaded images (admin only)"""
+        response = requests.get(
+            f"{BASE_URL}/api/upload/images",
+            headers={"Authorization": f"Bearer {auth_token}"}
+        )
+        assert response.status_code == 200
+        
+        data = response.json()
+        assert isinstance(data, list)
+        print(f"SUCCESS: Listed {len(data)} uploaded images")
+    
+    def test_list_images_requires_admin(self):
+        """List images should require admin"""
+        response = requests.get(f"{BASE_URL}/api/upload/images")
+        assert response.status_code == 401
+        print("SUCCESS: List uploaded images requires authentication")
+    
+    def test_image_accessible_via_static_route(self, auth_token):
+        """Verify uploaded images are accessible via /api/images/"""
+        # Upload a test image first
+        import io
+        png_data = bytes([
+            0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
+            0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+            0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+            0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53,
+            0xDE, 0x00, 0x00, 0x00, 0x0C, 0x49, 0x44, 0x41,
+            0x54, 0x08, 0xD7, 0x63, 0xF8, 0xFF, 0xFF, 0x3F,
+            0x00, 0x05, 0xFE, 0x02, 0xFE, 0xDC, 0xCC, 0x59,
+            0xE7, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E,
+            0x44, 0xAE, 0x42, 0x60, 0x82
+        ])
+        
+        files = {'file': ('access_test.png', io.BytesIO(png_data), 'image/png')}
+        upload_resp = requests.post(
+            f"{BASE_URL}/api/upload/image",
+            headers={"Authorization": f"Bearer {auth_token}"},
+            files=files
+        )
+        
+        if upload_resp.status_code == 200:
+            data = upload_resp.json()
+            image_url = f"{BASE_URL}{data['url']}"
+            
+            # Try to access the image
+            access_resp = requests.get(image_url)
+            assert access_resp.status_code == 200
+            print(f"SUCCESS: Image accessible at {image_url}")
+            
+            # Cleanup
+            requests.delete(
+                f"{BASE_URL}/api/upload/image/{data['id']}",
+                headers={"Authorization": f"Bearer {auth_token}"}
+            )
+        else:
+            pytest.skip("Could not upload image to test access")
+    
+    def test_delete_uploaded_image(self, auth_token):
+        """Delete an uploaded image"""
+        # Upload first
+        import io
+        png_data = bytes([
+            0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
+            0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+            0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+            0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53,
+            0xDE, 0x00, 0x00, 0x00, 0x0C, 0x49, 0x44, 0x41,
+            0x54, 0x08, 0xD7, 0x63, 0xF8, 0xFF, 0xFF, 0x3F,
+            0x00, 0x05, 0xFE, 0x02, 0xFE, 0xDC, 0xCC, 0x59,
+            0xE7, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E,
+            0x44, 0xAE, 0x42, 0x60, 0x82
+        ])
+        
+        files = {'file': ('delete_test.png', io.BytesIO(png_data), 'image/png')}
+        upload_resp = requests.post(
+            f"{BASE_URL}/api/upload/image",
+            headers={"Authorization": f"Bearer {auth_token}"},
+            files=files
+        )
+        
+        if upload_resp.status_code == 200:
+            image_id = upload_resp.json()["id"]
+            
+            # Delete the image
+            delete_resp = requests.delete(
+                f"{BASE_URL}/api/upload/image/{image_id}",
+                headers={"Authorization": f"Bearer {auth_token}"}
+            )
+            assert delete_resp.status_code == 200
+            print("SUCCESS: Image deleted successfully")
+            
+            # Verify it's gone from the list
+            list_resp = requests.get(
+                f"{BASE_URL}/api/upload/images",
+                headers={"Authorization": f"Bearer {auth_token}"}
+            )
+            images = list_resp.json()
+            image_ids = [img["id"] for img in images]
+            assert image_id not in image_ids
+            print("SUCCESS: Deleted image no longer in list")
+        else:
+            pytest.skip("Could not upload image to test deletion")
+    
+    def test_update_channel_thumbnail_with_uploaded_image(self, auth_token):
+        """Test that a channel thumbnail can be updated with an uploaded image URL"""
+        # First upload an image
+        import io
+        png_data = bytes([
+            0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
+            0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+            0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+            0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53,
+            0xDE, 0x00, 0x00, 0x00, 0x0C, 0x49, 0x44, 0x41,
+            0x54, 0x08, 0xD7, 0x63, 0xF8, 0xFF, 0xFF, 0x3F,
+            0x00, 0x05, 0xFE, 0x02, 0xFE, 0xDC, 0xCC, 0x59,
+            0xE7, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E,
+            0x44, 0xAE, 0x42, 0x60, 0x82
+        ])
+        
+        files = {'file': ('thumbnail_test.png', io.BytesIO(png_data), 'image/png')}
+        upload_resp = requests.post(
+            f"{BASE_URL}/api/upload/image",
+            headers={"Authorization": f"Bearer {auth_token}"},
+            files=files
+        )
+        
+        if upload_resp.status_code != 200:
+            pytest.skip("Could not upload image for thumbnail test")
+        
+        image_url = upload_resp.json()["url"]
+        image_id = upload_resp.json()["id"]
+        
+        # Create a test channel
+        create_resp = requests.post(
+            f"{BASE_URL}/api/channels",
+            headers={"Authorization": f"Bearer {auth_token}"},
+            json={
+                "name": "TEST_ThumbnailChannel",
+                "category": "Music"
+            }
+        )
+        channel_id = create_resp.json()["id"]
+        
+        # Update channel with uploaded image thumbnail
+        update_resp = requests.put(
+            f"{BASE_URL}/api/channels/{channel_id}",
+            headers={"Authorization": f"Bearer {auth_token}"},
+            json={"thumbnail": f"{BASE_URL}{image_url}"}
+        )
+        assert update_resp.status_code == 200
+        assert image_url in update_resp.json()["thumbnail"]
+        print(f"SUCCESS: Channel thumbnail updated with uploaded image")
+        
+        # Cleanup
+        requests.delete(
+            f"{BASE_URL}/api/channels/{channel_id}",
+            headers={"Authorization": f"Bearer {auth_token}"}
+        )
+        requests.delete(
+            f"{BASE_URL}/api/upload/image/{image_id}",
+            headers={"Authorization": f"Bearer {auth_token}"}
+        )
+
+
 class TestFavorites:
     """Favorites functionality tests"""
     
