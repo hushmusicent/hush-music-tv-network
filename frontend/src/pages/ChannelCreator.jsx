@@ -182,10 +182,16 @@ const ChannelCreator = () => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    // Validate file size (max 500MB)
-    const maxSize = 500 * 1024 * 1024;
+    // Validate file type (MP4 only per user requirement)
+    if (file.type !== 'video/mp4') {
+      toast.error('Only MP4 files are allowed');
+      return;
+    }
+
+    // Validate file size (max 2GB)
+    const maxSize = 2 * 1024 * 1024 * 1024; // 2GB
     if (file.size > maxSize) {
-      toast.error('File too large. Maximum size is 500MB');
+      toast.error('File too large. Maximum size is 2GB');
       return;
     }
 
@@ -495,11 +501,12 @@ const ChannelCreator = () => {
                   <input
                     ref={fileInputRef}
                     type="file"
-                    accept="video/mp4,video/webm,video/ogg,video/quicktime,video/x-msvideo"
+                    accept="video/mp4"
                     onChange={handleFileUpload}
                     className="hidden"
                     id="video-upload"
                     disabled={uploading}
+                    data-testid="video-upload-input"
                   />
                   <label htmlFor="video-upload" className="cursor-pointer">
                     <Upload size={32} className="mx-auto mb-2 text-gray-400" />
@@ -507,7 +514,7 @@ const ChannelCreator = () => {
                       Click to upload video
                     </p>
                     <p className="text-xs text-gray-500">
-                      MP4, WebM, OGG, MOV, AVI (max 500MB)
+                      MP4 only (max 2GB)
                     </p>
                   </label>
                 </div>
