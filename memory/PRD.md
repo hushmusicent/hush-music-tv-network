@@ -135,8 +135,9 @@ Build a TV network app like Strimm for Hush Music TV Network with:
 ## Known Issues
 - Some channel thumbnails may show as broken if using invalid URLs
 - Duplicate channels issue has been fixed (cleanup script applied)
+- User requested to delete first 7 channels but only 1 channel existed in database (no action needed)
 
 ## Testing
-- Backend: 28/28 tests passed (pytest in /app/backend/tests/)
+- Backend: 32/32 tests passed (pytest in /app/backend/tests/)
 - Frontend: All features tested and working
-- Test report: /app/test_reports/iteration_7.json
+- Test report: /app/test_reports/iteration_9.json
