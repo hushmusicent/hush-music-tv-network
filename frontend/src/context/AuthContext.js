@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 import { authAPI } from '../lib/api';
 
 const AuthContext = createContext(null);
@@ -16,39 +16,52 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
-  const loadUser = useCallback(async () => {
-    const token = localStorage.getItem('token');
-    const savedUser = localStorage.getItem('user');
-    
-    if (token && savedUser) {
-      try {
-        setUser(JSON.parse(savedUser));
-        setIsAuthenticated(true);
-        
-        // Verify token is still valid
-        const response = await authAPI.getMe();
-        setUser(response.data);
-        localStorage.setItem('user', JSON.stringify(response.data));
-      } catch (error) {
-        console.error('Token validation failed:', error);
-        logout();
-      }
-    }
-    setLoading(false);
-  }, []);
+  // Clear auth state
+  const clearAuth = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    setUser(null);
+    setIsAuthenticated(false);
+  };
 
   useEffect(() => {
+    const loadUser = async () => {
+      const token = localStorage.getItem('token');
+      const savedUser = localStorage.getItem('user');
+      
+      if (token && savedUser) {
+        try {
+          const parsedUser = JSON.parse(savedUser);
+          setUser(parsedUser);
+          setIsAuthenticated(true);
+          
+          // Verify token is still valid (in background)
+          try {
+            const response = await authAPI.getMe();
+            setUser(response.data);
+            localStorage.setItem('user', JSON.stringify(response.data));
+          } catch (verifyError) {
+            console.error('Token validation failed:', verifyError);
+            clearAuth();
+          }
+        } catch (error) {
+          console.error('Error parsing saved user:', error);
+          clearAuth();
+        }
+      }
+      setLoading(false);
+    };
+
     loadUser();
     
     // Listen for logout events
     const handleLogout = () => {
-      setUser(null);
-      setIsAuthenticated(false);
+      clearAuth();
     };
     
     window.addEventListener('auth-logout', handleLogout);
     return () => window.removeEventListener('auth-logout', handleLogout);
-  }, [loadUser]);
+  }, []);
 
   const login = async (email, password) => {
     const response = await authAPI.login({ email, password });
@@ -77,10 +90,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    setUser(null);
-    setIsAuthenticated(false);
+    clearAuth();
   };
 
   const value = {
