@@ -364,21 +364,22 @@ class UploadedVideoResponse(BaseModel):
     thumbnail: Optional[str] = None
     created_at: str
 
+MAX_UPLOAD_SIZE = 2 * 1024 * 1024 * 1024  # 2GB
+
 @api_router.post("/upload/video", response_model=UploadedVideoResponse)
 async def upload_video(
     file: UploadFile = File(...),
     user: dict = Depends(require_user)
 ):
-    """Upload a video file (admin only)"""
+    """Upload a video file (admin only) - MP4 only, max 2GB"""
     if not user.get("is_admin", False):
         raise HTTPException(status_code=403, detail="Admin access required")
     
-    # Validate file type
-    allowed_types = ["video/mp4", "video/webm", "video/ogg", "video/quicktime", "video/x-msvideo"]
-    if file.content_type not in allowed_types:
+    # Validate file type - MP4 only
+    if file.content_type != "video/mp4":
         raise HTTPException(
             status_code=400, 
-            detail=f"Invalid file type. Allowed: mp4, webm, ogg, mov, avi"
+            detail="Invalid file type. Only MP4 files are allowed"
         )
     
     # Generate unique filename
