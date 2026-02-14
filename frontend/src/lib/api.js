@@ -82,4 +82,27 @@ export const seedAPI = {
   seed: () => api.post('/seed'),
 };
 
+// Video Upload API
+export const uploadAPI = {
+  uploadVideo: (file, onProgress) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    return api.post('/upload/video', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+      onUploadProgress: (progressEvent) => {
+        if (onProgress) {
+          const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+          onProgress(percentCompleted);
+        }
+      },
+    });
+  },
+  listVideos: () => api.get('/upload/videos'),
+  deleteVideo: (videoId) => api.delete(`/upload/video/${videoId}`),
+  updateDuration: (videoId, duration) => api.put(`/upload/video/${videoId}/duration`, null, { params: { duration } }),
+};
+
 export default api;
