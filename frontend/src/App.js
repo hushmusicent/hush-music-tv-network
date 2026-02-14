@@ -26,8 +26,15 @@ function App() {
           <Route path="/embed/:channelId" element={<EmbedPlayer />} />
           <Route path="/embed" element={<EmbedNetwork />} />
           
-          {/* Live TV - full screen experience */}
-          <Route path="/live" element={<LiveTV />} />
+          {/* Live TV - with layout */}
+          <Route
+            path="/live"
+            element={
+              <Layout>
+                <LiveTV />
+              </Layout>
+            }
+          />
           
           {/* Auth page without layout */}
           <Route path="/login" element={<Login />} />
