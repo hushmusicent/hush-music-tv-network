@@ -31,9 +31,13 @@ client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
 # JWT Config
-JWT_SECRET = os.environ.get('JWT_SECRET', 'tv-network-secret-key-change-in-prod')
+JWT_SECRET = os.environ['JWT_SECRET']
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION_HOURS = 24
+
+# Admin credentials from environment
+ADMIN_EMAIL = os.environ['ADMIN_EMAIL']
+ADMIN_PASSWORD = os.environ['ADMIN_PASSWORD']
 
 # Create the main app
 app = FastAPI(title="TV Network API")
@@ -65,10 +69,6 @@ class UserResponse(BaseModel):
     avatar: Optional[str] = None
     is_admin: bool = False
     created_at: str
-
-# Admin credentials
-ADMIN_EMAIL = "Hushmusicent419@gmail.com"
-ADMIN_PASSWORD = "sstisdd419"
 
 class TokenResponse(BaseModel):
     access_token: str
