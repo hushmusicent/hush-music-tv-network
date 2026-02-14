@@ -189,6 +189,24 @@ const ChannelCreator = () => {
       return;
     }
 
+    // Parse duration - support formats like "3:45" or "225" (seconds)
+    let durationSeconds = 300; // Default 5 min
+    if (newVideoDuration.trim()) {
+      const durationStr = newVideoDuration.trim();
+      if (durationStr.includes(':')) {
+        // Format: MM:SS or HH:MM:SS
+        const parts = durationStr.split(':').map(Number);
+        if (parts.length === 2) {
+          durationSeconds = parts[0] * 60 + parts[1];
+        } else if (parts.length === 3) {
+          durationSeconds = parts[0] * 3600 + parts[1] * 60 + parts[2];
+        }
+      } else {
+        // Just seconds
+        durationSeconds = parseInt(durationStr, 10) || 300;
+      }
+    }
+
     setAddingVideo(true);
     
     const newVideo = {
@@ -196,7 +214,7 @@ const ChannelCreator = () => {
       youtube_id: youtubeId,
       title: `Video ${videos.length + 1}`,
       thumbnail: `https://img.youtube.com/vi/${youtubeId}/maxresdefault.jpg`,
-      duration: 300,
+      duration: durationSeconds,
       order: videos.length,
       type: 'youtube'
     };
@@ -220,6 +238,7 @@ const ChannelCreator = () => {
 
     setVideos((prev) => [...prev, newVideo]);
     setNewVideoUrl('');
+    setNewVideoDuration('');
     setAddingVideo(false);
   };
 
