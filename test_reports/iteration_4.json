@@ -9,7 +9,7 @@
         "component": "EmbedPlayer",
         "issue": "Single channel embed player component exists but remains hidden (not visible)",
         "selector": "[data-testid=\"embed-player\"]",
-        "test_url": "https://hush-music-tv.preview.emergentagent.com/embed/1e7d7c6c-1688-4119-8ee0-c06f8e38dc32",
+        "test_url": "https://live-tv-guide-1.preview.emergentagent.com/embed/1e7d7c6c-1688-4119-8ee0-c06f8e38dc32",
         "fix_priority": "HIGH",
         "details": "Component resolves but is hidden - 25x locator found hidden element. Shows black screen instead of video player."
       }
