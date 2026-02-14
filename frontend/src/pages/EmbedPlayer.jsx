@@ -148,7 +148,7 @@ const EmbedPlayer = () => {
     );
   }
 
-  const embedUrl = `https://www.youtube.com/embed/${currentVideo.youtube_id}?autoplay=${isPlaying ? 1 : 0}&mute=${isMuted ? 1 : 0}&start=${liveSync ? Math.floor(seekTime) : 0}&rel=0&modestbranding=1&controls=0&enablejsapi=1`;
+  const embedUrl = `https://www.youtube.com/embed/${currentVideo.youtube_id}?autoplay=${isPlaying ? 1 : 0}&mute=${isMuted ? 1 : 0}&start=${liveSync ? Math.floor(seekTime) : 0}&rel=0&modestbranding=1&playsinline=1`;
 
   return (
     <div 
@@ -159,11 +159,12 @@ const EmbedPlayer = () => {
     >
       {/* YouTube Embed */}
       <iframe
-        key={`${currentVideo.youtube_id}-${isPlaying}-${isMuted}`}
+        key={`${currentVideo.youtube_id}-${isPlaying}-${isMuted}-${currentIndex}`}
         src={embedUrl}
         title={currentVideo.title}
         className="absolute inset-0 w-full h-full"
-        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+        style={{ border: 'none' }}
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
         allowFullScreen
       />
 
