@@ -1,0 +1,137 @@
+{
+  "design_system": {
+    "identity": {
+      "name": "Strimm Clone",
+      "personality": "Cinematic, Immersive, Infinite, Curated",
+      "archetype": "Electric & Neon",
+      "theme_mode": "dark"
+    },
+    "typography": {
+      "fonts": [
+        {
+          "role": "heading",
+          "name": "Bebas Neue",
+          "url": "https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap",
+          "class": "font-heading",
+          "usage": "Page titles, Hero text, Channel Names"
+        },
+        {
+          "role": "body",
+          "name": "Manrope",
+          "url": "https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700&display=swap",
+          "class": "font-sans",
+          "usage": "UI text, descriptions, metadata"
+        }
+      ],
+      "scale": {
+        "h1": "text-6xl md:text-8xl tracking-tight leading-none",
+        "h2": "text-4xl md:text-5xl tracking-tight",
+        "h3": "text-2xl md:text-3xl font-semibold",
+        "body": "text-base text-gray-300",
+        "label": "text-xs font-bold tracking-widest uppercase text-gray-500"
+      }
+    },
+    "colors": {
+      "palette": {
+        "background": {
+          "default": "#0A0A0A",
+          "surface": "#121212",
+          "overlay": "rgba(10, 10, 10, 0.8)"
+        },
+        "primary": {
+          "main": "#7C3AED",
+          "hover": "#6D28D9",
+          "glow": "0 0 20px rgba(124, 58, 237, 0.5)"
+        },
+        "accent": {
+          "lime": "#CCF381",
+          "cyan": "#06B6D4",
+          "rose": "#F43F5E"
+        },
+        "text": {
+          "primary": "#FFFFFF",
+          "secondary": "#A3A3A3",
+          "muted": "#525252"
+        },
+        "status": {
+          "live": "#EF4444",
+          "success": "#22C55E",
+          "warning": "#EAB308"
+        }
+      },
+      "gradients": {
+        "hero_fade": "linear-gradient(to top, #0A0A0A 10%, transparent 100%)",
+        "brand_glow": "radial-gradient(circle at center, rgba(124, 58, 237, 0.15) 0%, transparent 70%)"
+      }
+    },
+    "layout": {
+      "spacing": {
+        "container_padding": "px-6 md:px-12 lg:px-16",
+        "section_gap": "gap-12 md:gap-20",
+        "item_gap": "gap-4 md:gap-6"
+      },
+      "grids": {
+        "tv_guide": "grid grid-cols-[100px_1fr] overflow-hidden",
+        "channel_list": "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6",
+        "bento_hero": "grid grid-cols-1 md:grid-cols-12 gap-4"
+      }
+    },
+    "ui_components": {
+      "glassmorphism": {
+        "default": "bg-black/40 backdrop-blur-xl border border-white/10",
+        "heavy": "bg-black/80 backdrop-blur-2xl border border-white/5",
+        "hover": "hover:bg-white/5 transition-colors duration-300"
+      },
+      "buttons": {
+        "primary": "bg-primary text-white rounded-none font-bold tracking-wider hover:bg-primary/90 transition-all shadow-[0_0_15px_rgba(124,58,237,0.3)] hover:shadow-[0_0_25px_rgba(124,58,237,0.5)]",
+        "ghost": "bg-transparent text-white border border-white/20 hover:bg-white/10 rounded-none",
+        "icon": "p-2 rounded-full hover:bg-white/10 text-white transition-colors"
+      },
+      "cards": {
+        "video_thumbnail": "aspect-video bg-zinc-900 rounded-sm overflow-hidden group relative border border-transparent hover:border-white/20 transition-all",
+        "channel_tile": "aspect-square bg-zinc-900 rounded-lg p-6 flex flex-col items-center justify-center border border-white/5 hover:border-primary/50 transition-all hover:bg-zinc-800"
+      }
+    },
+    "images": {
+      "hero_backgrounds": [
+        "https://images.unsplash.com/photo-1576307302704-b6142d572612?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxOTF8MHwxfHNlYXJjaHwzfHxjaW5lbWF0aWMlMjBtb3ZpZSUyMHNjZW5lJTIwYWN0aW9uJTIwZHJhbWElMjBzY2ktZml8ZW58MHx8fHwxNzcxMDQyMzE1fDA&ixlib=rb-4.1.0&q=85",
+        "https://images.unsplash.com/photo-1570380749637-7e570824d2df?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxOTF8MHwxfHNlYXJjaHw0fHxjaW5lbWF0aWMlMjBtb3ZpZSUyMHNjZW5lJTIwYWN0aW9uJTIwZHJhbWElMjBzY2ktZml8ZW58MHx8fHwxNzcxMDQyMzE1fDA&ixlib=rb-4.1.0&q=85",
+        "https://images.unsplash.com/photo-1693645325862-cf4fc2db0e29?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxOTF8MHwxfHNlYXJjaHwxfHxjaW5lbWF0aWMlMjBtb3ZpZSUyMHNjZW5lJTIwYWN0aW9uJTIwZHJhbWElMjBzY2ktZml8ZW58MHx8fHwxNzcxMDQyMzE1fDA&ixlib=rb-4.1.0&q=85"
+      ],
+      "channel_logos": [
+        "https://images.unsplash.com/photo-1738349068598-47714d8684f2?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2Nzd8MHwxfHNlYXJjaHw0fHxtb2Rlcm4lMjBhYnN0cmFjdCUyMHRlY2hub2xvZ3klMjBsb2dvJTIwd2hpdGUlMjBiYWNrZ3JvdW5kfGVufDB8fHx8MTc3MTA0MjMxNnww&ixlib=rb-4.1.0&q=85",
+        "https://images.unsplash.com/photo-1739582656946-8e19004070c6?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2Nzd8MHwxfHNlYXJjaHwzfHxtb2Rlcm4lMjBhYnN0cmFjdCUyMHRlY2hub2xvZ3klMjBsb2dvJTIwd2hpdGUlMjBiYWNrZ3JvdW5kfGVufDB8fHx8MTc3MTA0MjMxNnww&ixlib=rb-4.1.0&q=85"
+      ],
+      "avatars": [
+        "https://images.unsplash.com/photo-1659100939529-7008a25e447c?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxODF8MHwxfHNlYXJjaHw0fHxkaXZlcnNlJTIwdXNlciUyMHByb2ZpbGUlMjBwb3J0cmFpdHMlMjBwcm9mZXNzaW9uYWx8ZW58MHx8fHwxNzcxMDQyMzE3fDA&ixlib=rb-4.1.0&q=85",
+        "https://images.unsplash.com/photo-1665118440493-c25389dd1166?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxODF8MHwxfHNlYXJjaHwxfHxkaXZlcnNlJTIwdXNlciUyMHByb2ZpbGUlMjBwb3J0cmFpdHMlMjBwcm9mZXNzaW9uYWx8ZW58MHx8fHwxNzcxMDQyMzE3fDA&ixlib=rb-4.1.0&q=85"
+      ],
+      "placeholders": {
+        "action": "https://images.unsplash.com/photo-1544618869-f9a365fc4526?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2Nzh8MHwxfHNlYXJjaHwyfHx0diUyMGNoYW5uZWwlMjBjYXRlZ29yeSUyMGJhY2tncm91bmRzJTIwYWN0aW9uJTIwY29tZWR5JTIwZG9jdW1lbnRhcnl8ZW58MHx8fHwxNzcxMDQyMzE3fDA&ixlib=rb-4.1.0&q=85",
+        "comedy": "https://images.unsplash.com/photo-1730890754876-1657029c9eb9?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2Nzh8MHwxfHNlYXJjaHwxfHx0diUyMGNoYW5uZWwlMjBjYXRlZ29yeSUyMGJhY2tncm91bmRzJTIwYWN0aW9uJTIwY29tZWR5JTIwZG9jdW1lbnRhcnl8ZW58MHx8fHwxNzcxMDQyMzE3fDA&ixlib=rb-4.1.0&q=85",
+        "drama": "https://images.unsplash.com/photo-1666858443985-fead1d59b4f7?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2Nzh8MHwxfHNlYXJjaHwzfHx0diUyMGNoYW5uZWwlMjBjYXRlZ29yeSUyMGJhY2tncm91bmRzJTIwYWN0aW9uJTIwY29tZWR5JTIwZG9jdW1lbnRhcnl8ZW58MHx8fHwxNzcxMDQyMzE3fDA&ixlib=rb-4.1.0&q=85"
+      }
+    },
+    "accessibility": {
+      "contrast_check": "Ensure 4.5:1 contrast for text over video backgrounds using overlays",
+      "focus_states": "Visible outline-2 outline-primary for keyboard navigation (TV remote simulation)",
+      "reduced_motion": "Disable smooth scrolling and parallax if prefers-reduced-motion is true"
+    },
+    "instructions_to_main_agent": [
+      "1. FONT SETUP: Add the Google Fonts links to public/index.html immediately.",
+      "2. TAILWIND CONFIG: Update tailwind.config.js to extend the font family: 'heading': ['Bebas Neue', 'sans-serif'], 'sans': ['Manrope', 'sans-serif'].",
+      "3. SHADCN OVERRIDES: Dark mode is default. Force 'dark' class on the html element.",
+      "4. LAYOUT: Implement the 'TV Guide' grid using CSS Grid (not Tables). It must scroll horizontally while keeping channel names sticky on the left.",
+      "5. PLAYER: The video player should be the 'Hero' of the channel page. Use aspect-video w-full.",
+      "6. DATA-TESTID: Add data-testid attributes to all buttons, inputs, and channel cards."
+    ],
+    "universal_guidelines": [
+      "Avoid 'AI Slop' - no generic centered layouts.",
+      "Use depth (z-index, shadows, overlays) to create immersion.",
+      "Micro-animations on hover are mandatory for a premium feel.",
+      "Do not use gradients for text, only for backgrounds or accents.",
+      "Use 'sonner' for toasts.",
+      "Use 'lucide-react' for icons."
+    ]
+  }
+}
