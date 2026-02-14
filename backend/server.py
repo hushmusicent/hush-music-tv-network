@@ -287,7 +287,8 @@ async def create_channel(data: ChannelCreate, user: dict = Depends(require_user)
     }
     
     await db.channels.insert_one(channel_doc)
-    del channel_doc["_id"] if "_id" in channel_doc else None
+    if "_id" in channel_doc:
+        del channel_doc["_id"]
     
     return channel_doc
 
