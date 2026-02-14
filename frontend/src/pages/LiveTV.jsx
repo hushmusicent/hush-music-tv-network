@@ -553,7 +553,9 @@ const LiveTV = () => {
                     )}
                   </div>
                   <p className="text-sm truncate">{item.video.title}</p>
-                  <p className="text-xs text-gray-500">{Math.floor((item.video.duration || 300) / 60)} min</p>
+                  <p className="text-xs text-gray-500">
+                    {Math.floor((item.video.duration || 300) / 60)}:{((item.video.duration || 300) % 60).toString().padStart(2, '0')}
+                  </p>
                 </div>
               ))}
             </div>
