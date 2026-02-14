@@ -103,6 +103,26 @@ export const uploadAPI = {
   listVideos: () => api.get('/upload/videos'),
   deleteVideo: (videoId) => api.delete(`/upload/video/${videoId}`),
   updateDuration: (videoId, duration) => api.put(`/upload/video/${videoId}/duration`, null, { params: { duration } }),
+  
+  // Image upload
+  uploadImage: (file, onProgress) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    return api.post('/upload/image', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+      onUploadProgress: (progressEvent) => {
+        if (onProgress) {
+          const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+          onProgress(percentCompleted);
+        }
+      },
+    });
+  },
+  listImages: () => api.get('/upload/images'),
+  deleteImage: (imageId) => api.delete(`/upload/image/${imageId}`),
 };
 
 export default api;
