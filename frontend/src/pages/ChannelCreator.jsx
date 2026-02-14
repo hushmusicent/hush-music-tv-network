@@ -322,6 +322,44 @@ const ChannelCreator = () => {
     toast.success('Video removed');
   };
 
+  const handleUpdateVideoDuration = async (videoId, newDuration) => {
+    // Parse duration - support formats like "3:45" or "225" (seconds)
+    let durationSeconds = 300;
+    const durationStr = newDuration.trim();
+    if (durationStr.includes(':')) {
+      const parts = durationStr.split(':').map(Number);
+      if (parts.length === 2) {
+        durationSeconds = parts[0] * 60 + parts[1];
+      } else if (parts.length === 3) {
+        durationSeconds = parts[0] * 3600 + parts[1] * 60 + parts[2];
+      }
+    } else {
+      durationSeconds = parseInt(durationStr, 10) || 300;
+    }
+
+    if (isEditing) {
+      try {
+        await channelsAPI.updateVideo(channelId, videoId, { duration: durationSeconds });
+        toast.success('Duration updated');
+      } catch (error) {
+        toast.error('Failed to update duration');
+        return;
+      }
+    }
+
+    setVideos(prev => prev.map(v => 
+      v.id === videoId ? { ...v, duration: durationSeconds } : v
+    ));
+    setEditingVideoId(null);
+    setEditingDuration('');
+  };
+
+  const formatDuration = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
   const handleDeleteUploadedVideo = async (videoId) => {
     try {
       await uploadAPI.deleteVideo(videoId);
