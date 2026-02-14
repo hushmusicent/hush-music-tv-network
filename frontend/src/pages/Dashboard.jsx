@@ -537,6 +537,13 @@ const Dashboard = () => {
                                   />
                                   24/7
                                 </label>
+                                <label className="flex items-center gap-2 text-sm" data-testid="random-play-toggle">
+                                  <Switch
+                                    checked={editingChannel.random_play}
+                                    onCheckedChange={(checked) => setEditingChannel({...editingChannel, random_play: checked})}
+                                  />
+                                  <span className="text-purple-400">Random Play</span>
+                                </label>
                               </div>
                             </div>
                           </div>
