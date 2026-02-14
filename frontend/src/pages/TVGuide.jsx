@@ -1,9 +1,93 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { tvGuideAPI } from '../lib/api';
 import { Skeleton } from '../components/ui/skeleton';
-import { Calendar, Clock, ChevronLeft, ChevronRight, Radio, Play } from 'lucide-react';
+import { Calendar, Clock, ChevronLeft, ChevronRight, Radio, Play, Shuffle } from 'lucide-react';
 import { Button } from '../components/ui/button';
+
+// Seeded random function for consistent shuffling across all viewers
+const seededRandom = (seed) => {
+  const x = Math.sin(seed) * 10000;
+  return x - Math.floor(x);
+};
+
+// Shuffle array using a seed (date-based so all viewers see same order)
+const shuffleWithSeed = (array, seed) => {
+  const shuffled = [...array];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(seededRandom(seed + i) * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+};
+
+// Get today's seed - changes daily so playlist order changes each day
+const getDailySeed = () => {
+  const now = new Date();
+  return now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
+};
+
+// Generate a full 24-hour schedule for a channel based on actual video durations
+const generateChannelSchedule = (videos, randomPlay = false) => {
+  if (!videos || videos.length === 0) return [];
+
+  // If random play is enabled, shuffle videos consistently for all viewers
+  const playlistVideos = randomPlay ? shuffleWithSeed(videos, getDailySeed()) : videos;
+
+  const schedule = [];
+  const startOfDay = new Date();
+  startOfDay.setHours(0, 0, 0, 0);
+
+  // Calculate total playlist duration
+  let totalDuration = 0;
+  playlistVideos.forEach(v => {
+    totalDuration += v.duration || 300;
+  });
+
+  if (totalDuration === 0) return [];
+
+  // Generate schedule for 24 hours (86400 seconds)
+  let currentSecond = 0;
+  const endOfDay = 86400; // 24 hours in seconds
+
+  while (currentSecond < endOfDay) {
+    const positionInPlaylist = currentSecond % totalDuration;
+    
+    // Find which video is at this position
+    let accumulated = 0;
+    for (let i = 0; i < playlistVideos.length; i++) {
+      const video = playlistVideos[i];
+      const videoDuration = video.duration || 300;
+      
+      if (accumulated + videoDuration > positionInPlaylist) {
+        // This video is playing at currentSecond
+        const videoStartInPlaylist = accumulated;
+        const offsetIntoVideo = positionInPlaylist - videoStartInPlaylist;
+        const remainingDuration = videoDuration - offsetIntoVideo;
+        
+        const startTime = new Date(startOfDay);
+        startTime.setSeconds(currentSecond);
+        
+        const endTime = new Date(startOfDay);
+        endTime.setSeconds(currentSecond + remainingDuration);
+        
+        schedule.push({
+          video,
+          startTime,
+          endTime,
+          startSeconds: currentSecond,
+          durationSeconds: remainingDuration
+        });
+        
+        currentSecond += remainingDuration;
+        break;
+      }
+      accumulated += videoDuration;
+    }
+  }
+
+  return schedule;
+};
 
 const TVGuide = () => {
   const [guideData, setGuideData] = useState([]);
@@ -33,19 +117,23 @@ const TVGuide = () => {
     }
   };
 
-  // Generate time slots for 24 hours
-  const generateTimeSlots = () => {
+  // Generate time slots for 24 hours (48 half-hour slots)
+  const timeSlots = useMemo(() => {
     const slots = [];
     for (let i = 0; i < 24; i++) {
       slots.push(`${i.toString().padStart(2, '0')}:00`);
       slots.push(`${i.toString().padStart(2, '0')}:30`);
     }
     return slots;
-  };
+  }, []);
 
-  const timeSlots = generateTimeSlots();
   const currentHour = currentTime.getHours();
   const currentMinute = currentTime.getMinutes();
+  const currentSeconds = currentHour * 3600 + currentMinute * 60 + currentTime.getSeconds();
+
+  // Pixels per second for the timeline (120px per 30min slot = 120px per 1800 seconds)
+  const PIXELS_PER_SECOND = 120 / 1800;
+  const TOTAL_WIDTH = timeSlots.length * 120; // 48 slots * 120px
 
   const scrollLeft = () => {
     if (scrollRef.current) {
@@ -61,35 +149,9 @@ const TVGuide = () => {
 
   const scrollToNow = () => {
     if (scrollRef.current) {
-      const nowPosition = (currentHour * 2 + Math.floor(currentMinute / 30)) * 120;
+      const nowPosition = currentSeconds * PIXELS_PER_SECOND;
       scrollRef.current.scrollTo({ left: nowPosition - 200, behavior: 'smooth' });
     }
-  };
-
-  // Calculate which video is currently playing based on time
-  const getCurrentVideo = (videos) => {
-    if (!videos || videos.length === 0) return null;
-    
-    const totalSeconds = currentHour * 3600 + currentMinute * 60;
-    let totalDuration = 0;
-    
-    for (const video of videos) {
-      totalDuration += video.duration || 300; // Default 5 min if no duration
-    }
-    
-    if (totalDuration === 0) return videos[0];
-    
-    let elapsed = totalSeconds % totalDuration;
-    let cumulative = 0;
-    
-    for (const video of videos) {
-      cumulative += video.duration || 300;
-      if (elapsed < cumulative) {
-        return video;
-      }
-    }
-    
-    return videos[0];
   };
 
   return (
