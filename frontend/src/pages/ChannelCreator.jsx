@@ -30,7 +30,8 @@ import {
   Clock,
   FileVideo,
   X,
-  Check
+  Check,
+  Shuffle
 } from 'lucide-react';
 import { toast } from 'sonner';
 
