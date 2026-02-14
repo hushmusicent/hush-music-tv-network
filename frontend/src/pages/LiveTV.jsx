@@ -318,15 +318,34 @@ const LiveTV = () => {
           >
             {currentVideo ? (
               <>
-                <iframe
-                  key={`${currentVideo.youtube_id}-${currentVideoIndex}-${Math.floor(seekTime)}`}
-                  src={embedUrl}
-                  title={currentVideo.title}
-                  className="absolute inset-0 w-full h-full"
-                  style={{ border: 'none' }}
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                  allowFullScreen
-                />
+                {/* Uploaded Video Player */}
+                {isUploadedVideo && uploadedVideoUrl ? (
+                  <video
+                    ref={videoRef}
+                    src={uploadedVideoUrl}
+                    className="absolute inset-0 w-full h-full object-contain"
+                    autoPlay
+                    muted={isMuted}
+                    onEnded={handleUploadedVideoEnd}
+                    playsInline
+                    data-testid="live-uploaded-video"
+                  />
+                ) : currentVideo.youtube_id ? (
+                  /* YouTube Embed */
+                  <iframe
+                    key={`${currentVideo.youtube_id}-${currentVideoIndex}-${Math.floor(seekTime)}`}
+                    src={embedUrl}
+                    title={currentVideo.title}
+                    className="absolute inset-0 w-full h-full"
+                    style={{ border: 'none' }}
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    allowFullScreen
+                  />
+                ) : (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <p className="text-gray-400">Video not available</p>
+                  </div>
+                )}
 
                 {/* Channel Info Overlay */}
                 <div className="absolute top-0 left-0 right-0 p-4 bg-gradient-to-b from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity z-10">
