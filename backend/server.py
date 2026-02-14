@@ -370,6 +370,47 @@ async def remove_video_from_channel(channel_id: str, video_id: str, user: dict =
     
     return {"message": "Video removed"}
 
+class VideoUpdate(BaseModel):
+    title: Optional[str] = None
+    duration: Optional[int] = None
+    thumbnail: Optional[str] = None
+
+@api_router.put("/channels/{channel_id}/videos/{video_id}")
+async def update_video_in_channel(
+    channel_id: str, 
+    video_id: str, 
+    data: VideoUpdate,
+    user: dict = Depends(require_user)
+):
+    channel = await db.channels.find_one({"id": channel_id})
+    if not channel:
+        raise HTTPException(status_code=404, detail="Channel not found")
+    # Admin can update videos in any channel
+    if channel["owner_id"] != user["id"] and not user.get("is_admin", False):
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    # Build update dict only for provided fields
+    update_fields = {}
+    if data.title is not None:
+        update_fields["videos.$.title"] = data.title
+    if data.duration is not None:
+        update_fields["videos.$.duration"] = data.duration
+    if data.thumbnail is not None:
+        update_fields["videos.$.thumbnail"] = data.thumbnail
+    
+    if not update_fields:
+        return {"message": "No updates provided"}
+    
+    result = await db.channels.update_one(
+        {"id": channel_id, "videos.id": video_id},
+        {"$set": update_fields}
+    )
+    
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Video not found")
+    
+    return {"message": "Video updated"}
+
 # ===================== VIDEO UPLOAD ROUTES =====================
 
 class UploadedVideoResponse(BaseModel):
