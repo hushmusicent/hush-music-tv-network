@@ -644,6 +644,13 @@ const ChannelCreator = () => {
                     className="flex-1 bg-black/50 border-white/10"
                     data-testid="video-url-input"
                   />
+                  <Input
+                    value={newVideoDuration}
+                    onChange={(e) => setNewVideoDuration(e.target.value)}
+                    placeholder="Duration (3:45)"
+                    className="w-28 bg-black/50 border-white/10"
+                    data-testid="video-duration-input"
+                  />
                   <Button
                     type="button"
                     onClick={handleAddYouTubeVideo}
