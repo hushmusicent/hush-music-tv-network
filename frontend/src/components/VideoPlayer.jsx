@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Play, Pause, Volume2, VolumeX, Maximize, SkipForward, SkipBack, Radio } from 'lucide-react';
 
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+
 const VideoPlayer = ({ videos = [], channelName = '', isLive = true, startIndex = 0, seekTime = 0 }) => {
   const [currentIndex, setCurrentIndex] = useState(startIndex);
   const [currentSeekTime, setCurrentSeekTime] = useState(seekTime);
@@ -8,6 +10,7 @@ const VideoPlayer = ({ videos = [], channelName = '', isLive = true, startIndex 
   const [isMuted, setIsMuted] = useState(false);
   const [showControls, setShowControls] = useState(false);
   const playerRef = useRef(null);
+  const videoRef = useRef(null);
   const controlsTimeoutRef = useRef(null);
 
   // Update when startIndex or seekTime changes (live sync)
@@ -19,11 +22,38 @@ const VideoPlayer = ({ videos = [], channelName = '', isLive = true, startIndex 
   }, [startIndex, seekTime]);
 
   const currentVideo = videos[currentIndex];
+  const isUploadedVideo = currentVideo && (currentVideo.video_url || !currentVideo.youtube_id);
+
+  // Handle uploaded video playback
+  useEffect(() => {
+    if (isUploadedVideo && videoRef.current) {
+      videoRef.current.currentTime = currentSeekTime;
+      if (isPlaying) {
+        videoRef.current.play().catch(() => {});
+      }
+    }
+  }, [currentIndex, currentSeekTime, isUploadedVideo]);
+
+  useEffect(() => {
+    if (isUploadedVideo && videoRef.current) {
+      videoRef.current.muted = isMuted;
+      if (isPlaying) {
+        videoRef.current.play().catch(() => {});
+      } else {
+        videoRef.current.pause();
+      }
+    }
+  }, [isPlaying, isMuted, isUploadedVideo]);
 
   // Auto-advance to next video
   const handleVideoEnd = useCallback(() => {
     if (videos.length > 1) {
       setCurrentIndex((prev) => (prev + 1) % videos.length);
+      setCurrentSeekTime(0);
+    } else if (videoRef.current) {
+      // Loop single video
+      videoRef.current.currentTime = 0;
+      videoRef.current.play().catch(() => {});
     }
   }, [videos.length]);
 
@@ -39,6 +69,7 @@ const VideoPlayer = ({ videos = [], channelName = '', isLive = true, startIndex 
         handleVideoEnd();
       } else if (e.key === 'ArrowLeft' && videos.length > 1) {
         setCurrentIndex((prev) => (prev - 1 + videos.length) % videos.length);
+        setCurrentSeekTime(0);
       }
     };
 
@@ -60,12 +91,14 @@ const VideoPlayer = ({ videos = [], channelName = '', isLive = true, startIndex 
   const nextVideo = () => {
     if (videos.length > 1) {
       setCurrentIndex((prev) => (prev + 1) % videos.length);
+      setCurrentSeekTime(0);
     }
   };
 
   const prevVideo = () => {
     if (videos.length > 1) {
       setCurrentIndex((prev) => (prev - 1 + videos.length) % videos.length);
+      setCurrentSeekTime(0);
     }
   };
 
@@ -90,8 +123,15 @@ const VideoPlayer = ({ videos = [], channelName = '', isLive = true, startIndex 
     );
   }
 
+  // Build video URL for uploaded videos
+  const uploadedVideoUrl = currentVideo.video_url 
+    ? `${BACKEND_URL}${currentVideo.video_url}`
+    : null;
+
   // YouTube embed URL with autoplay, loop, and live seek position
-  const embedUrl = `https://www.youtube.com/embed/${currentVideo.youtube_id}?autoplay=${isPlaying ? 1 : 0}&mute=${isMuted ? 1 : 0}&start=${Math.floor(currentSeekTime)}&rel=0&modestbranding=1&playsinline=1`;
+  const embedUrl = currentVideo.youtube_id 
+    ? `https://www.youtube.com/embed/${currentVideo.youtube_id}?autoplay=${isPlaying ? 1 : 0}&mute=${isMuted ? 1 : 0}&start=${Math.floor(currentSeekTime)}&rel=0&modestbranding=1&playsinline=1`
+    : '';
 
   return (
     <div
@@ -102,16 +142,34 @@ const VideoPlayer = ({ videos = [], channelName = '', isLive = true, startIndex 
       onMouseLeave={() => setShowControls(false)}
       data-testid="video-player"
     >
-      {/* YouTube Embed */}
-      <iframe
-        key={`${currentVideo.youtube_id}-${isPlaying}-${isMuted}-${currentIndex}-${Math.floor(currentSeekTime)}`}
-        src={embedUrl}
-        title={currentVideo.title}
-        className="absolute inset-0 w-full h-full"
-        style={{ border: 'none' }}
-        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-        allowFullScreen
-      />
+      {/* Uploaded Video Player */}
+      {isUploadedVideo && uploadedVideoUrl ? (
+        <video
+          ref={videoRef}
+          src={uploadedVideoUrl}
+          className="absolute inset-0 w-full h-full object-contain"
+          autoPlay={isPlaying}
+          muted={isMuted}
+          onEnded={handleVideoEnd}
+          playsInline
+          data-testid="uploaded-video-element"
+        />
+      ) : currentVideo.youtube_id ? (
+        /* YouTube Embed */
+        <iframe
+          key={`${currentVideo.youtube_id}-${isPlaying}-${isMuted}-${currentIndex}-${Math.floor(currentSeekTime)}`}
+          src={embedUrl}
+          title={currentVideo.title}
+          className="absolute inset-0 w-full h-full"
+          style={{ border: 'none' }}
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          allowFullScreen
+        />
+      ) : (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <p className="text-gray-400">Video not available</p>
+        </div>
+      )}
 
       {/* Live Badge */}
       {isLive && (
