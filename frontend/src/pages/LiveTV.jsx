@@ -199,12 +199,13 @@ const LiveTV = () => {
   // Update schedule when channel changes or time updates
   useEffect(() => {
     if (currentChannel?.videos) {
-      setSchedule(generateSchedule(currentChannel.videos));
+      setSchedule(generateSchedule(currentChannel.videos, currentChannel.random_play));
     }
   }, [currentChannel, currentTime]);
 
-  // Determine if current video is uploaded
-  const currentVideo = currentChannel?.videos?.[currentVideoIndex];
+  // Determine if current video is uploaded - use shuffled videos if random play
+  const activeVideos = shuffledVideos.length > 0 ? shuffledVideos : currentChannel?.videos;
+  const currentVideo = activeVideos?.[currentVideoIndex];
   const isUploadedVideo = currentVideo && (currentVideo.video_url || !currentVideo.youtube_id);
   
   // Handle uploaded video playback and sync
