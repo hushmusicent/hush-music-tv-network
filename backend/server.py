@@ -496,6 +496,110 @@ async def update_video_duration(
     
     return {"message": "Duration updated"}
 
+# ===================== IMAGE UPLOAD ROUTES =====================
+
+class UploadedImageResponse(BaseModel):
+    id: str
+    filename: str
+    original_name: str
+    url: str
+    size: int
+    created_at: str
+
+MAX_IMAGE_SIZE = 10 * 1024 * 1024  # 10MB
+ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"]
+
+@api_router.post("/upload/image", response_model=UploadedImageResponse)
+async def upload_image(
+    file: UploadFile = File(...),
+    user: dict = Depends(require_user)
+):
+    """Upload an image file (admin only) - JPEG, PNG, WebP, GIF only, max 10MB"""
+    if not user.get("is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    # Validate file type
+    if file.content_type not in ALLOWED_IMAGE_TYPES:
+        raise HTTPException(
+            status_code=400, 
+            detail="Invalid file type. Only JPEG, PNG, WebP, and GIF images are allowed"
+        )
+    
+    # Generate unique filename
+    file_ext = Path(file.filename).suffix or ".jpg"
+    image_id = str(uuid.uuid4())
+    filename = f"{image_id}{file_ext}"
+    file_path = IMAGES_DIR / filename
+    
+    # Save file
+    try:
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save file: {str(e)}")
+    
+    # Check file size after saving
+    file_size = file_path.stat().st_size
+    if file_size > MAX_IMAGE_SIZE:
+        file_path.unlink()  # Delete the file
+        raise HTTPException(status_code=400, detail="File too large. Maximum size is 10MB")
+    
+    # Store in database
+    now = datetime.now(timezone.utc).isoformat()
+    image_doc = {
+        "id": image_id,
+        "filename": filename,
+        "original_name": file.filename,
+        "size": file_size,
+        "owner_id": user["id"],
+        "created_at": now
+    }
+    
+    await db.uploaded_images.insert_one(image_doc)
+    
+    return UploadedImageResponse(
+        id=image_id,
+        filename=filename,
+        original_name=file.filename,
+        url=f"/api/images/{filename}",
+        size=file_size,
+        created_at=now
+    )
+
+@api_router.get("/upload/images")
+async def list_uploaded_images(user: dict = Depends(require_user)):
+    """List all uploaded images (admin only)"""
+    if not user.get("is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    images = await db.uploaded_images.find({}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    
+    # Add URLs
+    for image in images:
+        image["url"] = f"/api/images/{image['filename']}"
+    
+    return images
+
+@api_router.delete("/upload/image/{image_id}")
+async def delete_uploaded_image(image_id: str, user: dict = Depends(require_user)):
+    """Delete an uploaded image (admin only)"""
+    if not user.get("is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    image = await db.uploaded_images.find_one({"id": image_id})
+    if not image:
+        raise HTTPException(status_code=404, detail="Image not found")
+    
+    # Delete file
+    file_path = IMAGES_DIR / image["filename"]
+    if file_path.exists():
+        file_path.unlink()
+    
+    # Delete from database
+    await db.uploaded_images.delete_one({"id": image_id})
+    
+    return {"message": "Image deleted"}
+
 @api_router.put("/channels/{channel_id}/videos/reorder")
 async def reorder_videos(channel_id: str, video_ids: List[str], user: dict = Depends(require_user)):
     channel = await db.channels.find_one({"id": channel_id}, {"_id": 0})
