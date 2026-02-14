@@ -452,6 +452,22 @@ const ChannelCreator = () => {
                   data-testid="24-7-switch"
                 />
               </div>
+
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label htmlFor="random_play" className="flex items-center gap-2">
+                    <Shuffle size={16} className="text-purple-400" />
+                    Random Play
+                  </Label>
+                  <p className="text-sm text-gray-400">Shuffle video order daily</p>
+                </div>
+                <Switch
+                  id="random_play"
+                  checked={formData.random_play}
+                  onCheckedChange={(checked) => setFormData({ ...formData, random_play: checked })}
+                  data-testid="random-play-switch"
+                />
+              </div>
             </div>
           </div>
 
