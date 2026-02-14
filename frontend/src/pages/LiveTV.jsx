@@ -228,7 +228,7 @@ const LiveTV = () => {
     if (!isUploadedVideo || !videoRef.current || !currentChannel?.videos) return;
     
     const video = videoRef.current;
-    const { seekTime: expectedTime } = calculateLivePosition(currentChannel.videos);
+    const { seekTime: expectedTime } = calculateLivePosition(currentChannel.videos, currentChannel.random_play);
     
     // If we're more than 5 seconds off, re-sync
     if (Math.abs(video.currentTime - expectedTime) > 5) {
@@ -239,9 +239,13 @@ const LiveTV = () => {
   const handleUploadedVideoEnd = () => {
     // Recalculate live position when video ends
     if (currentChannel?.videos?.length) {
-      const { videoIndex, seekTime: newSeekTime } = calculateLivePosition(currentChannel.videos);
+      const { videoIndex, seekTime: newSeekTime, shuffledVideos: newShuffled } = calculateLivePosition(
+        currentChannel.videos,
+        currentChannel.random_play
+      );
       setCurrentVideoIndex(videoIndex);
       setSeekTime(newSeekTime);
+      setShuffledVideos(newShuffled);
     }
   };
 
