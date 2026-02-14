@@ -91,6 +91,19 @@ const Watch = () => {
     }
   };
 
+  const embedCode = `<iframe src="${window.location.origin}/embed/${channelId}" width="640" height="360" frameborder="0" allowfullscreen allow="autoplay; encrypted-media"></iframe>`;
+
+  const copyEmbedCode = async () => {
+    try {
+      await navigator.clipboard.writeText(embedCode);
+      setCopiedEmbed(true);
+      toast.success('Embed code copied!');
+      setTimeout(() => setCopiedEmbed(false), 2000);
+    } catch (error) {
+      toast.error('Failed to copy embed code');
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen" data-testid="watch-page-loading">
