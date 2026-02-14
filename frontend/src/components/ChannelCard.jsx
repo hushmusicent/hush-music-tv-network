@@ -19,6 +19,8 @@ const ChannelCard = ({ channel, onDelete, showMenu = false }) => {
   const [isLoading, setIsLoading] = useState(false);
 
   const isOwner = user?.id === channel.owner_id;
+  const isAdmin = user?.is_admin === true;
+  const canEdit = isOwner || isAdmin;
 
   const handleFavorite = async (e) => {
     e.preventDefault();
@@ -128,7 +130,7 @@ const ChannelCard = ({ channel, onDelete, showMenu = false }) => {
                 <Heart size={16} fill={isFavorite ? 'currentColor' : 'none'} />
               </button>
 
-              {showMenu && isOwner && (
+              {showMenu && canEdit && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <button
