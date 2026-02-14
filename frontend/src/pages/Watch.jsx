@@ -172,7 +172,7 @@ const Watch = () => {
               </div>
 
               {/* Actions */}
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 flex-wrap">
                 <Button
                   onClick={handleFavorite}
                   variant={isFavorite ? 'default' : 'outline'}
@@ -194,8 +194,55 @@ const Watch = () => {
                   <Share2 size={18} className="mr-2" />
                   Share
                 </Button>
+                {isAdmin && (
+                  <Button
+                    onClick={() => setShowEmbedCode(!showEmbedCode)}
+                    variant="outline"
+                    className="border-white/20 hover:bg-white/10"
+                    data-testid="embed-btn"
+                  >
+                    <Code size={18} className="mr-2" />
+                    Embed
+                  </Button>
+                )}
               </div>
             </div>
+
+            {/* Embed Code Section */}
+            {showEmbedCode && isAdmin && (
+              <div className="mb-6 p-4 bg-surface rounded-lg border border-white/10">
+                <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
+                  <Code size={16} className="text-primary" />
+                  Embed Code
+                </h4>
+                <p className="text-xs text-gray-400 mb-3">
+                  Copy this code to embed the channel on your website:
+                </p>
+                <div className="flex gap-2">
+                  <Input
+                    value={embedCode}
+                    readOnly
+                    className="flex-1 bg-black/50 border-white/10 font-mono text-xs"
+                  />
+                  <Button
+                    onClick={copyEmbedCode}
+                    size="sm"
+                    className="bg-primary hover:bg-primary-hover"
+                  >
+                    {copiedEmbed ? <Check size={16} /> : <Copy size={16} />}
+                  </Button>
+                </div>
+                <div className="mt-3 text-xs text-gray-500">
+                  <p className="mb-1">Options (add to URL):</p>
+                  <ul className="list-disc list-inside space-y-0.5">
+                    <li><code className="text-primary">?muted=1</code> - Start muted</li>
+                    <li><code className="text-primary">?autoplay=0</code> - Disable autoplay</li>
+                    <li><code className="text-primary">?info=0</code> - Hide channel info</li>
+                    <li><code className="text-primary">?branding=0</code> - Hide branding</li>
+                  </ul>
+                </div>
+              </div>
+            )}
 
             {/* Stats */}
             <div className="flex flex-wrap gap-6 mb-8 pb-8 border-b border-white/10">
