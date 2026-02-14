@@ -123,6 +123,42 @@ const ChannelCreator = () => {
     }
   };
 
+  const handleThumbnailUpload = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    if (!allowedTypes.includes(file.type)) {
+      toast.error('Only JPEG, PNG, WebP, and GIF images are allowed');
+      return;
+    }
+
+    // Validate file size (max 10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('Image too large. Maximum size is 10MB');
+      return;
+    }
+
+    setUploadingThumbnail(true);
+    try {
+      const response = await uploadAPI.uploadImage(file);
+      const imageUrl = `${process.env.REACT_APP_BACKEND_URL}${response.data.url}`;
+      
+      // Update the form data with the new thumbnail
+      setFormData(prev => ({ ...prev, thumbnail: imageUrl }));
+      toast.success('Thumbnail uploaded successfully');
+    } catch (error) {
+      console.error('Upload failed:', error);
+      toast.error(error.response?.data?.detail || 'Failed to upload image');
+    } finally {
+      setUploadingThumbnail(false);
+      if (thumbnailInputRef.current) {
+        thumbnailInputRef.current.value = '';
+      }
+    }
+  };
+
   const extractYouTubeId = (url) => {
     const patterns = [
       /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/,
