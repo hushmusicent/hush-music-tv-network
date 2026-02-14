@@ -451,18 +451,63 @@ const ChannelCreator = () => {
                 </div>
 
                 <div>
-                  <Label htmlFor="thumbnail">Thumbnail URL</Label>
-                  <div className="relative mt-2">
-                    <ImageIcon size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
-                    <Input
-                      id="thumbnail"
-                      value={formData.thumbnail}
-                      onChange={(e) => setFormData({ ...formData, thumbnail: e.target.value })}
-                      placeholder="https://..."
-                      className="pl-10 bg-black/50 border-white/10"
-                      data-testid="thumbnail-input"
+                  <Label htmlFor="thumbnail">Channel Thumbnail</Label>
+                  <div className="flex gap-2 mt-2">
+                    <div className="relative flex-1">
+                      <ImageIcon size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+                      <Input
+                        id="thumbnail"
+                        value={formData.thumbnail}
+                        onChange={(e) => setFormData({ ...formData, thumbnail: e.target.value })}
+                        placeholder="https://... or upload image"
+                        className="pl-10 bg-black/50 border-white/10"
+                        data-testid="thumbnail-input"
+                      />
+                    </div>
+                    <input
+                      ref={thumbnailInputRef}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/gif"
+                      onChange={handleThumbnailUpload}
+                      className="hidden"
+                      id="thumbnail-upload"
+                      data-testid="thumbnail-upload-input"
                     />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => thumbnailInputRef.current?.click()}
+                      disabled={uploadingThumbnail}
+                      className="border-white/20 px-3"
+                      data-testid="upload-thumbnail-btn"
+                    >
+                      {uploadingThumbnail ? (
+                        <Loader2 size={18} className="animate-spin" />
+                      ) : (
+                        <Upload size={18} />
+                      )}
+                    </Button>
                   </div>
+                  {formData.thumbnail && (
+                    <div className="mt-2 relative w-32 h-20 rounded-lg overflow-hidden group">
+                      <img
+                        src={formData.thumbnail}
+                        alt="Thumbnail preview"
+                        className="w-full h-full object-cover"
+                        onError={(e) => { e.target.style.display = 'none'; }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, thumbnail: '' })}
+                        className="absolute top-1 right-1 p-1 bg-black/70 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  )}
+                  <p className="text-xs text-gray-500 mt-1">
+                    Upload JPEG, PNG, WebP, or GIF (max 10MB)
+                  </p>
                 </div>
               </div>
 
