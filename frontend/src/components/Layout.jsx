@@ -233,7 +233,7 @@ const Layout = ({ children }) => {
       )}
 
       {/* Main Content */}
-      <main className="pt-20 min-h-screen">
+      <main className="pt-20 min-h-screen overflow-y-auto">
         {children}
       </main>
 
