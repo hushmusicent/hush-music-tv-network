@@ -125,10 +125,10 @@ const Home = () => {
           ) : (
             <div className="max-w-2xl animate-slide-up">
               <h1 className="font-heading text-5xl md:text-7xl tracking-tight leading-none mb-4">
-                YOUR TV NETWORK
+                HUSH MUSIC TV
               </h1>
               <p className="text-lg text-gray-300 mb-6">
-                Create and watch custom TV channels 24/7
+                Your 24/7 music and entertainment network
               </p>
               <Button
                 onClick={() => isAuthenticated ? navigate('/create') : navigate('/login')}
@@ -236,12 +236,12 @@ const Home = () => {
           <div className="relative grid md:grid-cols-2 gap-8 items-center">
             <div>
               <h2 className="font-heading text-4xl md:text-5xl tracking-tight mb-4">
-                START YOUR OWN
+                HUSH MUSIC
                 <br />
-                <span className="text-primary">TV CHANNEL</span>
+                <span className="text-primary">TV NETWORK</span>
               </h2>
               <p className="text-gray-400 mb-6">
-                Curate playlists from YouTube, create schedules, and broadcast 24/7 to your audience.
+                24/7 music, entertainment, and more. Tune in anytime, anywhere.
               </p>
               <Button
                 onClick={() => isAuthenticated ? navigate('/create') : navigate('/login')}
