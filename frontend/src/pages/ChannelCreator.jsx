@@ -57,6 +57,7 @@ const ChannelCreator = () => {
     thumbnail: '',
     is_public: true,
     is_24_7: true,
+    random_play: false,
   });
   
   const [videos, setVideos] = useState([]);
