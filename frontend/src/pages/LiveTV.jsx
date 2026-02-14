@@ -107,7 +107,6 @@ const LiveTV = () => {
   const [showChannelList, setShowChannelList] = useState(true);
   const [currentTime, setCurrentTime] = useState(new Date());
   const playerRef = useRef(null);
-  const iframeRef = useRef(null);
 
   useEffect(() => {
     loadChannels();
