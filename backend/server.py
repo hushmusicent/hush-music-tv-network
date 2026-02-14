@@ -268,6 +268,7 @@ async def create_channel(data: ChannelCreate, user: dict = Depends(require_user)
         "thumbnail": data.thumbnail,
         "is_public": data.is_public,
         "is_24_7": data.is_24_7,
+        "random_play": data.random_play,
         "owner_id": user["id"],
         "owner_username": user["username"],
         "videos": [],
