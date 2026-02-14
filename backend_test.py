@@ -92,6 +92,57 @@ class TVNetworkAdminAPITester:
             self.log_test("Get Categories", success, f"Found {len(data)} categories")
         else:
             self.log_test("Get Categories", False, f"Status: {response.status_code}")
+    def test_admin_login(self):
+        """Test admin login with specific credentials"""
+        print("\n🔍 Testing Admin Login...")
+        login_data = {
+            "email": self.admin_email,
+            "password": self.admin_password
+        }
+        
+        response = self.make_request('POST', 'auth/login', login_data, auth=False)
+        
+        if isinstance(response, tuple):
+            self.log_test("Admin Login", False, response[1])
+            return False
+            
+        success = response.status_code == 200
+        if success:
+            data = response.json()
+            self.token = data.get('access_token')
+            user = data.get('user', {})
+            self.user_id = user.get('id')
+            is_admin = user.get('is_admin', False)
+            success = bool(self.token and self.user_id and is_admin)
+            self.log_test("Admin Login", success, f"Logged in as admin: {is_admin}, got token: {bool(self.token)}")
+        else:
+            self.log_test("Admin Login", False, f"Status: {response.status_code}, Response: {response.text}")
+        return success
+
+    def test_invalid_login(self):
+        """Test login with invalid credentials"""
+        print("\n🔍 Testing Invalid Login...")
+        login_data = {
+            "email": "invalid@example.com",
+            "password": "wrongpassword"
+        }
+        
+        response = self.make_request('POST', 'auth/login', login_data, auth=False)
+        
+        if isinstance(response, tuple):
+            self.log_test("Invalid Login", False, response[1])
+            return False
+            
+        # Invalid login should return 401
+        success = response.status_code == 401
+        if success:
+            data = response.json()
+            success = "Invalid credentials" in data.get('detail', '')
+            self.log_test("Invalid Login", success, f"Got expected 401 with message: {data.get('detail', '')}")
+        else:
+            self.log_test("Invalid Login", False, f"Expected 401, got {response.status_code}")
+        return success
+
         return success
 
     def test_registration_disabled(self):
