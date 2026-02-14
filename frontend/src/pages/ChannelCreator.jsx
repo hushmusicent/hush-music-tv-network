@@ -1,12 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { channelsAPI, categoriesAPI } from '../lib/api';
+import { channelsAPI, categoriesAPI, uploadAPI } from '../lib/api';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
 import { Switch } from '../components/ui/switch';
+import { Progress } from '../components/ui/progress';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import {
   Select,
   SelectContent,
@@ -18,25 +20,34 @@ import {
   Tv, 
   Plus, 
   Trash2, 
-  GripVertical, 
   Youtube,
   ArrowLeft,
   Save,
   Image as ImageIcon,
-  Radio
+  Radio,
+  Upload,
+  Film,
+  Clock,
+  FileVideo,
+  X,
+  Check
 } from 'lucide-react';
 import { toast } from 'sonner';
 
 const ChannelCreator = () => {
   const { channelId } = useParams();
   const navigate = useNavigate();
-  const { isAuthenticated, loading: authLoading } = useAuth();
+  const { isAuthenticated, loading: authLoading, user } = useAuth();
   
   const isEditing = !!channelId;
+  const fileInputRef = useRef(null);
   
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [categories, setCategories] = useState([]);
+  const [uploadedVideos, setUploadedVideos] = useState([]);
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   
   const [formData, setFormData] = useState({
     name: '',
@@ -59,6 +70,7 @@ const ChannelCreator = () => {
       return;
     }
     loadCategories();
+    loadUploadedVideos();
     if (isEditing) {
       loadChannel();
     }
@@ -70,6 +82,15 @@ const ChannelCreator = () => {
       setCategories(response.data.filter(c => c.name !== 'All'));
     } catch (error) {
       console.error('Failed to load categories:', error);
+    }
+  };
+
+  const loadUploadedVideos = async () => {
+    try {
+      const response = await uploadAPI.listVideos();
+      setUploadedVideos(response.data);
+    } catch (error) {
+      console.error('Failed to load uploaded videos:', error);
     }
   };
 
@@ -109,7 +130,7 @@ const ChannelCreator = () => {
     return null;
   };
 
-  const handleAddVideo = async () => {
+  const handleAddYouTubeVideo = async () => {
     const youtubeId = extractYouTubeId(newVideoUrl.trim());
     
     if (!youtubeId) {
@@ -132,6 +153,7 @@ const ChannelCreator = () => {
       thumbnail: `https://img.youtube.com/vi/${youtubeId}/maxresdefault.jpg`,
       duration: 300,
       order: videos.length,
+      type: 'youtube'
     };
 
     // If editing, add to server
@@ -156,6 +178,66 @@ const ChannelCreator = () => {
     setAddingVideo(false);
   };
 
+  const handleFileUpload = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Validate file size (max 500MB)
+    const maxSize = 500 * 1024 * 1024;
+    if (file.size > maxSize) {
+      toast.error('File too large. Maximum size is 500MB');
+      return;
+    }
+
+    setUploading(true);
+    setUploadProgress(0);
+
+    try {
+      const response = await uploadAPI.uploadVideo(file, (progress) => {
+        setUploadProgress(progress);
+      });
+
+      const uploadedVideo = response.data;
+      
+      // Add to uploaded videos list
+      setUploadedVideos(prev => [uploadedVideo, ...prev]);
+      
+      toast.success('Video uploaded successfully!');
+    } catch (error) {
+      console.error('Upload failed:', error);
+      toast.error(error.response?.data?.detail || 'Failed to upload video');
+    } finally {
+      setUploading(false);
+      setUploadProgress(0);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleAddUploadedVideo = (uploadedVideo) => {
+    // Check for duplicates
+    if (videos.some(v => v.uploaded_id === uploadedVideo.id)) {
+      toast.error('This video is already in the playlist');
+      return;
+    }
+
+    const newVideo = {
+      id: `uploaded-${uploadedVideo.id}`,
+      uploaded_id: uploadedVideo.id,
+      youtube_id: null,
+      video_url: uploadedVideo.url,
+      title: uploadedVideo.original_name.replace(/\.[^/.]+$/, ''),
+      thumbnail: uploadedVideo.thumbnail || '/video-placeholder.png',
+      duration: uploadedVideo.duration || 300,
+      order: videos.length,
+      type: 'uploaded'
+    };
+
+    setVideos((prev) => [...prev, newVideo]);
+    toast.success('Video added to playlist');
+  };
+
   const handleRemoveVideo = async (videoId) => {
     if (isEditing) {
       try {
@@ -168,6 +250,16 @@ const ChannelCreator = () => {
     
     setVideos((prev) => prev.filter((v) => v.id !== videoId));
     toast.success('Video removed');
+  };
+
+  const handleDeleteUploadedVideo = async (videoId) => {
+    try {
+      await uploadAPI.deleteVideo(videoId);
+      setUploadedVideos(prev => prev.filter(v => v.id !== videoId));
+      toast.success('Video deleted');
+    } catch (error) {
+      toast.error('Failed to delete video');
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -195,10 +287,11 @@ const ChannelCreator = () => {
         // Add videos to the new channel
         for (const video of videos) {
           await channelsAPI.addVideo(newChannelId, {
-            youtube_id: video.youtube_id,
+            youtube_id: video.youtube_id || '',
             title: video.title,
             thumbnail: video.thumbnail,
             duration: video.duration,
+            video_url: video.video_url || null,
           });
         }
         
@@ -213,6 +306,14 @@ const ChannelCreator = () => {
     }
   };
 
+  const formatFileSize = (bytes) => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -225,7 +326,7 @@ const ChannelCreator = () => {
   }
 
   return (
-    <div className="min-h-screen px-6 md:px-12 lg:px-16 py-8" data-testid="channel-creator-page">
+    <div className="min-h-screen overflow-y-auto px-6 md:px-12 lg:px-16 py-8" data-testid="channel-creator-page">
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-4">
@@ -345,86 +446,207 @@ const ChannelCreator = () => {
             </div>
           </div>
 
-          {/* Videos Card */}
+          {/* Videos Card with Tabs */}
           <div className="glass rounded-lg p-6">
             <h2 className="font-semibold text-lg mb-4 flex items-center gap-2">
-              <Youtube size={20} className="text-red-500" />
+              <Film size={20} className="text-primary" />
               Video Playlist
             </h2>
 
-            {/* Add Video */}
-            <div className="flex gap-2 mb-4">
-              <Input
-                value={newVideoUrl}
-                onChange={(e) => setNewVideoUrl(e.target.value)}
-                placeholder="Paste YouTube URL or video ID..."
-                className="flex-1 bg-black/50 border-white/10"
-                data-testid="video-url-input"
-              />
-              <Button
-                type="button"
-                onClick={handleAddVideo}
-                disabled={!newVideoUrl.trim() || addingVideo}
-                className="bg-primary hover:bg-primary-hover"
-                data-testid="add-video-btn"
-              >
-                <Plus size={18} className="mr-1" />
-                Add
-              </Button>
-            </div>
+            <Tabs defaultValue="youtube" className="w-full">
+              <TabsList className="grid w-full grid-cols-2 mb-4">
+                <TabsTrigger value="youtube" className="flex items-center gap-2">
+                  <Youtube size={16} />
+                  YouTube
+                </TabsTrigger>
+                <TabsTrigger value="upload" className="flex items-center gap-2">
+                  <Upload size={16} />
+                  Upload
+                </TabsTrigger>
+              </TabsList>
 
-            {/* Video List */}
-            {videos.length > 0 ? (
-              <div className="space-y-2">
-                {videos.map((video, index) => (
-                  <div
-                    key={video.id}
-                    className="flex items-center gap-3 p-3 bg-black/30 rounded-lg group"
+              {/* YouTube Tab */}
+              <TabsContent value="youtube" className="space-y-4">
+                <div className="flex gap-2">
+                  <Input
+                    value={newVideoUrl}
+                    onChange={(e) => setNewVideoUrl(e.target.value)}
+                    placeholder="Paste YouTube URL or video ID..."
+                    className="flex-1 bg-black/50 border-white/10"
+                    data-testid="video-url-input"
+                  />
+                  <Button
+                    type="button"
+                    onClick={handleAddYouTubeVideo}
+                    disabled={!newVideoUrl.trim() || addingVideo}
+                    className="bg-red-600 hover:bg-red-700"
+                    data-testid="add-video-btn"
                   >
-                    <span className="w-6 text-center text-gray-500 font-mono text-sm">
-                      {index + 1}
-                    </span>
-                    <div className="w-24 aspect-video bg-black rounded overflow-hidden flex-shrink-0">
-                      <img
-                        src={video.thumbnail}
-                        alt={video.title}
-                        className="w-full h-full object-cover"
-                        onError={(e) => {
-                          e.target.src = `https://img.youtube.com/vi/${video.youtube_id}/mqdefault.jpg`;
-                        }}
-                      />
+                    <Plus size={18} className="mr-1" />
+                    Add
+                  </Button>
+                </div>
+              </TabsContent>
+
+              {/* Upload Tab */}
+              <TabsContent value="upload" className="space-y-4">
+                {/* Upload Button */}
+                <div className="border-2 border-dashed border-white/20 rounded-lg p-6 text-center hover:border-primary/50 transition-colors">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="video/mp4,video/webm,video/ogg,video/quicktime,video/x-msvideo"
+                    onChange={handleFileUpload}
+                    className="hidden"
+                    id="video-upload"
+                    disabled={uploading}
+                  />
+                  <label htmlFor="video-upload" className="cursor-pointer">
+                    <Upload size={32} className="mx-auto mb-2 text-gray-400" />
+                    <p className="text-sm text-gray-300 mb-1">
+                      Click to upload video
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      MP4, WebM, OGG, MOV, AVI (max 500MB)
+                    </p>
+                  </label>
+                </div>
+
+                {/* Upload Progress */}
+                {uploading && (
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-400">Uploading...</span>
+                      <span className="text-primary">{uploadProgress}%</span>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <Input
-                        value={video.title}
-                        onChange={(e) => {
-                          const newVideos = [...videos];
-                          newVideos[index].title = e.target.value;
-                          setVideos(newVideos);
-                        }}
-                        className="bg-transparent border-transparent hover:border-white/10 focus:border-primary h-8 text-sm"
-                        placeholder="Video title"
-                      />
-                      <p className="text-xs text-gray-500 mt-1">{video.youtube_id}</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveVideo(video.id)}
-                      className="p-2 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
-                      data-testid={`remove-video-${video.id}`}
-                    >
-                      <Trash2 size={18} />
-                    </button>
+                    <Progress value={uploadProgress} className="h-2" />
                   </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-8 text-gray-400">
-                <Youtube size={32} className="mx-auto mb-2 opacity-50" />
-                <p>No videos added yet</p>
-                <p className="text-sm">Add YouTube videos to create your playlist</p>
-              </div>
-            )}
+                )}
+
+                {/* Uploaded Videos Library */}
+                {uploadedVideos.length > 0 && (
+                  <div>
+                    <h4 className="text-sm font-medium text-gray-400 mb-2">Your Uploaded Videos</h4>
+                    <div className="space-y-2 max-h-60 overflow-y-auto">
+                      {uploadedVideos.map((video) => (
+                        <div
+                          key={video.id}
+                          className="flex items-center gap-3 p-2 bg-black/30 rounded-lg group"
+                        >
+                          <div className="w-16 h-10 bg-black rounded flex items-center justify-center flex-shrink-0">
+                            <FileVideo size={20} className="text-gray-500" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm truncate">{video.original_name}</p>
+                            <p className="text-xs text-gray-500">
+                              {formatFileSize(video.size)} • {Math.floor(video.duration / 60)}min
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleAddUploadedVideo(video)}
+                              className="h-8 px-2 text-green-400 hover:text-green-300 hover:bg-green-400/10"
+                            >
+                              <Plus size={16} />
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleDeleteUploadedVideo(video.id)}
+                              className="h-8 px-2 text-red-400 hover:text-red-300 hover:bg-red-400/10"
+                            >
+                              <Trash2 size={16} />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </TabsContent>
+            </Tabs>
+
+            {/* Current Playlist */}
+            <div className="mt-6 pt-4 border-t border-white/10">
+              <h4 className="text-sm font-medium text-gray-400 mb-3">
+                Current Playlist ({videos.length} videos)
+              </h4>
+              
+              {videos.length > 0 ? (
+                <div className="space-y-2">
+                  {videos.map((video, index) => (
+                    <div
+                      key={video.id}
+                      className="flex items-center gap-3 p-3 bg-black/30 rounded-lg group"
+                    >
+                      <span className="w-6 text-center text-gray-500 font-mono text-sm">
+                        {index + 1}
+                      </span>
+                      <div className="w-20 h-12 bg-black rounded overflow-hidden flex-shrink-0">
+                        {video.youtube_id ? (
+                          <img
+                            src={video.thumbnail}
+                            alt={video.title}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              e.target.src = `https://img.youtube.com/vi/${video.youtube_id}/mqdefault.jpg`;
+                            }}
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <FileVideo size={20} className="text-gray-500" />
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <Input
+                          value={video.title}
+                          onChange={(e) => {
+                            const newVideos = [...videos];
+                            newVideos[index].title = e.target.value;
+                            setVideos(newVideos);
+                          }}
+                          className="bg-transparent border-transparent hover:border-white/10 focus:border-primary h-8 text-sm"
+                          placeholder="Video title"
+                        />
+                        <div className="flex items-center gap-2 mt-1">
+                          {video.youtube_id ? (
+                            <span className="text-xs text-red-400 flex items-center gap-1">
+                              <Youtube size={10} /> YouTube
+                            </span>
+                          ) : (
+                            <span className="text-xs text-primary flex items-center gap-1">
+                              <Upload size={10} /> Uploaded
+                            </span>
+                          )}
+                          <span className="text-xs text-gray-500 flex items-center gap-1">
+                            <Clock size={10} /> {Math.floor(video.duration / 60)}min
+                          </span>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveVideo(video.id)}
+                        className="p-2 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
+                        data-testid={`remove-video-${video.id}`}
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-400">
+                  <Film size={32} className="mx-auto mb-2 opacity-50" />
+                  <p>No videos added yet</p>
+                  <p className="text-sm">Add YouTube videos or upload your own</p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
