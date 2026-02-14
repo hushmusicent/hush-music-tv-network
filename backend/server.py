@@ -352,6 +352,131 @@ async def remove_video_from_channel(channel_id: str, video_id: str, user: dict =
     
     return {"message": "Video removed"}
 
+# ===================== VIDEO UPLOAD ROUTES =====================
+
+class UploadedVideoResponse(BaseModel):
+    id: str
+    filename: str
+    original_name: str
+    url: str
+    size: int
+    duration: int = 300  # Default 5 min, can be updated
+    thumbnail: Optional[str] = None
+    created_at: str
+
+@api_router.post("/upload/video", response_model=UploadedVideoResponse)
+async def upload_video(
+    file: UploadFile = File(...),
+    user: dict = Depends(require_user)
+):
+    """Upload a video file (admin only)"""
+    if not user.get("is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    # Validate file type
+    allowed_types = ["video/mp4", "video/webm", "video/ogg", "video/quicktime", "video/x-msvideo"]
+    if file.content_type not in allowed_types:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Invalid file type. Allowed: mp4, webm, ogg, mov, avi"
+        )
+    
+    # Generate unique filename
+    file_ext = Path(file.filename).suffix or ".mp4"
+    video_id = str(uuid.uuid4())
+    filename = f"{video_id}{file_ext}"
+    file_path = UPLOADS_DIR / filename
+    
+    # Save file
+    try:
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save file: {str(e)}")
+    
+    # Get file size
+    file_size = file_path.stat().st_size
+    
+    # Store in database
+    now = datetime.now(timezone.utc).isoformat()
+    video_doc = {
+        "id": video_id,
+        "filename": filename,
+        "original_name": file.filename,
+        "size": file_size,
+        "duration": 300,  # Default, can be updated later
+        "thumbnail": None,
+        "owner_id": user["id"],
+        "created_at": now
+    }
+    
+    await db.uploaded_videos.insert_one(video_doc)
+    
+    return UploadedVideoResponse(
+        id=video_id,
+        filename=filename,
+        original_name=file.filename,
+        url=f"/api/videos/{filename}",
+        size=file_size,
+        duration=300,
+        thumbnail=None,
+        created_at=now
+    )
+
+@api_router.get("/upload/videos")
+async def list_uploaded_videos(user: dict = Depends(require_user)):
+    """List all uploaded videos (admin only)"""
+    if not user.get("is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    videos = await db.uploaded_videos.find({}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    
+    # Add URLs
+    for video in videos:
+        video["url"] = f"/api/videos/{video['filename']}"
+    
+    return videos
+
+@api_router.delete("/upload/video/{video_id}")
+async def delete_uploaded_video(video_id: str, user: dict = Depends(require_user)):
+    """Delete an uploaded video (admin only)"""
+    if not user.get("is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    video = await db.uploaded_videos.find_one({"id": video_id})
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+    
+    # Delete file
+    file_path = UPLOADS_DIR / video["filename"]
+    if file_path.exists():
+        file_path.unlink()
+    
+    # Delete from database
+    await db.uploaded_videos.delete_one({"id": video_id})
+    
+    return {"message": "Video deleted"}
+
+@api_router.put("/upload/video/{video_id}/duration")
+async def update_video_duration(
+    video_id: str, 
+    duration: int,
+    user: dict = Depends(require_user)
+):
+    """Update video duration (admin only)"""
+    if not user.get("is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    result = await db.uploaded_videos.update_one(
+        {"id": video_id},
+        {"$set": {"duration": duration}}
+    )
+    
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Video not found")
+    
+    return {"message": "Duration updated"}
+
 @api_router.put("/channels/{channel_id}/videos/reorder")
 async def reorder_videos(channel_id: str, video_ids: List[str], user: dict = Depends(require_user)):
     channel = await db.channels.find_one({"id": channel_id}, {"_id": 0})
