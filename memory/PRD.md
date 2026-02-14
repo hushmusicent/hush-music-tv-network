@@ -39,19 +39,22 @@ Build a TV network app like Strimm for Hush Music TV Network with:
 - [x] TV Guide with time-based schedule
 - [x] **Admin Dashboard with full management**:
   - Stats overview (Channels, Videos, Viewers, Favorites)
-  - Channels tab with Grid/List view toggle
-  - Edit/Delete buttons for each channel
-  - Uploaded Videos tab with video library
-  - Embed tab with network/single channel embed codes
+  - Expandable channel list showing all videos
+  - Inline editing (name, description, category, thumbnail, toggles)
+  - Remove videos from channels
+  - Copy embed codes per channel
 - [x] Channel Creator/Editor with YouTube and Upload tabs
 - [x] Video upload UI with progress indicator
 - [x] Favorites page
 - [x] Admin-only Login page
-- [x] Live TV page with:
+- [x] **Live TV page with synchronized playback**:
   - Channel sidebar with switching
-  - Synchronized video player
-  - Schedule bar showing current/upcoming
-  - Support for both YouTube and uploaded videos
+  - **Live sync** - calculates video position based on current time
+  - All viewers see same content at same moment
+  - Schedule bar showing current/upcoming with NOW indicator
+  - Admin Panel sidebar (toggle with 'A' key or button)
+  - Edit channel button in player overlay
+  - Keyboard controls (↑↓ channels, M mute, G guide, A admin)
 - [x] Embeddable player for single channel
 - [x] Embeddable network player
 - [x] Top navigation bar on all pages
