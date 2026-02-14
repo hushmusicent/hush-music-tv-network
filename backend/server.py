@@ -565,11 +565,10 @@ async def upload_image(
 
 @api_router.get("/upload/images")
 async def list_uploaded_images(user: dict = Depends(require_user)):
-    """List all uploaded images (admin only)"""
-    if not user.get("is_admin", False):
-        raise HTTPException(status_code=403, detail="Admin access required")
-    
-    images = await db.uploaded_images.find({}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    """List uploaded images for the current user"""
+    # Users see their own images, admins see all
+    query = {} if user.get("is_admin", False) else {"owner_id": user["id"]}
+    images = await db.uploaded_images.find(query, {"_id": 0}).sort("created_at", -1).to_list(100)
     
     # Add URLs
     for image in images:
@@ -579,13 +578,14 @@ async def list_uploaded_images(user: dict = Depends(require_user)):
 
 @api_router.delete("/upload/image/{image_id}")
 async def delete_uploaded_image(image_id: str, user: dict = Depends(require_user)):
-    """Delete an uploaded image (admin only)"""
-    if not user.get("is_admin", False):
-        raise HTTPException(status_code=403, detail="Admin access required")
-    
+    """Delete an uploaded image (owner or admin)"""
     image = await db.uploaded_images.find_one({"id": image_id})
     if not image:
         raise HTTPException(status_code=404, detail="Image not found")
+    
+    # Only owner or admin can delete
+    if image["owner_id"] != user["id"] and not user.get("is_admin", False):
+        raise HTTPException(status_code=403, detail="Not authorized")
     
     # Delete file
     file_path = IMAGES_DIR / image["filename"]
