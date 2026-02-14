@@ -91,12 +91,13 @@ const VideoPlayer = ({ videos = [], channelName = '', isLive = true, startIndex 
   }
 
   // YouTube embed URL with autoplay, loop, and live seek position
-  const embedUrl = `https://www.youtube.com/embed/${currentVideo.youtube_id}?autoplay=${isPlaying ? 1 : 0}&mute=${isMuted ? 1 : 0}&start=${Math.floor(currentSeekTime)}&rel=0&modestbranding=1&enablejsapi=1&loop=0&controls=0`;
+  const embedUrl = `https://www.youtube.com/embed/${currentVideo.youtube_id}?autoplay=${isPlaying ? 1 : 0}&mute=${isMuted ? 1 : 0}&start=${Math.floor(currentSeekTime)}&rel=0&modestbranding=1&playsinline=1`;
 
   return (
     <div
       ref={playerRef}
-      className="relative w-full aspect-video bg-black group"
+      className="relative w-full bg-black group"
+      style={{ aspectRatio: '16/9' }}
       onMouseMove={handleMouseMove}
       onMouseLeave={() => setShowControls(false)}
       data-testid="video-player"
@@ -107,7 +108,8 @@ const VideoPlayer = ({ videos = [], channelName = '', isLive = true, startIndex 
         src={embedUrl}
         title={currentVideo.title}
         className="absolute inset-0 w-full h-full"
-        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+        style={{ border: 'none' }}
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
         allowFullScreen
       />
 
