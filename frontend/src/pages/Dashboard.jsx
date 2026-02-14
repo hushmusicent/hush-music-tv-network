@@ -63,6 +63,7 @@ import {
 const Dashboard = () => {
   const { user, isAuthenticated, loading: authLoading } = useAuth();
   const navigate = useNavigate();
+  const imageInputRef = useRef(null);
   
   const [channels, setChannels] = useState([]);
   const [uploadedVideos, setUploadedVideos] = useState([]);
@@ -76,6 +77,7 @@ const Dashboard = () => {
   const [expandedChannels, setExpandedChannels] = useState({});
   const [editingChannel, setEditingChannel] = useState(null);
   const [savingChannel, setSavingChannel] = useState(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   useEffect(() => {
     if (authLoading) return;
