@@ -1,34 +1,121 @@
-.App-logo {
-    height: 40vmin;
-    pointer-events: none;
+/* App specific styles */
+
+/* Hero section gradient */
+.hero-gradient {
+  background: radial-gradient(circle at center, rgba(124, 58, 237, 0.15) 0%, transparent 70%);
 }
 
-@media (prefers-reduced-motion: no-preference) {
-    .App-logo {
-        animation: App-logo-spin infinite 20s linear;
-    }
+/* Channel thumbnail hover effect */
+.thumbnail-hover {
+  position: relative;
+  overflow: hidden;
 }
 
-.App-header {
-    background-color: #0f0f10;
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    font-size: calc(10px + 2vmin);
-    color: white;
+.thumbnail-hover::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.8) 0%, transparent 50%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
 }
 
-.App-link {
-    color: #61dafb;
+.thumbnail-hover:hover::after {
+  opacity: 1;
 }
 
-@keyframes App-logo-spin {
-    from {
-        transform: rotate(0deg);
-    }
-    to {
-        transform: rotate(360deg);
-    }
+/* Navigation active state */
+.nav-link {
+  position: relative;
+}
+
+.nav-link::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  width: 0;
+  height: 2px;
+  background: #7C3AED;
+  transition: width 0.3s ease;
+}
+
+.nav-link:hover::after,
+.nav-link.active::after {
+  width: 100%;
+}
+
+/* Category pill */
+.category-pill {
+  transition: all 0.2s ease;
+}
+
+.category-pill:hover {
+  background: rgba(124, 58, 237, 0.2);
+  border-color: rgba(124, 58, 237, 0.5);
+}
+
+.category-pill.active {
+  background: #7C3AED;
+  border-color: #7C3AED;
+}
+
+/* TV Guide time slot */
+.time-slot {
+  min-width: 200px;
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Modal backdrop blur */
+.modal-backdrop {
+  backdrop-filter: blur(8px);
+  background: rgba(0, 0, 0, 0.7);
+}
+
+/* Input focus ring */
+input:focus,
+textarea:focus,
+select:focus {
+  outline: none;
+  ring: 2px;
+  ring-color: #7C3AED;
+}
+
+/* Button press effect */
+.btn-press:active {
+  transform: scale(0.98);
+}
+
+/* Sidebar transition */
+.sidebar {
+  transition: width 0.3s ease, transform 0.3s ease;
+}
+
+/* Player controls fade */
+.player-controls {
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.player-container:hover .player-controls {
+  opacity: 1;
+}
+
+/* Loading skeleton */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.skeleton {
+  background: linear-gradient(90deg, #1a1a1a 25%, #2a2a2a 50%, #1a1a1a 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* Focus visible for accessibility */
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid #7C3AED;
+  outline-offset: 2px;
 }
