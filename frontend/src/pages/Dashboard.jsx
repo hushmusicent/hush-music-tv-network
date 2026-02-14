@@ -78,6 +78,7 @@ const Dashboard = () => {
   const [editingChannel, setEditingChannel] = useState(null);
   const [savingChannel, setSavingChannel] = useState(null);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [editingVideoDuration, setEditingVideoDuration] = useState({ channelId: null, videoId: null, value: '' });
 
   useEffect(() => {
     if (authLoading) return;
