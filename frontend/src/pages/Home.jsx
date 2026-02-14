@@ -132,11 +132,11 @@ const Home = () => {
                 Your 24/7 music and entertainment network
               </p>
               <Button
-                onClick={() => isAuthenticated ? navigate('/create') : navigate('/login')}
+                onClick={() => navigate('/live')}
                 className="bg-primary hover:bg-primary-hover text-white font-bold px-8 py-6 text-lg"
               >
-                <Plus size={20} className="mr-2" />
-                Create Channel
+                <Radio size={20} className="mr-2" />
+                Watch Live TV
               </Button>
             </div>
           )}
