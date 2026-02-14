@@ -1,13 +1,22 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Play, Pause, Volume2, VolumeX, Maximize, SkipForward, SkipBack, Radio } from 'lucide-react';
 
-const VideoPlayer = ({ videos = [], channelName = '', isLive = true, startIndex = 0 }) => {
+const VideoPlayer = ({ videos = [], channelName = '', isLive = true, startIndex = 0, seekTime = 0 }) => {
   const [currentIndex, setCurrentIndex] = useState(startIndex);
+  const [currentSeekTime, setCurrentSeekTime] = useState(seekTime);
   const [isPlaying, setIsPlaying] = useState(true);
   const [isMuted, setIsMuted] = useState(false);
   const [showControls, setShowControls] = useState(false);
   const playerRef = useRef(null);
   const controlsTimeoutRef = useRef(null);
+
+  // Update when startIndex or seekTime changes (live sync)
+  useEffect(() => {
+    if (startIndex !== currentIndex) {
+      setCurrentIndex(startIndex);
+      setCurrentSeekTime(seekTime);
+    }
+  }, [startIndex, seekTime]);
 
   const currentVideo = videos[currentIndex];
 
@@ -81,8 +90,8 @@ const VideoPlayer = ({ videos = [], channelName = '', isLive = true, startIndex 
     );
   }
 
-  // YouTube embed URL with autoplay and loop
-  const embedUrl = `https://www.youtube.com/embed/${currentVideo.youtube_id}?autoplay=${isPlaying ? 1 : 0}&mute=${isMuted ? 1 : 0}&rel=0&modestbranding=1&enablejsapi=1&loop=0&controls=0`;
+  // YouTube embed URL with autoplay, loop, and live seek position
+  const embedUrl = `https://www.youtube.com/embed/${currentVideo.youtube_id}?autoplay=${isPlaying ? 1 : 0}&mute=${isMuted ? 1 : 0}&start=${Math.floor(currentSeekTime)}&rel=0&modestbranding=1&enablejsapi=1&loop=0&controls=0`;
 
   return (
     <div
@@ -94,7 +103,7 @@ const VideoPlayer = ({ videos = [], channelName = '', isLive = true, startIndex 
     >
       {/* YouTube Embed */}
       <iframe
-        key={`${currentVideo.youtube_id}-${isPlaying}-${isMuted}`}
+        key={`${currentVideo.youtube_id}-${isPlaying}-${isMuted}-${currentIndex}-${Math.floor(currentSeekTime)}`}
         src={embedUrl}
         title={currentVideo.title}
         className="absolute inset-0 w-full h-full"
