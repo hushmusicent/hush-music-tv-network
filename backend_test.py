@@ -223,31 +223,51 @@ class TVNetworkAdminAPITester:
             
         return success
 
-    def test_channel_creation(self):
-        """Test channel creation"""
-        print("\n🔍 Testing Channel Creation...")
-        channel_data = {
-            "name": "Test Channel",
-            "description": "A test channel for automated testing",
-            "category": "Entertainment",
-            "is_public": True,
-            "is_24_7": True
+    def test_admin_can_edit_all_channels(self):
+        """Test that admin can edit any channel"""
+        print("\n🔍 Testing Admin Can Edit All Channels...")
+        
+        # First get all channels to find one to edit
+        response = self.make_request('GET', 'channels', auth=False)
+        if isinstance(response, tuple) or response.status_code != 200:
+            self.log_test("Admin Edit All Channels - Get Channels", False, "Could not get channels list")
+            return False
+            
+        channels = response.json()
+        if not channels:
+            self.log_test("Admin Edit All Channels - Get Channels", False, "No channels found")
+            return False
+            
+        # Pick the first channel (should not be owned by admin)
+        test_channel = channels[0]
+        channel_id = test_channel['id']
+        original_name = test_channel['name']
+        
+        # Try to update the channel name
+        update_data = {
+            "name": f"{original_name} - Admin Edited"
         }
         
-        response = self.make_request('POST', 'channels', channel_data)
+        response = self.make_request('PUT', f'channels/{channel_id}', update_data)
         
         if isinstance(response, tuple):
-            self.log_test("Create Channel", False, response[1])
+            self.log_test("Admin Edit All Channels", False, response[1])
             return False
             
         success = response.status_code == 200
         if success:
-            channel = response.json()
-            self.channel_id = channel.get('id')
-            success = bool(self.channel_id)
-            self.log_test("Create Channel", success, f"Channel ID: {self.channel_id}")
+            updated_channel = response.json()
+            new_name = updated_channel.get('name')
+            success = new_name == update_data['name']
+            self.log_test("Admin Edit All Channels", success, f"Updated channel name from '{original_name}' to '{new_name}'")
+            
+            # Revert the change
+            revert_data = {"name": original_name}
+            revert_response = self.make_request('PUT', f'channels/{channel_id}', revert_data)
+            if revert_response.status_code == 200:
+                print("  ✓ Successfully reverted channel name")
         else:
-            self.log_test("Create Channel", False, f"Status: {response.status_code}, Response: {response.text}")
+            self.log_test("Admin Edit All Channels", False, f"Status: {response.status_code}, Response: {response.text}")
         return success
 
     def test_add_video_to_channel(self):
