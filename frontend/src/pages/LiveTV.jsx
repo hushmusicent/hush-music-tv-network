@@ -173,7 +173,15 @@ const LiveTV = () => {
     if (!currentChannel?.videos?.length) return;
     
     const syncInterval = setInterval(() => {
-      const { videoIndex, seekTime: newSeekTime } = calculateLivePosition(currentChannel.videos);
+      const { videoIndex, seekTime: newSeekTime, shuffledVideos: newShuffled } = calculateLivePosition(
+        currentChannel.videos, 
+        currentChannel.random_play
+      );
+      
+      // Update shuffled videos if changed
+      if (JSON.stringify(newShuffled.map(v => v.id)) !== JSON.stringify(shuffledVideos.map(v => v.id))) {
+        setShuffledVideos(newShuffled);
+      }
       
       // Update if video changed OR if we've drifted more than 10 seconds
       if (videoIndex !== currentVideoIndex) {
@@ -186,7 +194,7 @@ const LiveTV = () => {
     }, 3000); // Check every 3 seconds for better sync
     
     return () => clearInterval(syncInterval);
-  }, [currentChannel, currentVideoIndex, seekTime]);
+  }, [currentChannel, currentVideoIndex, seekTime, shuffledVideos]);
 
   // Update schedule when channel changes or time updates
   useEffect(() => {
