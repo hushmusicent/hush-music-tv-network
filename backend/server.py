@@ -708,12 +708,24 @@ CATEGORIES = [
 
 @api_router.get("/categories", response_model=List[CategoryResponse])
 async def get_categories():
+    # Use aggregation to get all category counts in a single query
+    pipeline = [
+        {"$match": {"is_public": True}},
+        {"$group": {"_id": "$category", "count": {"$sum": 1}}}
+    ]
+    counts_cursor = db.channels.aggregate(pipeline)
+    counts_list = await counts_cursor.to_list(None)
+    counts_dict = {doc["_id"]: doc["count"] for doc in counts_list}
+    
+    # Get total count for "All" category
+    total_count = sum(counts_dict.values())
+    
     result = []
     for cat in CATEGORIES:
         if cat["name"] == "All":
-            count = await db.channels.count_documents({"is_public": True})
+            count = total_count
         else:
-            count = await db.channels.count_documents({"category": cat["name"], "is_public": True})
+            count = counts_dict.get(cat["name"], 0)
         result.append(CategoryResponse(name=cat["name"], count=count, thumbnail=cat["thumbnail"]))
     return result
 
