@@ -43,6 +43,7 @@ const ChannelCreator = () => {
   
   const isEditing = !!channelId;
   const fileInputRef = useRef(null);
+  const thumbnailInputRef = useRef(null);
   
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -50,6 +51,7 @@ const ChannelCreator = () => {
   const [uploadedVideos, setUploadedVideos] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadingThumbnail, setUploadingThumbnail] = useState(false);
   
   const [formData, setFormData] = useState({
     name: '',
