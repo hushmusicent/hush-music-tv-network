@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { channelsAPI, favoritesAPI } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
@@ -17,9 +17,44 @@ import {
   ExternalLink,
   Code,
   Copy,
-  Check
+  Check,
+  Clock
 } from 'lucide-react';
 import { toast } from 'sonner';
+
+// Calculate the current position in a channel's playlist based on real time
+const calculateLivePosition = (videos) => {
+  if (!videos || videos.length === 0) return { videoIndex: 0, seekTime: 0 };
+  
+  const now = new Date();
+  const startOfDay = new Date(now);
+  startOfDay.setHours(0, 0, 0, 0);
+  
+  const secondsSinceMidnight = Math.floor((now - startOfDay) / 1000);
+  
+  let totalDuration = 0;
+  videos.forEach(v => {
+    totalDuration += v.duration || 300;
+  });
+  
+  if (totalDuration === 0) return { videoIndex: 0, seekTime: 0 };
+  
+  const positionInPlaylist = secondsSinceMidnight % totalDuration;
+  
+  let accumulated = 0;
+  for (let i = 0; i < videos.length; i++) {
+    const videoDuration = videos[i].duration || 300;
+    if (accumulated + videoDuration > positionInPlaylist) {
+      return {
+        videoIndex: i,
+        seekTime: positionInPlaylist - accumulated
+      };
+    }
+    accumulated += videoDuration;
+  }
+  
+  return { videoIndex: 0, seekTime: 0 };
+};
 
 const Watch = () => {
   const { channelId } = useParams();
@@ -32,6 +67,8 @@ const Watch = () => {
   const [isFavorite, setIsFavorite] = useState(false);
   const [showEmbedCode, setShowEmbedCode] = useState(false);
   const [copiedEmbed, setCopiedEmbed] = useState(false);
+  const [liveVideoIndex, setLiveVideoIndex] = useState(0);
+  const [liveSeekTime, setLiveSeekTime] = useState(0);
 
   const isAdmin = user?.is_admin === true;
 
@@ -39,11 +76,33 @@ const Watch = () => {
     loadChannel();
   }, [channelId]);
 
+  // Sync to live position periodically
+  useEffect(() => {
+    if (!channel?.videos?.length) return;
+    
+    const syncInterval = setInterval(() => {
+      const { videoIndex, seekTime } = calculateLivePosition(channel.videos);
+      if (videoIndex !== liveVideoIndex) {
+        setLiveVideoIndex(videoIndex);
+        setLiveSeekTime(seekTime);
+      }
+    }, 5000);
+    
+    return () => clearInterval(syncInterval);
+  }, [channel, liveVideoIndex]);
+
   const loadChannel = async () => {
     setLoading(true);
     try {
       const response = await channelsAPI.getById(channelId);
       setChannel(response.data);
+
+      // Calculate live position
+      if (response.data.videos?.length > 0) {
+        const { videoIndex, seekTime } = calculateLivePosition(response.data.videos);
+        setLiveVideoIndex(videoIndex);
+        setLiveSeekTime(seekTime);
+      }
 
       // Load related channels from same category
       const relatedRes = await channelsAPI.getAll({ category: response.data.category });
