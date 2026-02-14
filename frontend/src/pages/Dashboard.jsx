@@ -44,7 +44,9 @@ import {
   X,
   Youtube,
   ExternalLink,
-  GripVertical
+  GripVertical,
+  Image as ImageIcon,
+  Loader2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
