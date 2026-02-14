@@ -108,6 +108,7 @@ class ChannelBase(BaseModel):
     thumbnail: Optional[str] = None
     is_public: bool = True
     is_24_7: bool = True
+    random_play: bool = False  # If True, videos play in random order
 
 class ChannelCreate(ChannelBase):
     pass
@@ -119,6 +120,7 @@ class ChannelUpdate(BaseModel):
     thumbnail: Optional[str] = None
     is_public: Optional[bool] = None
     is_24_7: Optional[bool] = None
+    random_play: Optional[bool] = None
 
 class ChannelResponse(ChannelBase):
     model_config = ConfigDict(extra="ignore")
