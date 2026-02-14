@@ -4,7 +4,7 @@ import json
 from datetime import datetime
 
 class TVNetworkAdminAPITester:
-    def __init__(self, base_url="https://broadcaster.preview.emergentagent.com"):
+    def __init__(self, base_url="https://tv-network-hub.preview.emergentagent.com"):
         self.base_url = base_url
         self.token = None
         self.user_id = None
