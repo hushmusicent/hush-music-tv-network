@@ -908,6 +908,9 @@ app.include_router(api_router)
 # Serve uploaded videos
 app.mount("/api/videos", StaticFiles(directory=str(UPLOADS_DIR)), name="videos")
 
+# Serve uploaded images
+app.mount("/api/images", StaticFiles(directory=str(IMAGES_DIR)), name="images")
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
