@@ -266,11 +266,15 @@ const LiveTV = () => {
   };
 
   const selectChannel = useCallback((channel) => {
-    const { videoIndex, seekTime: newSeekTime } = calculateLivePosition(channel.videos);
+    const { videoIndex, seekTime: newSeekTime, shuffledVideos: newShuffled } = calculateLivePosition(
+      channel.videos, 
+      channel.random_play
+    );
     setCurrentChannel(channel);
     setCurrentVideoIndex(videoIndex);
     setSeekTime(newSeekTime);
-    setSchedule(generateSchedule(channel.videos));
+    setShuffledVideos(newShuffled);
+    setSchedule(generateSchedule(channel.videos, channel.random_play));
   }, []);
 
   const changeChannel = (direction) => {
