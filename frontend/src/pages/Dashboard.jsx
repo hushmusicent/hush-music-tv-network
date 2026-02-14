@@ -47,11 +47,14 @@ const Dashboard = () => {
 
   const loadChannels = async () => {
     try {
-      const response = await channelsAPI.getMy();
+      // Admin gets all channels, not just their own
+      const response = user?.is_admin 
+        ? await channelsAPI.getAll({})
+        : await channelsAPI.getMy();
       setChannels(response.data);
     } catch (error) {
       console.error('Failed to load channels:', error);
-      toast.error('Failed to load your channels');
+      toast.error('Failed to load channels');
     } finally {
       setLoading(false);
     }
@@ -142,7 +145,7 @@ const Dashboard = () => {
         <div className="flex items-center justify-between mb-6">
           <h2 className="font-heading text-2xl tracking-wide flex items-center gap-2">
             <Radio size={24} className="text-accent-lime" />
-            My Channels
+            {user?.is_admin ? 'All Channels' : 'My Channels'}
           </h2>
         </div>
 
