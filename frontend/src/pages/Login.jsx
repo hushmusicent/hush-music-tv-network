@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
-import { Tv, Mail, Lock, User, Eye, EyeOff, ArrowLeft } from 'lucide-react';
+import { Tv, Mail, Lock, Eye, EyeOff, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
 
 const Login = () => {
