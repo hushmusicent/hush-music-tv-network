@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { channelsAPI } from '../lib/api';
 import { Play, Pause, Volume2, VolumeX, SkipForward, SkipBack } from 'lucide-react';
+import '../embed.css';
 
 const EmbedPlayer = () => {
   const { channelId } = useParams();
@@ -92,7 +93,7 @@ const EmbedPlayer = () => {
 
   return (
     <div 
-      className="relative w-full h-full bg-black overflow-hidden"
+      className="embed-container"
       onMouseMove={handleMouseMove}
       onMouseLeave={() => setShowControls(false)}
       data-testid="embed-player"
