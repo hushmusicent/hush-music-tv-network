@@ -75,17 +75,19 @@ class TokenResponse(BaseModel):
 class VideoItem(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    youtube_id: str
+    youtube_id: Optional[str] = None
+    video_url: Optional[str] = None  # For uploaded videos
     title: str
     thumbnail: Optional[str] = None
     duration: int = 0  # in seconds
     order: int = 0
 
 class VideoCreate(BaseModel):
-    youtube_id: str
+    youtube_id: Optional[str] = None
     title: str
     thumbnail: Optional[str] = None
     duration: int = 0
+    video_url: Optional[str] = None  # For uploaded videos
 
 class ScheduleSlot(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -320,10 +322,19 @@ async def add_video_to_channel(channel_id: str, data: VideoCreate, user: dict = 
     if channel["owner_id"] != user["id"] and not user.get("is_admin", False):
         raise HTTPException(status_code=403, detail="Not authorized")
     
+    # Determine thumbnail based on video type
+    thumbnail = data.thumbnail
+    if not thumbnail:
+        if data.youtube_id:
+            thumbnail = f"https://img.youtube.com/vi/{data.youtube_id}/maxresdefault.jpg"
+        else:
+            thumbnail = None  # Uploaded videos may not have thumbnails
+    
     video = VideoItem(
         youtube_id=data.youtube_id,
+        video_url=data.video_url,
         title=data.title,
-        thumbnail=data.thumbnail or f"https://img.youtube.com/vi/{data.youtube_id}/maxresdefault.jpg",
+        thumbnail=thumbnail,
         duration=data.duration,
         order=len(channel.get("videos", []))
     )
