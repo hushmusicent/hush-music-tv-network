@@ -397,6 +397,9 @@ const Dashboard = () => {
                           {channel.is_24_7 && (
                             <span className="text-red-400 text-xs font-bold">24/7</span>
                           )}
+                          {channel.random_play && (
+                            <span className="text-purple-400 text-xs font-bold">SHUFFLE</span>
+                          )}
                         </div>
                       </div>
                       
