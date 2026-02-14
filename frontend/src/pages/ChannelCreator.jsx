@@ -712,6 +712,11 @@ const ChannelCreator = () => {
               {formData.is_24_7 && (
                 <span className="px-2 py-1 bg-red-500/20 text-red-400 rounded">24/7</span>
               )}
+              {formData.random_play && (
+                <span className="px-2 py-1 bg-purple-500/20 text-purple-400 rounded flex items-center gap-1">
+                  <Shuffle size={10} /> Shuffle
+                </span>
+              )}
             </div>
 
             <div className="mt-6 pt-4 border-t border-white/10">
