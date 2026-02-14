@@ -246,12 +246,12 @@ const Home = () => {
                 24/7 music, entertainment, and more. Tune in anytime, anywhere.
               </p>
               <Button
-                onClick={() => isAuthenticated ? navigate('/create') : navigate('/login')}
+                onClick={() => navigate('/live')}
                 className="bg-primary hover:bg-primary-hover text-white font-bold px-8 py-6 text-lg glow-primary-hover"
-                data-testid="cta-create-btn"
+                data-testid="cta-watch-btn"
               >
-                <Tv size={20} className="mr-2" />
-                Create Channel
+                <Radio size={20} className="mr-2" />
+                Watch Live TV
               </Button>
             </div>
             <div className="hidden md:block">
