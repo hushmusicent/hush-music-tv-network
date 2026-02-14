@@ -514,10 +514,7 @@ async def upload_image(
     file: UploadFile = File(...),
     user: dict = Depends(require_user)
 ):
-    """Upload an image file (admin only) - JPEG, PNG, WebP, GIF only, max 10MB"""
-    if not user.get("is_admin", False):
-        raise HTTPException(status_code=403, detail="Admin access required")
-    
+    """Upload an image file - JPEG, PNG, WebP, GIF only, max 10MB"""
     # Validate file type
     if file.content_type not in ALLOWED_IMAGE_TYPES:
         raise HTTPException(
