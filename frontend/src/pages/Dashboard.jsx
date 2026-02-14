@@ -733,7 +733,42 @@ const Dashboard = () => {
                                         </span>
                                       )}
                                       <span className="flex items-center gap-1">
-                                        <Clock size={10} /> {Math.floor((video.duration || 300) / 60)}min
+                                        <Clock size={10} />
+                                        {editingVideoDuration.channelId === channel.id && editingVideoDuration.videoId === video.id ? (
+                                          <Input
+                                            value={editingVideoDuration.value}
+                                            onChange={(e) => setEditingVideoDuration(prev => ({ ...prev, value: e.target.value }))}
+                                            onBlur={() => {
+                                              if (editingVideoDuration.value.trim()) {
+                                                handleUpdateVideoDuration(channel.id, video.id, editingVideoDuration.value);
+                                              } else {
+                                                setEditingVideoDuration({ channelId: null, videoId: null, value: '' });
+                                              }
+                                            }}
+                                            onKeyDown={(e) => {
+                                              if (e.key === 'Enter') {
+                                                handleUpdateVideoDuration(channel.id, video.id, editingVideoDuration.value);
+                                              } else if (e.key === 'Escape') {
+                                                setEditingVideoDuration({ channelId: null, videoId: null, value: '' });
+                                              }
+                                            }}
+                                            className="w-16 h-5 text-xs bg-black/50 border-white/20 px-1"
+                                            placeholder="3:45"
+                                            autoFocus
+                                          />
+                                        ) : (
+                                          <button
+                                            onClick={() => setEditingVideoDuration({
+                                              channelId: channel.id,
+                                              videoId: video.id,
+                                              value: formatDuration(video.duration || 300)
+                                            })}
+                                            className="hover:text-primary transition-colors"
+                                            title="Click to edit duration"
+                                          >
+                                            {formatDuration(video.duration || 300)}
+                                          </button>
+                                        )}
                                       </span>
                                     </div>
                                   </div>
