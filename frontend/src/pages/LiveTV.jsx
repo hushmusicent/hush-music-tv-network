@@ -13,6 +13,8 @@ import {
   List
 } from 'lucide-react';
 
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+
 // Calculate the current position in a channel's playlist based on real time
 const calculateLivePosition = (videos, baseTime = null) => {
   if (!videos || videos.length === 0) return { videoIndex: 0, seekTime: 0 };
