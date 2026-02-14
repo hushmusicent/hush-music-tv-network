@@ -27,7 +27,7 @@ import {
 } from '../components/ui/alert-dialog';
 
 const Dashboard = () => {
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   
   const [channels, setChannels] = useState([]);
@@ -35,12 +35,15 @@ const Dashboard = () => {
   const [deleteChannelId, setDeleteChannelId] = useState(null);
 
   useEffect(() => {
+    // Wait for auth to finish loading before checking
+    if (authLoading) return;
+    
     if (!isAuthenticated) {
       navigate('/login');
       return;
     }
     loadChannels();
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, authLoading, navigate]);
 
   const loadChannels = async () => {
     try {

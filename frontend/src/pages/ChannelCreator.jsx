@@ -30,7 +30,7 @@ import { toast } from 'sonner';
 const ChannelCreator = () => {
   const { channelId } = useParams();
   const navigate = useNavigate();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, loading: authLoading } = useAuth();
   
   const isEditing = !!channelId;
   
@@ -52,6 +52,8 @@ const ChannelCreator = () => {
   const [addingVideo, setAddingVideo] = useState(false);
 
   useEffect(() => {
+    if (authLoading) return;
+    
     if (!isAuthenticated) {
       navigate('/login');
       return;
@@ -60,7 +62,7 @@ const ChannelCreator = () => {
     if (isEditing) {
       loadChannel();
     }
-  }, [isAuthenticated, isEditing, channelId, navigate]);
+  }, [isAuthenticated, authLoading, isEditing, channelId, navigate]);
 
   const loadCategories = async () => {
     try {

@@ -9,19 +9,21 @@ import { Heart, Radio, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
 
 const Favorites = () => {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   
   const [favorites, setFavorites] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (authLoading) return;
+    
     if (!isAuthenticated) {
       navigate('/login');
       return;
     }
     loadFavorites();
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, authLoading, navigate]);
 
   const loadFavorites = async () => {
     try {
