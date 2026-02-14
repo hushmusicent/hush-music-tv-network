@@ -1,8 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Link } from 'react-router-dom';
 import { channelsAPI } from '../lib/api';
 import { Button } from '../components/ui/button';
-import { ScrollArea } from '../components/ui/scroll-area';
 import { 
   ChevronUp, 
   ChevronDown, 
@@ -214,7 +212,7 @@ const LiveTV = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
+      <div className="flex items-center justify-center" style={{ minHeight: 'calc(100vh - 100px)' }}>
         <div className="text-center">
           <Tv size={48} className="mx-auto mb-4 text-primary animate-pulse" />
           <p className="text-gray-400">Loading Live TV...</p>
@@ -225,81 +223,77 @@ const LiveTV = () => {
 
   const currentVideo = currentChannel?.videos?.[currentVideoIndex];
   
-  // Build YouTube URL with start time for live sync
+  // Build YouTube URL with start time for live sync - removed controls=0 to ensure video shows
   const embedUrl = currentVideo 
-    ? `https://www.youtube.com/embed/${currentVideo.youtube_id}?autoplay=1&mute=${isMuted ? 1 : 0}&start=${Math.floor(seekTime)}&rel=0&modestbranding=1&controls=0&enablejsapi=1`
+    ? `https://www.youtube.com/embed/${currentVideo.youtube_id}?autoplay=1&mute=${isMuted ? 1 : 0}&start=${Math.floor(seekTime)}&rel=0&modestbranding=1&playsinline=1`
     : '';
 
   return (
-    <div className="min-h-screen bg-black" data-testid="live-tv-page">
-      <div className="flex h-screen">
+    <div className="px-4 md:px-8 py-4" data-testid="live-tv-page">
+      <div className="flex gap-4" style={{ height: 'calc(100vh - 140px)' }}>
         {/* Channel List Sidebar */}
         {showChannelList && (
-          <div className="w-72 bg-[#0A0A0A] border-r border-white/10 flex flex-col">
+          <div className="w-64 bg-surface rounded-lg border border-white/10 flex flex-col overflow-hidden flex-shrink-0">
             <div className="p-4 border-b border-white/10">
-              <h2 className="font-heading text-xl tracking-wide flex items-center gap-2">
-                <Radio size={20} className="text-primary" />
+              <h2 className="font-heading text-lg tracking-wide flex items-center gap-2">
+                <Radio size={18} className="text-primary" />
                 CHANNELS
               </h2>
               <p className="text-xs text-gray-500 mt-1">
-                {channels.length} channels • Use ↑↓ to switch
+                {channels.length} channels • ↑↓ to switch
               </p>
             </div>
             
-            <ScrollArea className="flex-1">
-              <div className="p-2">
-                {channels.map((channel, index) => (
-                  <button
-                    key={channel.id}
-                    onClick={() => selectChannel(channel)}
-                    className={`w-full p-3 rounded-lg flex items-center gap-3 text-left transition-all ${
-                      currentChannel?.id === channel.id
-                        ? 'bg-primary/20 border border-primary/50'
-                        : 'hover:bg-white/5 border border-transparent'
-                    }`}
-                    data-testid={`channel-btn-${channel.id}`}
-                  >
-                    <div className="w-10 h-10 rounded bg-surface flex items-center justify-center text-lg font-bold text-primary">
-                      {index + 1}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h4 className="font-medium text-sm truncate">{channel.name}</h4>
-                      <p className="text-xs text-gray-500 truncate">{channel.category}</p>
-                    </div>
-                    {currentChannel?.id === channel.id && (
-                      <div className="flex items-center gap-1">
-                        <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-                        <span className="text-[10px] text-red-400 font-medium">LIVE</span>
-                      </div>
-                    )}
-                  </button>
-                ))}
-              </div>
-            </ScrollArea>
+            <div className="flex-1 overflow-y-auto">
+              {channels.map((channel, index) => (
+                <button
+                  key={channel.id}
+                  onClick={() => selectChannel(channel)}
+                  className={`w-full p-3 flex items-center gap-3 text-left transition-all border-l-2 ${
+                    currentChannel?.id === channel.id
+                      ? 'bg-primary/20 border-l-primary'
+                      : 'hover:bg-white/5 border-l-transparent'
+                  }`}
+                  data-testid={`channel-btn-${channel.id}`}
+                >
+                  <div className="w-8 h-8 rounded bg-black/50 flex items-center justify-center text-sm font-bold text-primary flex-shrink-0">
+                    {index + 1}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h4 className="font-medium text-sm truncate">{channel.name}</h4>
+                    <p className="text-xs text-gray-500 truncate">{channel.category}</p>
+                  </div>
+                  {currentChannel?.id === channel.id && (
+                    <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse flex-shrink-0" />
+                  )}
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
         {/* Main Content */}
-        <div className="flex-1 flex flex-col">
+        <div className="flex-1 flex flex-col gap-4 min-w-0">
           {/* Video Player */}
           <div 
             ref={playerRef}
-            className="relative flex-1 bg-black group"
+            className="relative bg-black rounded-lg overflow-hidden group"
+            style={{ aspectRatio: '16/9', maxHeight: 'calc(100vh - 300px)' }}
           >
             {currentVideo ? (
               <>
                 <iframe
-                  ref={iframeRef}
                   key={`${currentVideo.youtube_id}-${currentVideoIndex}-${Math.floor(seekTime)}`}
                   src={embedUrl}
                   title={currentVideo.title}
                   className="absolute inset-0 w-full h-full"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  style={{ border: 'none' }}
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                   allowFullScreen
                 />
 
                 {/* Channel Info Overlay */}
-                <div className="absolute top-0 left-0 right-0 p-4 bg-gradient-to-b from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="absolute top-0 left-0 right-0 p-4 bg-gradient-to-b from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity z-10">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4">
                       <div className="flex items-center gap-2 bg-red-600 px-3 py-1 rounded">
@@ -307,7 +301,7 @@ const LiveTV = () => {
                         <span className="text-xs font-bold">LIVE</span>
                       </div>
                       <div>
-                        <h3 className="font-heading text-2xl">{currentChannel?.name}</h3>
+                        <h3 className="font-heading text-xl">{currentChannel?.name}</h3>
                         <p className="text-sm text-gray-300">{currentVideo.title}</p>
                       </div>
                     </div>
@@ -320,28 +314,28 @@ const LiveTV = () => {
                 </div>
 
                 {/* Controls Overlay */}
-                <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity z-10">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2">
                       {/* Channel Up/Down */}
                       <div className="flex flex-col gap-1">
                         <Button
                           size="sm"
                           variant="ghost"
                           onClick={() => changeChannel('up')}
-                          className="h-8 px-3 bg-white/10 hover:bg-white/20"
+                          className="h-7 px-2 bg-white/10 hover:bg-white/20"
                           data-testid="channel-up-btn"
                         >
-                          <ChevronUp size={18} />
+                          <ChevronUp size={16} />
                         </Button>
                         <Button
                           size="sm"
                           variant="ghost"
                           onClick={() => changeChannel('down')}
-                          className="h-8 px-3 bg-white/10 hover:bg-white/20"
+                          className="h-7 px-2 bg-white/10 hover:bg-white/20"
                           data-testid="channel-down-btn"
                         >
-                          <ChevronDown size={18} />
+                          <ChevronDown size={16} />
                         </Button>
                       </div>
 
@@ -352,7 +346,7 @@ const LiveTV = () => {
                         className="bg-white/10 hover:bg-white/20"
                         data-testid="mute-btn"
                       >
-                        {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
+                        {isMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
                       </Button>
 
                       <Button
@@ -362,7 +356,7 @@ const LiveTV = () => {
                         className="bg-white/10 hover:bg-white/20"
                         data-testid="toggle-channels-btn"
                       >
-                        <List size={18} />
+                        <List size={16} />
                       </Button>
                     </div>
 
@@ -377,7 +371,7 @@ const LiveTV = () => {
                         className="bg-white/10 hover:bg-white/20"
                         data-testid="fullscreen-btn"
                       >
-                        <Maximize size={18} />
+                        <Maximize size={16} />
                       </Button>
                     </div>
                   </div>
@@ -391,47 +385,45 @@ const LiveTV = () => {
           </div>
 
           {/* Schedule Bar */}
-          <div className="bg-[#0A0A0A] border-t border-white/10">
-            <div className="p-4">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="font-heading text-lg tracking-wide flex items-center gap-2">
-                  <Clock size={18} className="text-primary" />
-                  SCHEDULE
-                </h3>
-                <span className="text-xs text-gray-500">
-                  {currentChannel?.name} • What's on
-                </span>
-              </div>
-              
-              <div className="flex gap-2 overflow-x-auto pb-2 hide-scrollbar">
-                {schedule.map((slot, index) => (
-                  <div
-                    key={index}
-                    className={`flex-shrink-0 p-3 rounded-lg border ${
-                      slot.isNowPlaying
-                        ? 'bg-primary/20 border-primary/50 min-w-[200px]'
-                        : 'bg-surface border-white/5 min-w-[180px]'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className={`text-xs font-mono ${slot.isNowPlaying ? 'text-primary' : 'text-gray-500'}`}>
-                        {formatTime(slot.startTime)}
+          <div className="bg-surface rounded-lg border border-white/10 p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-heading text-lg tracking-wide flex items-center gap-2">
+                <Clock size={18} className="text-primary" />
+                SCHEDULE
+              </h3>
+              <span className="text-xs text-gray-500">
+                {currentChannel?.name}
+              </span>
+            </div>
+            
+            <div className="flex gap-2 overflow-x-auto pb-2">
+              {schedule.map((slot, index) => (
+                <div
+                  key={index}
+                  className={`flex-shrink-0 p-3 rounded-lg border ${
+                    slot.isNowPlaying
+                      ? 'bg-primary/20 border-primary/50 min-w-[180px]'
+                      : 'bg-black/30 border-white/5 min-w-[160px]'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className={`text-xs font-mono ${slot.isNowPlaying ? 'text-primary' : 'text-gray-500'}`}>
+                      {formatTime(slot.startTime)}
+                    </span>
+                    {slot.isNowPlaying && (
+                      <span className="text-[10px] bg-red-600 px-1.5 py-0.5 rounded text-white font-bold">
+                        NOW
                       </span>
-                      {slot.isNowPlaying && (
-                        <span className="text-[10px] bg-red-600 px-1.5 py-0.5 rounded text-white font-bold">
-                          NOW
-                        </span>
-                      )}
-                    </div>
-                    <p className={`text-sm truncate ${slot.isNowPlaying ? 'text-white' : 'text-gray-400'}`}>
-                      {slot.video.title}
-                    </p>
-                    <p className="text-[10px] text-gray-600 mt-1">
-                      {Math.floor((slot.video.duration || 300) / 60)} min
-                    </p>
+                    )}
                   </div>
-                ))}
-              </div>
+                  <p className={`text-sm truncate ${slot.isNowPlaying ? 'text-white' : 'text-gray-400'}`}>
+                    {slot.video.title}
+                  </p>
+                  <p className="text-[10px] text-gray-600 mt-1">
+                    {Math.floor((slot.video.duration || 300) / 60)} min
+                  </p>
+                </div>
+              ))}
             </div>
           </div>
         </div>
