@@ -31,7 +31,8 @@ import {
   FileVideo,
   X,
   Check,
-  Shuffle
+  Shuffle,
+  Loader2
 } from 'lucide-react';
 import { toast } from 'sonner';
 
