@@ -252,7 +252,8 @@ const TVGuide = () => {
           ) : guideData.length > 0 ? (
             <div>
               {guideData.map((channel) => {
-                const currentVideo = getCurrentVideo(channel.videos);
+                // Generate the full schedule for this channel based on actual durations
+                const schedule = generateChannelSchedule(channel.videos, channel.random_play);
                 
                 return (
                   <div
@@ -273,52 +274,71 @@ const TVGuide = () => {
                             <h4 className="font-medium text-sm truncate group-hover:text-primary transition-colors">
                               {channel.channel_name}
                             </h4>
-                            {channel.is_24_7 && (
-                              <span className="text-[10px] text-live">24/7</span>
-                            )}
+                            <div className="flex items-center gap-1">
+                              {channel.is_24_7 && (
+                                <span className="text-[10px] text-live">24/7</span>
+                              )}
+                              {channel.random_play && (
+                                <Shuffle size={10} className="text-purple-400" />
+                              )}
+                            </div>
                           </div>
                         </div>
                       </Link>
                     </div>
 
-                    {/* Schedule */}
+                    {/* Schedule - positioned by actual time */}
                     <div className="flex-1 overflow-x-auto hide-scrollbar">
                       <div
-                        className="flex items-stretch min-h-[80px]"
-                        style={{ width: `${timeSlots.length * 120}px` }}
+                        className="relative min-h-[80px]"
+                        style={{ width: `${TOTAL_WIDTH}px` }}
                       >
-                        {channel.videos && channel.videos.length > 0 ? (
-                          channel.videos.map((video, vIndex) => {
-                            const duration = video.duration || 300;
-                            const width = Math.max((duration / 1800) * 120, 120); // Min 1 slot width
-                            const isNowPlaying = currentVideo?.id === video.id;
-                            
+                        {schedule.length > 0 ? (
+                          schedule.map((item, index) => {
+                            const leftPosition = item.startSeconds * PIXELS_PER_SECOND;
+                            const width = Math.max(item.durationSeconds * PIXELS_PER_SECOND, 60); // Min 60px
+                            const isNowPlaying = currentSeconds >= item.startSeconds && 
+                                                 currentSeconds < (item.startSeconds + item.durationSeconds);
+
+                            // Format time for display
+                            const startTimeStr = item.startTime.toLocaleTimeString([], { 
+                              hour: '2-digit', 
+                              minute: '2-digit' 
+                            });
+
                             return (
                               <div
-                                key={video.id}
-                                className={`flex-shrink-0 p-3 border-r border-white/5 ${
+                                key={`${item.video.id}-${index}`}
+                                className={`absolute top-0 bottom-0 p-2 border-r border-white/5 flex flex-col justify-center ${
                                   isNowPlaying
-                                    ? 'bg-primary/20 border-l-2 border-l-primary'
+                                    ? 'bg-primary/20 border-l-2 border-l-primary z-10'
                                     : 'hover:bg-white/5'
                                 }`}
-                                style={{ width: `${width}px` }}
+                                style={{ 
+                                  left: `${leftPosition}px`, 
+                                  width: `${width}px`,
+                                  minHeight: '80px'
+                                }}
                               >
                                 <Link
                                   to={`/watch/${channel.channel_id}`}
                                   className="block h-full"
                                 >
-                                  <div className="flex items-start gap-2">
+                                  <div className="flex items-start gap-1">
                                     {isNowPlaying && (
-                                      <div className="p-1 bg-primary rounded">
-                                        <Play size={10} fill="white" />
+                                      <div className="p-1 bg-primary rounded flex-shrink-0">
+                                        <Play size={8} fill="white" />
                                       </div>
                                     )}
                                     <div className="flex-1 min-w-0">
-                                      <p className="text-xs font-medium truncate">
-                                        {video.title}
+                                      <p className="text-[10px] text-gray-400 mb-0.5">
+                                        {startTimeStr}
                                       </p>
-                                      <p className="text-[10px] text-gray-500 mt-1">
-                                        {Math.floor(duration / 60)}min
+                                      <p className="text-xs font-medium truncate leading-tight">
+                                        {item.video.title}
+                                      </p>
+                                      <p className="text-[10px] text-gray-500">
+                                        {Math.floor((item.video.duration || 300) / 60)}:{((item.video.duration || 300) % 60).toString().padStart(2, '0')}
                                       </p>
                                     </div>
                                   </div>
@@ -327,7 +347,7 @@ const TVGuide = () => {
                             );
                           })
                         ) : (
-                          <div className="flex items-center justify-center w-full text-gray-500 text-sm">
+                          <div className="flex items-center justify-center w-full h-full text-gray-500 text-sm">
                             No schedule available
                           </div>
                         )}
