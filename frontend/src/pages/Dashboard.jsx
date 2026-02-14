@@ -5,6 +5,7 @@ import { channelsAPI } from '../lib/api';
 import ChannelCard from '../components/ChannelCard';
 import { Button } from '../components/ui/button';
 import { Skeleton } from '../components/ui/skeleton';
+import { Input } from '../components/ui/input';
 import { 
   Tv, 
   Plus, 
@@ -12,7 +13,10 @@ import {
   TrendingUp, 
   Heart,
   Settings,
-  User
+  User,
+  Code,
+  Copy,
+  Check
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -33,6 +37,7 @@ const Dashboard = () => {
   const [channels, setChannels] = useState([]);
   const [loading, setLoading] = useState(true);
   const [deleteChannelId, setDeleteChannelId] = useState(null);
+  const [copiedNetworkEmbed, setCopiedNetworkEmbed] = useState(false);
 
   useEffect(() => {
     // Wait for auth to finish loading before checking
@@ -76,6 +81,19 @@ const Dashboard = () => {
 
   const totalViewers = channels.reduce((sum, c) => sum + (c.viewers_count || 0), 0);
   const totalFavorites = channels.reduce((sum, c) => sum + (c.favorites_count || 0), 0);
+
+  const networkEmbedCode = `<iframe src="${window.location.origin}/embed" width="100%" height="600" frameborder="0" allowfullscreen allow="autoplay; encrypted-media"></iframe>`;
+
+  const copyNetworkEmbed = async () => {
+    try {
+      await navigator.clipboard.writeText(networkEmbedCode);
+      setCopiedNetworkEmbed(true);
+      toast.success('Network embed code copied!');
+      setTimeout(() => setCopiedNetworkEmbed(false), 2000);
+    } catch (error) {
+      toast.error('Failed to copy embed code');
+    }
+  };
 
   return (
     <div className="min-h-screen px-6 md:px-12 lg:px-16 py-8" data-testid="dashboard-page">
@@ -225,6 +243,41 @@ const Dashboard = () => {
           </div>
         </Link>
       </div>
+
+      {/* Network Embed Code */}
+      {user?.is_admin && (
+        <div className="mt-8 glass rounded-lg p-6">
+          <h3 className="font-semibold text-lg mb-4 flex items-center gap-2">
+            <Code size={20} className="text-primary" />
+            Network Embed Code
+          </h3>
+          <p className="text-sm text-gray-400 mb-4">
+            Embed your entire TV network on any website. Shows all channels with a sidebar selector.
+          </p>
+          <div className="flex gap-2 mb-4">
+            <Input
+              value={networkEmbedCode}
+              readOnly
+              className="flex-1 bg-black/50 border-white/10 font-mono text-xs"
+            />
+            <Button
+              onClick={copyNetworkEmbed}
+              className="bg-primary hover:bg-primary-hover"
+            >
+              {copiedNetworkEmbed ? <Check size={18} /> : <Copy size={18} />}
+            </Button>
+          </div>
+          <div className="text-xs text-gray-500">
+            <p className="mb-1">Options (add to URL):</p>
+            <ul className="list-disc list-inside space-y-0.5">
+              <li><code className="text-primary">?category=Music</code> - Filter by category</li>
+              <li><code className="text-primary">?sidebar=0</code> - Hide channel sidebar</li>
+              <li><code className="text-primary">?muted=1</code> - Start muted</li>
+              <li><code className="text-primary">?autoplay=0</code> - Disable autoplay</li>
+            </ul>
+          </div>
+        </div>
+      )}
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={!!deleteChannelId} onOpenChange={() => setDeleteChannelId(null)}>
