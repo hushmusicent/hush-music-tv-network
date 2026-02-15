@@ -435,10 +435,7 @@ async def upload_video(
     file: UploadFile = File(...),
     user: dict = Depends(require_user)
 ):
-    """Upload a video file (admin only) - MP4 only, max 2GB"""
-    if not user.get("is_admin", False):
-        raise HTTPException(status_code=403, detail="Admin access required")
-    
+    """Upload a video file - MP4 only, max 2GB"""
     # Validate file type - MP4 only
     if file.content_type != "video/mp4":
         raise HTTPException(
