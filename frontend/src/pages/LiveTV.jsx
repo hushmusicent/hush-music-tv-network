@@ -435,10 +435,10 @@ const LiveTV = () => {
                     data-testid="live-uploaded-video"
                   />
                 ) : currentVideo.youtube_id ? (
-                  /* YouTube Embed with live sync */
+                  /* YouTube Embed with live sync - key only changes on video change, not during playback */
                   <iframe
                     ref={iframeRef}
-                    key={`${currentVideo.youtube_id}-${currentVideoIndex}-${Math.floor(seekTime / 10) * 10}`}
+                    key={`${currentVideo.youtube_id}-${currentVideoIndex}`}
                     src={embedUrl}
                     title={currentVideo.title}
                     className="absolute inset-0 w-full h-full"
