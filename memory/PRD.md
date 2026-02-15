@@ -156,8 +156,10 @@ Build a TV network app like Strimm for Hush Music TV Network with:
 - Test report: /app/test_reports/iteration_11.json (latest)
 
 ## Recent Changes (Feb 15, 2026)
-- Fixed TV Guide schedule to use actual video durations instead of hardcoded 30-minute slots
-- Added `random_play` field to `/api/tv-guide` endpoint for consistent shuffle display
-- **Removed TV Guide** from navigation and app routes (user request)
-- **Fixed video blinking issue** - removed aggressive re-syncing that caused YouTube iframe to reload every 10 seconds
-- Videos now play smoothly while still maintaining live sync (all viewers see same video at same time)
+- **Removed time-based live sync** - Videos now play from start to finish instead of being cut off at 5 minutes
+- **Fixed video blinking** - Removed aggressive re-syncing that caused YouTube iframe to reload
+- **YouTube IFrame API integration** - Properly detects when videos end and auto-advances to next video
+- **Auto-skip unavailable videos** - If a YouTube video is unavailable, automatically skips to next
+- **Removed TV Guide** from navigation and app routes
+- **New "UP NEXT" bar** - Shows upcoming videos in playlist with skip button
+- Videos play their full duration and loop through the playlist
