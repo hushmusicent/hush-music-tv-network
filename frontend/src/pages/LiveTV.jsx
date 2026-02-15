@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { channelsAPI } from '../lib/api';
 import { Button } from '../components/ui/button';
-import { Input } from '../components/ui/input';
 import { 
   ChevronUp, 
   ChevronDown, 
@@ -17,11 +16,9 @@ import {
   Settings,
   Edit,
   Plus,
-  Trash2,
   X,
-  Save,
-  ExternalLink,
-  Shuffle
+  Shuffle,
+  SkipForward
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -49,93 +46,10 @@ const getDailySeed = () => {
   return now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
 };
 
-// Calculate the current position in a channel's playlist based on real time
-// This ensures all viewers see the same video at the same time
-const calculateLivePosition = (videos, randomPlay = false, baseTime = null) => {
-  if (!videos || videos.length === 0) return { videoIndex: 0, seekTime: 0, shuffledVideos: [] };
-  
-  // If random play is enabled, shuffle videos consistently for all viewers
-  const playlistVideos = randomPlay ? shuffleWithSeed(videos, getDailySeed()) : videos;
-  
-  const now = baseTime || new Date();
-  const startOfDay = new Date(now);
-  startOfDay.setHours(0, 0, 0, 0);
-  
-  // Seconds since midnight - this is the "global clock" all viewers share
-  const secondsSinceMidnight = Math.floor((now - startOfDay) / 1000);
-  
-  // Calculate total playlist duration
-  let totalDuration = 0;
-  playlistVideos.forEach(v => {
-    totalDuration += v.duration || 300; // Default 5 min if no duration
-  });
-  
-  if (totalDuration === 0) return { videoIndex: 0, seekTime: 0, shuffledVideos: playlistVideos };
-  
-  // Find position in the looped playlist
-  const positionInPlaylist = secondsSinceMidnight % totalDuration;
-  
-  // Find which video and at what time
-  let accumulated = 0;
-  for (let i = 0; i < playlistVideos.length; i++) {
-    const videoDuration = playlistVideos[i].duration || 300;
-    if (accumulated + videoDuration > positionInPlaylist) {
-      return {
-        videoIndex: i,
-        seekTime: positionInPlaylist - accumulated,
-        shuffledVideos: playlistVideos
-      };
-    }
-    accumulated += videoDuration;
-  }
-  
-  return { videoIndex: 0, seekTime: 0, shuffledVideos: playlistVideos };
-};
-
-// Generate schedule for a channel
-const generateSchedule = (videos, randomPlay = false, hoursAhead = 4) => {
+// Get playlist videos (shuffled if random play enabled)
+const getPlaylistVideos = (videos, randomPlay = false) => {
   if (!videos || videos.length === 0) return [];
-  
-  const schedule = [];
-  const now = new Date();
-  const { videoIndex, seekTime, shuffledVideos } = calculateLivePosition(videos, randomPlay);
-  
-  // Use shuffled videos if random play is enabled
-  const playlistVideos = shuffledVideos.length > 0 ? shuffledVideos : videos;
-  
-  let currentTime = new Date(now);
-  let currentVideoIndex = videoIndex;
-  
-  // Subtract the seek time to get the start of current video
-  currentTime.setSeconds(currentTime.getSeconds() - seekTime);
-  
-  const endTime = new Date(now);
-  endTime.setHours(endTime.getHours() + hoursAhead);
-  
-  while (currentTime < endTime && schedule.length < 20) {
-    const video = playlistVideos[currentVideoIndex % playlistVideos.length];
-    const duration = video.duration || 300;
-    
-    const startTime = new Date(currentTime);
-    const endTimeSlot = new Date(currentTime);
-    endTimeSlot.setSeconds(endTimeSlot.getSeconds() + duration);
-    
-    schedule.push({
-      video,
-      startTime,
-      endTime: endTimeSlot,
-      isNowPlaying: schedule.length === 0
-    });
-    
-    currentTime = endTimeSlot;
-    currentVideoIndex++;
-  }
-  
-  return schedule;
-};
-
-const formatTime = (date) => {
-  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return randomPlay ? shuffleWithSeed(videos, getDailySeed()) : videos;
 };
 
 const LiveTV = () => {
@@ -146,9 +60,7 @@ const LiveTV = () => {
   const [channels, setChannels] = useState([]);
   const [currentChannel, setCurrentChannel] = useState(null);
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
-  const [seekTime, setSeekTime] = useState(0);
-  const [shuffledVideos, setShuffledVideos] = useState([]);
-  const [schedule, setSchedule] = useState([]);
+  const [playlistVideos, setPlaylistVideos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isMuted, setIsMuted] = useState(false);
   const [showChannelList, setShowChannelList] = useState(true);
@@ -156,7 +68,17 @@ const LiveTV = () => {
   const [currentTime, setCurrentTime] = useState(new Date());
   const playerRef = useRef(null);
   const videoRef = useRef(null);
-  const iframeRef = useRef(null);
+  const youtubePlayerRef = useRef(null);
+
+  // Load YouTube IFrame API
+  useEffect(() => {
+    if (!window.YT) {
+      const tag = document.createElement('script');
+      tag.src = 'https://www.youtube.com/iframe_api';
+      const firstScriptTag = document.getElementsByTagName('script')[0];
+      firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+    }
+  }, []);
 
   useEffect(() => {
     loadChannels();
