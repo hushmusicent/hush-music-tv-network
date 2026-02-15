@@ -15,18 +15,21 @@ import {
 
 const Analytics = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
+    // Wait for auth to finish loading before checking admin status
+    if (authLoading) return;
+    
     if (!user?.is_admin) {
       navigate('/');
       return;
     }
     loadStats();
-  }, [user, navigate]);
+  }, [user, authLoading, navigate]);
 
   const loadStats = async () => {
     try {
@@ -41,7 +44,8 @@ const Analytics = () => {
     }
   };
 
-  if (loading) {
+  // Show loading while auth is being checked
+  if (authLoading || loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
