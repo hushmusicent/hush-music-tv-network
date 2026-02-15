@@ -211,32 +211,21 @@ const LiveTV = () => {
   const currentVideo = activeVideos?.[currentVideoIndex];
   const isUploadedVideo = currentVideo && (currentVideo.video_url || !currentVideo.youtube_id);
   
-  // Handle uploaded video playback and sync
+  // Handle uploaded video playback - only sync on initial load or video change
   useEffect(() => {
     if (isUploadedVideo && videoRef.current) {
       const video = videoRef.current;
       
-      // Sync video to calculated position
-      if (Math.abs(video.currentTime - seekTime) > 2) {
-        video.currentTime = seekTime;
-      }
-      
+      // Only sync on video change (when currentVideoIndex changes)
+      video.currentTime = seekTime;
       video.muted = isMuted;
       video.play().catch(() => {});
     }
-  }, [currentVideoIndex, seekTime, isUploadedVideo, isMuted]);
+  }, [currentVideoIndex, isUploadedVideo, isMuted]);
 
-  // Handle uploaded video time updates for better sync
+  // Let uploaded videos play naturally without constant re-syncing
   const handleTimeUpdate = () => {
-    if (!isUploadedVideo || !videoRef.current || !currentChannel?.videos) return;
-    
-    const video = videoRef.current;
-    const { seekTime: expectedTime } = calculateLivePosition(currentChannel.videos, currentChannel.random_play);
-    
-    // If we're more than 5 seconds off, re-sync
-    if (Math.abs(video.currentTime - expectedTime) > 5) {
-      video.currentTime = expectedTime;
-    }
+    // Removed aggressive re-syncing to prevent stuttering
   };
 
   const handleUploadedVideoEnd = () => {
