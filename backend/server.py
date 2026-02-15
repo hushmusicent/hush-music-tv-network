@@ -785,6 +785,7 @@ async def get_tv_guide():
                 "channel_name": channel["name"],
                 "thumbnail": channel.get("thumbnail"),
                 "is_24_7": channel.get("is_24_7", True),
+                "random_play": channel.get("random_play", False),
                 "videos": channel.get("videos", []),
                 "schedule": channel.get("schedule", [])
             })
