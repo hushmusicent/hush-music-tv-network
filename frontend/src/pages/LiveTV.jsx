@@ -517,23 +517,24 @@ const LiveTV = () => {
                   
                   {/* Videos in Channel */}
                   <h3 className="text-sm font-medium text-gray-400 mt-4">
-                    Videos ({currentChannel.videos?.length || 0})
+                    Videos ({playlistVideos.length || 0})
+                    {currentChannel.random_play && <Shuffle size={12} className="inline ml-2 text-purple-400" />}
                   </h3>
                   <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                    {currentChannel.videos?.map((video, index) => (
+                    {playlistVideos.map((video, index) => (
                       <div
                         key={video.id}
-                        className={`bg-black/30 rounded-lg p-2 flex items-center gap-2 ${
+                        className={`bg-black/30 rounded-lg p-2 flex items-center gap-2 cursor-pointer hover:bg-white/5 ${
                           index === currentVideoIndex ? 'ring-1 ring-primary' : ''
                         }`}
+                        onClick={() => setCurrentVideoIndex(index)}
                       >
                         <span className="w-5 text-center text-xs text-gray-500">{index + 1}</span>
                         <div className="flex-1 min-w-0">
                           <p className="text-xs font-medium truncate">{video.title}</p>
                           <p className="text-[10px] text-gray-500">
-                            {Math.floor((video.duration || 300) / 60)}min
                             {index === currentVideoIndex && (
-                              <span className="text-red-400 ml-2">• Playing</span>
+                              <span className="text-red-400">• Playing</span>
                             )}
                           </p>
                         </div>
