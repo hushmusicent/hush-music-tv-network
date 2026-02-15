@@ -143,6 +143,19 @@ const LiveTV = () => {
     return () => clearInterval(timeInterval);
   }, []);
 
+  // Periodic view tracking for "current viewers" count (every 2 minutes)
+  useEffect(() => {
+    if (!currentChannel) return;
+    
+    const trackInterval = setInterval(() => {
+      try {
+        analyticsAPI.recordView(currentChannel.id, getViewerId());
+      } catch (e) {}
+    }, 120000); // Every 2 minutes
+    
+    return () => clearInterval(trackInterval);
+  }, [currentChannel]);
+
   // Get current video from playlist
   const currentVideo = playlistVideos[currentVideoIndex];
   const isUploadedVideo = currentVideo && (currentVideo.video_url || !currentVideo.youtube_id);
