@@ -91,77 +91,87 @@ const LiveTV = () => {
     return () => clearInterval(timeInterval);
   }, []);
 
-  // Recalculate position periodically to stay in sync
-  // Only update when video changes - don't force re-sync during playback to avoid blinking
-  useEffect(() => {
-    if (!currentChannel?.videos?.length) return;
-    
-    const syncInterval = setInterval(() => {
-      const { videoIndex, shuffledVideos: newShuffled } = calculateLivePosition(
-        currentChannel.videos, 
-        currentChannel.random_play
-      );
-      
-      // Update shuffled videos if changed
-      if (JSON.stringify(newShuffled.map(v => v.id)) !== JSON.stringify(shuffledVideos.map(v => v.id))) {
-        setShuffledVideos(newShuffled);
-      }
-      
-      // Only update when video changes - not during playback
-      if (videoIndex !== currentVideoIndex) {
-        const { seekTime: newSeekTime } = calculateLivePosition(
-          currentChannel.videos, 
-          currentChannel.random_play
-        );
-        setCurrentVideoIndex(videoIndex);
-        setSeekTime(newSeekTime);
-      }
-    }, 5000); // Check every 5 seconds
-    
-    return () => clearInterval(syncInterval);
-  }, [currentChannel, currentVideoIndex, shuffledVideos]);
-
-  // Update schedule when channel changes or time updates
-  useEffect(() => {
-    if (currentChannel?.videos) {
-      setSchedule(generateSchedule(currentChannel.videos, currentChannel.random_play));
-    }
-  }, [currentChannel, currentTime]);
-
-  // Determine if current video is uploaded - use shuffled videos if random play
-  const activeVideos = shuffledVideos.length > 0 ? shuffledVideos : currentChannel?.videos;
-  const currentVideo = activeVideos?.[currentVideoIndex];
+  // Get current video from playlist
+  const currentVideo = playlistVideos[currentVideoIndex];
   const isUploadedVideo = currentVideo && (currentVideo.video_url || !currentVideo.youtube_id);
-  
-  // Handle uploaded video playback - only sync on initial load or video change
+
+  // Play next video in playlist
+  const playNextVideo = useCallback(() => {
+    if (playlistVideos.length === 0) return;
+    const nextIndex = (currentVideoIndex + 1) % playlistVideos.length;
+    setCurrentVideoIndex(nextIndex);
+  }, [playlistVideos, currentVideoIndex]);
+
+  // Handle uploaded video ending
+  const handleUploadedVideoEnd = () => {
+    playNextVideo();
+  };
+
+  // Initialize YouTube player when video changes
+  useEffect(() => {
+    if (!currentVideo?.youtube_id || isUploadedVideo) return;
+    
+    // Clean up previous player
+    if (youtubePlayerRef.current) {
+      try {
+        youtubePlayerRef.current.destroy();
+      } catch (e) {}
+      youtubePlayerRef.current = null;
+    }
+
+    // Wait for YT API to load
+    const initPlayer = () => {
+      if (!window.YT || !window.YT.Player) {
+        setTimeout(initPlayer, 100);
+        return;
+      }
+
+      youtubePlayerRef.current = new window.YT.Player('youtube-player', {
+        videoId: currentVideo.youtube_id,
+        playerVars: {
+          autoplay: 1,
+          mute: isMuted ? 1 : 0,
+          rel: 0,
+          modestbranding: 1,
+          playsinline: 1,
+        },
+        events: {
+          onStateChange: (event) => {
+            // YT.PlayerState.ENDED = 0
+            if (event.data === 0) {
+              playNextVideo();
+            }
+          },
+          onError: () => {
+            // Skip to next video on error
+            toast.error('Video unavailable, skipping...');
+            setTimeout(playNextVideo, 1000);
+          }
+        }
+      });
+    };
+
+    initPlayer();
+
+    return () => {
+      if (youtubePlayerRef.current) {
+        try {
+          youtubePlayerRef.current.destroy();
+        } catch (e) {}
+        youtubePlayerRef.current = null;
+      }
+    };
+  }, [currentVideo?.youtube_id, isUploadedVideo, isMuted, playNextVideo]);
+
+  // Handle uploaded video playback
   useEffect(() => {
     if (isUploadedVideo && videoRef.current) {
       const video = videoRef.current;
-      
-      // Only sync on video change (when currentVideoIndex changes)
-      video.currentTime = seekTime;
+      video.currentTime = 0; // Start from beginning
       video.muted = isMuted;
       video.play().catch(() => {});
     }
   }, [currentVideoIndex, isUploadedVideo, isMuted]);
-
-  // Let uploaded videos play naturally without constant re-syncing
-  const handleTimeUpdate = () => {
-    // Removed aggressive re-syncing to prevent stuttering
-  };
-
-  const handleUploadedVideoEnd = () => {
-    // Recalculate live position when video ends
-    if (currentChannel?.videos?.length) {
-      const { videoIndex, seekTime: newSeekTime, shuffledVideos: newShuffled } = calculateLivePosition(
-        currentChannel.videos,
-        currentChannel.random_play
-      );
-      setCurrentVideoIndex(videoIndex);
-      setSeekTime(newSeekTime);
-      setShuffledVideos(newShuffled);
-    }
-  };
 
   const loadChannels = async () => {
     try {
