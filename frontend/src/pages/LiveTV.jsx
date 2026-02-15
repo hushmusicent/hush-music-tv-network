@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { channelsAPI } from '../lib/api';
+import { channelsAPI, analyticsAPI } from '../lib/api';
 import { Button } from '../components/ui/button';
 import { 
   ChevronUp, 
@@ -22,6 +22,16 @@ import {
 import { toast } from 'sonner';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+
+// Get or create anonymous viewer ID
+const getViewerId = () => {
+  let viewerId = localStorage.getItem('viewer_id');
+  if (!viewerId) {
+    viewerId = 'v_' + Math.random().toString(36).substring(2, 15);
+    localStorage.setItem('viewer_id', viewerId);
+  }
+  return viewerId;
+};
 
 // Seeded random function for consistent shuffling across all viewers
 const seededRandom = (seed) => {
