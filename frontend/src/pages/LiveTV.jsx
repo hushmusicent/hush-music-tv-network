@@ -143,6 +143,7 @@ const LiveTV = () => {
     if (playlistVideos.length === 0) return;
     const nextIndex = (currentVideoIndex + 1) % playlistVideos.length;
     setCurrentVideoIndex(nextIndex);
+    setSeekTime(0); // Start next video from beginning
   }, [playlistVideos, currentVideoIndex]);
 
   // Handle uploaded video ending
@@ -150,7 +151,7 @@ const LiveTV = () => {
     playNextVideo();
   };
 
-  // Initialize YouTube player when video changes
+  // Initialize YouTube player when video changes - starts at live position
   useEffect(() => {
     if (!currentVideo?.youtube_id || isUploadedVideo) return;
     
@@ -174,6 +175,7 @@ const LiveTV = () => {
         playerVars: {
           autoplay: 1,
           mute: isMuted ? 1 : 0,
+          start: seekTime, // Start at live position
           rel: 0,
           modestbranding: 1,
           playsinline: 1,
@@ -204,17 +206,17 @@ const LiveTV = () => {
         youtubePlayerRef.current = null;
       }
     };
-  }, [currentVideo?.youtube_id, isUploadedVideo, isMuted, playNextVideo]);
+  }, [currentVideo?.youtube_id, isUploadedVideo, isMuted, seekTime, playNextVideo]);
 
-  // Handle uploaded video playback
+  // Handle uploaded video playback - starts at live position
   useEffect(() => {
     if (isUploadedVideo && videoRef.current) {
       const video = videoRef.current;
-      video.currentTime = 0; // Start from beginning
+      video.currentTime = seekTime; // Start at live position
       video.muted = isMuted;
       video.play().catch(() => {});
     }
-  }, [currentVideoIndex, isUploadedVideo, isMuted]);
+  }, [currentVideoIndex, isUploadedVideo, isMuted, seekTime]);
 
   const loadChannels = async () => {
     try {
