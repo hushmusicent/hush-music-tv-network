@@ -147,8 +147,13 @@ Build a TV network app like Strimm for Hush Music TV Network with:
 ## Known Issues
 - Some channel thumbnails may show as broken if using invalid URLs
 - Duplicate channels issue has been fixed (cleanup script applied)
-- User requested to delete first 7 channels but only 1 channel existed in database (no action needed)
-- TV Guide may appear dense with many short-duration videos (cosmetic only)
+
+## Channel Deletion
+The admin dashboard includes a "Delete Channel" button for each channel. Users can delete unwanted channels via:
+1. Go to Dashboard
+2. Find the channel
+3. Click the trash icon
+4. Confirm deletion in the dialog
 
 ## Testing
 - Backend: 39/39 tests passed (pytest in /app/backend/tests/)
