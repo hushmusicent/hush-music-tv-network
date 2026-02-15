@@ -156,9 +156,19 @@ Build a TV network app like Strimm for Hush Music TV Network with:
 - Test report: /app/test_reports/iteration_11.json (latest)
 
 ## Recent Changes (Feb 15, 2026)
+- **Analytics page auth fix** - Fixed redirect bug where analytics page was redirecting logged-in admins to home page
+  - Issue: Analytics.jsx wasn't using `isAuthenticated` from AuthContext, only checking `user?.is_admin`
+  - Fix: Added `isAuthenticated` check before admin permission check to prevent race condition
 - **Live sync restored** - Videos play at the current "live" position based on time of day
 - When switching channels, videos don't restart - they start at the live position
 - **Auto-skip unavailable videos** - Uses YouTube IFrame API with timeout detection to skip restricted videos
 - **No blinking** - Removed aggressive re-syncing, videos play smoothly
-- **TV Guide removed** from navigation
+- **TV Guide removed** completely from navigation and app
+- **Skip video feature removed** - Users can no longer skip to next video
 - Uses 4-minute default duration for videos without duration set (for sync calculation)
+
+## Analytics Feature (Implemented)
+- **Backend**: `/api/analytics` and `/api/track-view` endpoints
+- **Frontend**: `Analytics.jsx` page accessible from Dashboard
+- Tracks: Current viewers (5 min window), 24h unique viewers, total views
+- Channel performance with progress bars
