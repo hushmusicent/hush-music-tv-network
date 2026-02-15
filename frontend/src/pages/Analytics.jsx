@@ -15,21 +15,29 @@ import {
 
 const Analytics = () => {
   const navigate = useNavigate();
-  const { user, loading: authLoading } = useAuth();
+  const { user, isAuthenticated, loading: authLoading } = useAuth();
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
-    // Wait for auth to finish loading before checking admin status
+    // Wait for auth to finish loading before checking permissions
     if (authLoading) return;
     
+    // First check if user is authenticated at all
+    if (!isAuthenticated) {
+      navigate('/login');
+      return;
+    }
+    
+    // Then check if user is admin
     if (!user?.is_admin) {
       navigate('/');
       return;
     }
+    
     loadStats();
-  }, [user, authLoading, navigate]);
+  }, [isAuthenticated, user, authLoading, navigate]);
 
   const loadStats = async () => {
     try {
