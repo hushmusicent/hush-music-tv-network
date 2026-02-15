@@ -163,6 +163,8 @@ const LiveTV = () => {
       youtubePlayerRef.current = null;
     }
 
+    let errorTimeout = null;
+
     // Wait for YT API to load
     const initPlayer = () => {
       if (!window.YT || !window.YT.Player) {
@@ -181,16 +183,38 @@ const LiveTV = () => {
           playsinline: 1,
         },
         events: {
+          onReady: (event) => {
+            // Set a timeout - if video doesn't start playing within 5 seconds, skip it
+            errorTimeout = setTimeout(() => {
+              const state = event.target.getPlayerState();
+              // -1 = unstarted, 5 = video cued (not playing)
+              if (state === -1 || state === 5) {
+                console.log('Video not playing, skipping...');
+                playNextVideo();
+              }
+            }, 5000);
+          },
           onStateChange: (event) => {
+            // Clear error timeout if video starts playing
+            if (event.data === 1) { // YT.PlayerState.PLAYING
+              if (errorTimeout) {
+                clearTimeout(errorTimeout);
+                errorTimeout = null;
+              }
+            }
             // YT.PlayerState.ENDED = 0
             if (event.data === 0) {
               playNextVideo();
             }
           },
-          onError: () => {
+          onError: (event) => {
             // Skip to next video on error
-            toast.error('Video unavailable, skipping...');
-            setTimeout(playNextVideo, 1000);
+            if (errorTimeout) {
+              clearTimeout(errorTimeout);
+              errorTimeout = null;
+            }
+            console.log('YouTube error:', event.data);
+            playNextVideo();
           }
         }
       });
@@ -199,6 +223,9 @@ const LiveTV = () => {
     initPlayer();
 
     return () => {
+      if (errorTimeout) {
+        clearTimeout(errorTimeout);
+      }
       if (youtubePlayerRef.current) {
         try {
           youtubePlayerRef.current.destroy();
