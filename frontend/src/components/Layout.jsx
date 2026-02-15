@@ -30,7 +30,6 @@ const navItems = [
   { path: '/', icon: Home, label: 'Home' },
   { path: '/live', icon: Radio, label: 'Live TV' },
   { path: '/browse', icon: Grid3X3, label: 'Browse' },
-  { path: '/guide', icon: Calendar, label: 'TV Guide' },
 ];
 
 const Layout = ({ children }) => {
