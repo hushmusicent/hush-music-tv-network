@@ -46,7 +46,8 @@ import {
   ExternalLink,
   GripVertical,
   Image as ImageIcon,
-  Loader2
+  Loader2,
+  BarChart3
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
