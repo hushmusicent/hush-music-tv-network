@@ -148,8 +148,14 @@ Build a TV network app like Strimm for Hush Music TV Network with:
 - Some channel thumbnails may show as broken if using invalid URLs
 - Duplicate channels issue has been fixed (cleanup script applied)
 - User requested to delete first 7 channels but only 1 channel existed in database (no action needed)
+- TV Guide may appear dense with many short-duration videos (cosmetic only)
 
 ## Testing
 - Backend: 39/39 tests passed (pytest in /app/backend/tests/)
 - Frontend: All features tested and working
-- Test report: /app/test_reports/iteration_10.json
+- Test report: /app/test_reports/iteration_11.json (latest)
+
+## Recent Changes (Feb 15, 2026)
+- Fixed TV Guide schedule to use actual video durations instead of hardcoded 30-minute slots
+- Added `random_play` field to `/api/tv-guide` endpoint for consistent shuffle display
+- TV Guide now syncs perfectly with Live TV page schedules
