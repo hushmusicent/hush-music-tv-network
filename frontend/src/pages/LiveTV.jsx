@@ -436,34 +436,41 @@ const LiveTV = () => {
             )}
           </div>
 
-          {/* Schedule Bar */}
+          {/* Playlist Bar */}
           <div className="bg-surface rounded-lg border border-white/10 p-4">
             <div className="flex items-center gap-2 mb-3">
               <Clock size={16} className="text-primary" />
-              <h3 className="font-heading text-sm tracking-wide">SCHEDULE</h3>
+              <h3 className="font-heading text-sm tracking-wide">UP NEXT</h3>
               <span className="text-xs text-gray-500 ml-auto">{currentChannel?.name}</span>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={playNextVideo}
+                className="ml-2 text-xs"
+                title="Skip to next video"
+              >
+                <SkipForward size={14} />
+              </Button>
             </div>
             
             <div className="flex gap-2 overflow-x-auto pb-2 hide-scrollbar">
-              {schedule.map((item, index) => (
+              {playlistVideos.slice(currentVideoIndex, currentVideoIndex + 10).map((video, index) => (
                 <div
-                  key={index}
-                  className={`flex-shrink-0 p-3 rounded-lg min-w-[150px] transition-all ${
-                    item.isNowPlaying
+                  key={video.id}
+                  className={`flex-shrink-0 p-3 rounded-lg min-w-[150px] transition-all cursor-pointer ${
+                    index === 0
                       ? 'bg-primary/20 border border-primary/50'
-                      : 'bg-black/30 border border-white/5'
+                      : 'bg-black/30 border border-white/5 hover:bg-white/5'
                   }`}
+                  onClick={() => setCurrentVideoIndex(currentVideoIndex + index)}
                 >
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="text-xs font-medium">{formatTime(item.startTime)}</span>
-                    {item.isNowPlaying && (
+                    <span className="text-xs font-medium">#{currentVideoIndex + index + 1}</span>
+                    {index === 0 && (
                       <span className="text-[10px] bg-red-600 px-1.5 py-0.5 rounded font-bold">NOW</span>
                     )}
                   </div>
-                  <p className="text-sm truncate">{item.video.title}</p>
-                  <p className="text-xs text-gray-500">
-                    {Math.floor((item.video.duration || 300) / 60)}:{((item.video.duration || 300) % 60).toString().padStart(2, '0')}
-                  </p>
+                  <p className="text-sm truncate">{video.title}</p>
                 </div>
               ))}
             </div>
