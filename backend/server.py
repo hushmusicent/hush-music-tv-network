@@ -955,6 +955,92 @@ async def root():
 async def health():
     return {"status": "healthy"}
 
+# ===================== ANALYTICS =====================
+
+class ViewEvent(BaseModel):
+    channel_id: str
+    viewer_id: str  # Anonymous viewer ID (from frontend)
+
+@api_router.post("/analytics/view")
+async def record_view(event: ViewEvent):
+    """Record a channel view event"""
+    now = datetime.now(timezone.utc)
+    view_doc = {
+        "id": str(uuid.uuid4()),
+        "channel_id": event.channel_id,
+        "viewer_id": event.viewer_id,
+        "timestamp": now.isoformat()
+    }
+    await db.views.insert_one(view_doc)
+    return {"status": "recorded"}
+
+@api_router.get("/analytics/stats")
+async def get_analytics(user: dict = Depends(require_user)):
+    """Get analytics stats (admin only)"""
+    if not user.get("is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    now = datetime.now(timezone.utc)
+    last_24h = now - timedelta(hours=24)
+    last_5min = now - timedelta(minutes=5)
+    
+    # Get all views
+    all_views = await db.views.find({}, {"_id": 0}).to_list(10000)
+    
+    # Filter by time
+    views_24h = []
+    views_5min = []
+    
+    for view in all_views:
+        try:
+            view_time = datetime.fromisoformat(view["timestamp"].replace("Z", "+00:00"))
+            if view_time.tzinfo is None:
+                view_time = view_time.replace(tzinfo=timezone.utc)
+            
+            if view_time >= last_24h:
+                views_24h.append(view)
+            if view_time >= last_5min:
+                views_5min.append(view)
+        except:
+            continue
+    
+    # Count unique viewers
+    unique_24h = len(set(v["viewer_id"] for v in views_24h))
+    unique_5min = len(set(v["viewer_id"] for v in views_5min))
+    
+    # Views per channel
+    channel_views = {}
+    for view in views_24h:
+        cid = view["channel_id"]
+        if cid not in channel_views:
+            channel_views[cid] = {"total": 0, "unique_viewers": set()}
+        channel_views[cid]["total"] += 1
+        channel_views[cid]["unique_viewers"].add(view["viewer_id"])
+    
+    # Get channel names
+    channels = await db.channels.find({}, {"_id": 0, "id": 1, "name": 1}).to_list(100)
+    channel_names = {c["id"]: c["name"] for c in channels}
+    
+    # Format channel stats
+    channel_stats = []
+    for cid, stats in channel_views.items():
+        channel_stats.append({
+            "channel_id": cid,
+            "channel_name": channel_names.get(cid, "Unknown"),
+            "total_views": stats["total"],
+            "unique_viewers": len(stats["unique_viewers"])
+        })
+    
+    # Sort by total views
+    channel_stats.sort(key=lambda x: x["total_views"], reverse=True)
+    
+    return {
+        "viewers_24h": unique_24h,
+        "current_viewers": unique_5min,
+        "total_views_24h": len(views_24h),
+        "channel_stats": channel_stats
+    }
+
 # Include router and middleware
 app.include_router(api_router)
 
