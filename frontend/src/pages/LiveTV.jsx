@@ -52,6 +52,48 @@ const getPlaylistVideos = (videos, randomPlay = false) => {
   return randomPlay ? shuffleWithSeed(videos, getDailySeed()) : videos;
 };
 
+// Calculate live position - where should we be in the playlist right now?
+// Uses video durations to sync all viewers to the same point
+const calculateLivePosition = (videos, randomPlay = false) => {
+  if (!videos || videos.length === 0) return { videoIndex: 0, seekTime: 0, playlist: [] };
+  
+  const playlist = randomPlay ? shuffleWithSeed(videos, getDailySeed()) : videos;
+  
+  const now = new Date();
+  const startOfDay = new Date(now);
+  startOfDay.setHours(0, 0, 0, 0);
+  
+  // Seconds since midnight
+  const secondsSinceMidnight = Math.floor((now - startOfDay) / 1000);
+  
+  // Calculate total playlist duration (use actual durations, default to 4 min for unknown)
+  let totalDuration = 0;
+  playlist.forEach(v => {
+    totalDuration += v.duration || 240; // Default 4 min if no duration set
+  });
+  
+  if (totalDuration === 0) return { videoIndex: 0, seekTime: 0, playlist };
+  
+  // Find position in the looped playlist
+  const positionInPlaylist = secondsSinceMidnight % totalDuration;
+  
+  // Find which video and at what seek time
+  let accumulated = 0;
+  for (let i = 0; i < playlist.length; i++) {
+    const videoDuration = playlist[i].duration || 240;
+    if (accumulated + videoDuration > positionInPlaylist) {
+      return {
+        videoIndex: i,
+        seekTime: Math.floor(positionInPlaylist - accumulated),
+        playlist
+      };
+    }
+    accumulated += videoDuration;
+  }
+  
+  return { videoIndex: 0, seekTime: 0, playlist };
+};
+
 const LiveTV = () => {
   const navigate = useNavigate();
   const { user, isAuthenticated } = useAuth();
@@ -60,6 +102,7 @@ const LiveTV = () => {
   const [channels, setChannels] = useState([]);
   const [currentChannel, setCurrentChannel] = useState(null);
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
+  const [seekTime, setSeekTime] = useState(0);
   const [playlistVideos, setPlaylistVideos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isMuted, setIsMuted] = useState(false);
@@ -95,7 +138,7 @@ const LiveTV = () => {
   const currentVideo = playlistVideos[currentVideoIndex];
   const isUploadedVideo = currentVideo && (currentVideo.video_url || !currentVideo.youtube_id);
 
-  // Play next video in playlist
+  // Play next video in playlist (for when video ends naturally)
   const playNextVideo = useCallback(() => {
     if (playlistVideos.length === 0) return;
     const nextIndex = (currentVideoIndex + 1) % playlistVideos.length;
