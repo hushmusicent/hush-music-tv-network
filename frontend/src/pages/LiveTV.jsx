@@ -235,11 +235,15 @@ const LiveTV = () => {
   };
 
   const selectChannel = useCallback((channel) => {
-    // Get playlist videos (shuffled if random play enabled)
-    const videos = getPlaylistVideos(channel.videos, channel.random_play);
+    // Calculate live position - where should we be in this channel right now?
+    const { videoIndex, seekTime: startTime, playlist } = calculateLivePosition(
+      channel.videos, 
+      channel.random_play
+    );
     setCurrentChannel(channel);
-    setPlaylistVideos(videos);
-    setCurrentVideoIndex(0); // Start from first video
+    setPlaylistVideos(playlist);
+    setCurrentVideoIndex(videoIndex);
+    setSeekTime(startTime); // Start at the live position
   }, []);
 
   const changeChannel = (direction) => {
