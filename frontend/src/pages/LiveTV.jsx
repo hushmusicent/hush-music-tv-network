@@ -342,21 +342,15 @@ const LiveTV = () => {
                     autoPlay
                     muted={isMuted}
                     onEnded={handleUploadedVideoEnd}
-                    onTimeUpdate={handleTimeUpdate}
                     playsInline
                     data-testid="live-uploaded-video"
                   />
                 ) : currentVideo.youtube_id ? (
-                  /* YouTube Embed with live sync - key only changes on video change, not during playback */
-                  <iframe
-                    ref={iframeRef}
-                    key={`${currentVideo.youtube_id}-${currentVideoIndex}`}
-                    src={embedUrl}
-                    title={currentVideo.title}
+                  /* YouTube Player using IFrame API - plays to completion */
+                  <div 
+                    id="youtube-player" 
                     className="absolute inset-0 w-full h-full"
-                    style={{ border: 'none' }}
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                    allowFullScreen
+                    data-testid="live-youtube-video"
                   />
                 ) : (
                   <div className="absolute inset-0 flex items-center justify-center">
