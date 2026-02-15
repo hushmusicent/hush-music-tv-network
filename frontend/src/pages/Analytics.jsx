@@ -30,13 +30,17 @@ const Analytics = () => {
       return;
     }
     
-    // Then check if user is admin
-    if (!user?.is_admin) {
+    // Only redirect if we have user data AND they're not admin
+    // This prevents redirect when user object is still being populated
+    if (user && user.is_admin === false) {
       navigate('/');
       return;
     }
     
-    loadStats();
+    // Load stats if user is admin (or user.is_admin is undefined/true)
+    if (user?.is_admin) {
+      loadStats();
+    }
   }, [isAuthenticated, user, authLoading, navigate]);
 
   const loadStats = async () => {
