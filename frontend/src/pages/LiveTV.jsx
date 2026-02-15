@@ -290,6 +290,13 @@ const LiveTV = () => {
     setPlaylistVideos(playlist);
     setCurrentVideoIndex(videoIndex);
     setSeekTime(startTime); // Start at the live position
+    
+    // Record view for analytics
+    try {
+      analyticsAPI.recordView(channel.id, getViewerId());
+    } catch (e) {
+      // Silently fail - don't interrupt viewing experience
+    }
   }, []);
 
   const changeChannel = (direction) => {
