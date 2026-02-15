@@ -9,7 +9,6 @@ import Home from './pages/Home';
 import Browse from './pages/Browse';
 import Watch from './pages/Watch';
 import LiveTV from './pages/LiveTV';
-import TVGuide from './pages/TVGuide';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import ChannelCreator from './pages/ChannelCreator';
@@ -48,7 +47,6 @@ function App() {
                   <Route path="/" element={<Home />} />
                   <Route path="/browse" element={<Browse />} />
                   <Route path="/watch/:channelId" element={<Watch />} />
-                  <Route path="/guide" element={<TVGuide />} />
                   <Route path="/dashboard" element={<Dashboard />} />
                   <Route path="/create" element={<ChannelCreator />} />
                   <Route path="/edit/:channelId" element={<ChannelCreator />} />
