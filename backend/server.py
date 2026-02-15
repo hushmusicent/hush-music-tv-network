@@ -1001,7 +1001,7 @@ async def get_analytics(user: dict = Depends(require_user)):
                 views_24h.append(view)
             if view_time >= last_5min:
                 views_5min.append(view)
-        except:
+        except Exception:
             continue
     
     # Count unique viewers
