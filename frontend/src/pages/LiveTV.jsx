@@ -255,11 +255,6 @@ const LiveTV = () => {
     );
   }
 
-  // Build YouTube URL with start time for live sync
-  const embedUrl = currentVideo?.youtube_id 
-    ? `https://www.youtube.com/embed/${currentVideo.youtube_id}?autoplay=1&mute=${isMuted ? 1 : 0}&start=${Math.floor(seekTime)}&rel=0&modestbranding=1&playsinline=1&enablejsapi=1`
-    : '';
-  
   // Build uploaded video URL
   const uploadedVideoUrl = currentVideo?.video_url 
     ? `${BACKEND_URL}${currentVideo.video_url}`
