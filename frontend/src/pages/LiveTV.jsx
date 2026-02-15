@@ -17,8 +17,7 @@ import {
   Edit,
   Plus,
   X,
-  Shuffle,
-  SkipForward
+  Shuffle
 } from 'lucide-react';
 import { toast } from 'sonner';
 
