@@ -56,8 +56,8 @@ const Analytics = () => {
     }
   };
 
-  // Show loading while auth is being checked
-  if (authLoading || loading) {
+  // Show loading while auth is being checked or user data is loading
+  if (authLoading || !user || loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
