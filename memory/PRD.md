@@ -158,4 +158,6 @@ Build a TV network app like Strimm for Hush Music TV Network with:
 ## Recent Changes (Feb 15, 2026)
 - Fixed TV Guide schedule to use actual video durations instead of hardcoded 30-minute slots
 - Added `random_play` field to `/api/tv-guide` endpoint for consistent shuffle display
-- TV Guide now syncs perfectly with Live TV page schedules
+- **Removed TV Guide** from navigation and app routes (user request)
+- **Fixed video blinking issue** - removed aggressive re-syncing that caused YouTube iframe to reload every 10 seconds
+- Videos now play smoothly while still maintaining live sync (all viewers see same video at same time)
