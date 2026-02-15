@@ -528,27 +528,17 @@ const LiveTV = () => {
               <Clock size={16} className="text-primary" />
               <h3 className="font-heading text-sm tracking-wide">UP NEXT</h3>
               <span className="text-xs text-gray-500 ml-auto">{currentChannel?.name}</span>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={playNextVideo}
-                className="ml-2 text-xs"
-                title="Skip to next video"
-              >
-                <SkipForward size={14} />
-              </Button>
             </div>
             
             <div className="flex gap-2 overflow-x-auto pb-2 hide-scrollbar">
               {playlistVideos.slice(currentVideoIndex, currentVideoIndex + 10).map((video, index) => (
                 <div
                   key={video.id}
-                  className={`flex-shrink-0 p-3 rounded-lg min-w-[150px] transition-all cursor-pointer ${
+                  className={`flex-shrink-0 p-3 rounded-lg min-w-[150px] transition-all ${
                     index === 0
                       ? 'bg-primary/20 border border-primary/50'
-                      : 'bg-black/30 border border-white/5 hover:bg-white/5'
+                      : 'bg-black/30 border border-white/5'
                   }`}
-                  onClick={() => setCurrentVideoIndex(currentVideoIndex + index)}
                 >
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-xs font-medium">#{currentVideoIndex + index + 1}</span>
