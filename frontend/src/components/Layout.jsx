@@ -14,7 +14,6 @@ import {
   Tv,
   Home,
   Grid3X3,
-  Calendar,
   Plus,
   Heart,
   User,
