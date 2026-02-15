@@ -15,6 +15,7 @@ import ChannelCreator from './pages/ChannelCreator';
 import Favorites from './pages/Favorites';
 import EmbedPlayer from './pages/EmbedPlayer';
 import EmbedNetwork from './pages/EmbedNetwork';
+import Analytics from './pages/Analytics';
 
 function App() {
   return (
@@ -48,6 +49,7 @@ function App() {
                   <Route path="/browse" element={<Browse />} />
                   <Route path="/watch/:channelId" element={<Watch />} />
                   <Route path="/dashboard" element={<Dashboard />} />
+                  <Route path="/analytics" element={<Analytics />} />
                   <Route path="/create" element={<ChannelCreator />} />
                   <Route path="/edit/:channelId" element={<ChannelCreator />} />
                   <Route path="/favorites" element={<Favorites />} />
