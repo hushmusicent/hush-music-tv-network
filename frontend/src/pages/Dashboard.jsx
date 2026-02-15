@@ -345,6 +345,15 @@ const Dashboard = () => {
 
         <div className="flex gap-3">
           <Button
+            onClick={() => navigate('/analytics')}
+            variant="outline"
+            className="border-purple-500/50 text-purple-400 hover:bg-purple-500/10"
+            data-testid="analytics-btn"
+          >
+            <BarChart3 size={18} className="mr-2" />
+            Analytics
+          </Button>
+          <Button
             onClick={() => navigate('/create')}
             className="bg-primary hover:bg-primary-hover font-bold glow-primary-hover"
             data-testid="create-channel-btn"
