@@ -599,10 +599,9 @@ const LiveTV = () => {
                     {playlistVideos.map((video, index) => (
                       <div
                         key={video.id}
-                        className={`bg-black/30 rounded-lg p-2 flex items-center gap-2 cursor-pointer hover:bg-white/5 ${
+                        className={`bg-black/30 rounded-lg p-2 flex items-center gap-2 ${
                           index === currentVideoIndex ? 'ring-1 ring-primary' : ''
                         }`}
-                        onClick={() => setCurrentVideoIndex(index)}
                       >
                         <span className="w-5 text-center text-xs text-gray-500">{index + 1}</span>
                         <div className="flex-1 min-w-0">
