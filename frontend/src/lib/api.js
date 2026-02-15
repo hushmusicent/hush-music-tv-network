@@ -126,4 +126,10 @@ export const uploadAPI = {
   deleteImage: (imageId) => api.delete(`/upload/image/${imageId}`),
 };
 
+// Analytics API
+export const analyticsAPI = {
+  recordView: (channelId, viewerId) => api.post('/analytics/view', { channel_id: channelId, viewer_id: viewerId }),
+  getStats: () => api.get('/analytics/stats'),
+};
+
 export default api;
