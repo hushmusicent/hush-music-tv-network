@@ -44,6 +44,11 @@ app = FastAPI(title="TV Network API")
 api_router = APIRouter(prefix="/api")
 security = HTTPBearer(auto_error=False)
 
+# Root-level health check endpoint for Kubernetes
+@app.get("/health")
+async def root_health_check():
+    return {"status": "healthy"}
+
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
