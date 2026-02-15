@@ -138,13 +138,23 @@ const LiveTV = () => {
   const currentVideo = playlistVideos[currentVideoIndex];
   const isUploadedVideo = currentVideo && (currentVideo.video_url || !currentVideo.youtube_id);
 
-  // Play next video in playlist (for when video ends naturally)
+  // Use refs to avoid dependency cycles in callbacks
+  const playlistRef = useRef(playlistVideos);
+  const indexRef = useRef(currentVideoIndex);
+  
+  useEffect(() => {
+    playlistRef.current = playlistVideos;
+    indexRef.current = currentVideoIndex;
+  }, [playlistVideos, currentVideoIndex]);
+
+  // Play next video in playlist (for when video ends naturally or on error)
   const playNextVideo = useCallback(() => {
-    if (playlistVideos.length === 0) return;
-    const nextIndex = (currentVideoIndex + 1) % playlistVideos.length;
+    if (playlistRef.current.length === 0) return;
+    const nextIndex = (indexRef.current + 1) % playlistRef.current.length;
+    console.log(`Skipping to next video: index ${nextIndex}`);
     setCurrentVideoIndex(nextIndex);
     setSeekTime(0); // Start next video from beginning
-  }, [playlistVideos, currentVideoIndex]);
+  }, []);
 
   // Handle uploaded video ending
   const handleUploadedVideoEnd = () => {
