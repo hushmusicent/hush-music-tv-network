@@ -722,7 +722,7 @@ const LiveTV = () => {
           )}
 
           {/* Player controls */}
-          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4">
+          <div className={`${isFullscreen ? 'fixed' : 'absolute'} bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4 z-40`}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Button
@@ -733,10 +733,15 @@ const LiveTV = () => {
                 >
                   {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} />}
                 </Button>
+                {isFullscreen && (
+                  <span className="text-sm text-gray-400 ml-2">
+                    Press C to toggle remote • ↑↓ to change channels
+                  </span>
+                )}
               </div>
               
               <div className="flex items-center gap-2">
-                {isAdmin && (
+                {isAdmin && !isFullscreen && (
                   <Button
                     variant="ghost"
                     size="sm"
