@@ -84,12 +84,23 @@ const LiveTV = () => {
   const [showChannelChanger, setShowChannelChanger] = useState(true);
   const [channelInput, setChannelInput] = useState('');
   const [showChannelOSD, setShowChannelOSD] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const playerRef = useRef(null);
   const videoRef = useRef(null);
   const youtubePlayerRef = useRef(null);
   const scheduleCheckRef = useRef(null);
   const channelInputTimeoutRef = useRef(null);
   const osdTimeoutRef = useRef(null);
+
+  // Track fullscreen state
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
 
   // Load YouTube IFrame API
   useEffect(() => {
