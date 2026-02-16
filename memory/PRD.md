@@ -38,6 +38,12 @@ Build a TV network app like Strimm for Hush Music TV Network with:
 - [x] Home page with hero section and featured channels
 - [x] Browse page with search and category filters
 - [x] Watch page with YouTube/uploaded video player
+- [x] **24-Hour TV Guide Feature** - Classic TV Guide style schedule page:
+  - Grid layout showing all channels with their 24-hour schedules
+  - Time navigation with scroll controls
+  - "Now" button to jump to current time
+  - Individual channel shuffle/regenerate
+  - Current time indicator
 - [x] **TV Guide with dynamic schedule based on actual video durations**:
   - 24-hour timeline with videos positioned at correct start times
   - Supports random play channels (consistent shuffle across viewers)
