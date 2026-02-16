@@ -123,6 +123,11 @@ Build a TV network app like Strimm for Hush Music TV Network with:
 - GET /api/upload/videos - List uploaded videos
 - DELETE /api/upload/video/:id - Delete uploaded video
 
+### Schedule
+- GET /api/schedule/channels - Get 24-hour schedules for all channels
+- GET /api/schedule/channel/:id - Get schedule for specific channel
+- POST /api/schedule/regenerate/:id - Regenerate schedule with random order
+
 ### Other
 - GET /api/categories - List categories
 - GET /api/tv-guide - Get TV guide data
