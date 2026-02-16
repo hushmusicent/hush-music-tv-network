@@ -656,7 +656,7 @@ const LiveTV = () => {
 
           {/* Channel Changer OSD */}
           {showChannelOSD && currentChannel && (
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-30 pointer-events-none">
+            <div className={`${isFullscreen ? 'fixed' : 'absolute'} top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 pointer-events-none`}>
               <div className="bg-black/90 backdrop-blur-sm rounded-xl p-6 text-center min-w-[200px]">
                 <div className="text-6xl font-bold text-primary mb-2">
                   {channelInput || (getCurrentChannelIndex() + 1)}
@@ -675,7 +675,10 @@ const LiveTV = () => {
 
           {/* Channel Changer Remote */}
           {showChannelChanger && (
-            <div className="absolute bottom-20 right-4 z-20" data-testid="channel-changer">
+            <div 
+              className={`${isFullscreen ? 'fixed bottom-24 right-6' : 'absolute bottom-20 right-4'} z-50`} 
+              data-testid="channel-changer"
+            >
               <div className="bg-[#12121a]/95 backdrop-blur-sm border border-white/10 rounded-xl p-3 flex flex-col items-center gap-2">
                 {/* Channel Up */}
                 <Button
