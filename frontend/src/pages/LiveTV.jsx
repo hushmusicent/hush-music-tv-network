@@ -721,13 +721,13 @@ const LiveTV = () => {
           )}
 
           {/* Play/Pause Indicator - Shows briefly when toggling */}
-          {showChannelOSD && currentVideo && (
+          {showPlayPauseOSD && currentVideo && (
             <div className={`${isFullscreen ? 'fixed' : 'absolute'} top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 pointer-events-none`}>
               <div className="bg-black/80 backdrop-blur-sm rounded-full p-6">
                 {isPaused ? (
-                  <Play size={48} className="text-white" fill="white" />
-                ) : (
                   <Pause size={48} className="text-white" fill="white" />
+                ) : (
+                  <Play size={48} className="text-white ml-1" fill="white" />
                 )}
               </div>
             </div>
