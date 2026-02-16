@@ -206,6 +206,78 @@ const LiveTV = () => {
     try {
       analyticsAPI.recordView(channel.id, getViewerId());
     } catch (e) {}
+    
+    // Show OSD
+    showOSD();
+  };
+
+  // Show channel OSD temporarily
+  const showOSD = () => {
+    setShowChannelOSD(true);
+    if (osdTimeoutRef.current) {
+      clearTimeout(osdTimeoutRef.current);
+    }
+    osdTimeoutRef.current = setTimeout(() => {
+      setShowChannelOSD(false);
+    }, 3000);
+  };
+
+  // Get current channel index
+  const getCurrentChannelIndex = () => {
+    if (!currentChannel) return -1;
+    return channels.findIndex(c => c.id === currentChannel.id);
+  };
+
+  // Channel up
+  const channelUp = () => {
+    const currentIndex = getCurrentChannelIndex();
+    if (currentIndex > 0) {
+      selectChannel(channels[currentIndex - 1]);
+    } else if (channels.length > 0) {
+      // Wrap to last channel
+      selectChannel(channels[channels.length - 1]);
+    }
+  };
+
+  // Channel down
+  const channelDown = () => {
+    const currentIndex = getCurrentChannelIndex();
+    if (currentIndex < channels.length - 1) {
+      selectChannel(channels[currentIndex + 1]);
+    } else if (channels.length > 0) {
+      // Wrap to first channel
+      selectChannel(channels[0]);
+    }
+  };
+
+  // Go to channel by number
+  const goToChannel = (num) => {
+    const index = num - 1; // Convert to 0-based index
+    if (index >= 0 && index < channels.length) {
+      selectChannel(channels[index]);
+    }
+  };
+
+  // Handle number key input for channel selection
+  const handleChannelNumberInput = (digit) => {
+    // Clear previous timeout
+    if (channelInputTimeoutRef.current) {
+      clearTimeout(channelInputTimeoutRef.current);
+    }
+    
+    // Append digit to input
+    const newInput = channelInput + digit;
+    setChannelInput(newInput);
+    setShowChannelOSD(true);
+    
+    // Set timeout to process the input
+    channelInputTimeoutRef.current = setTimeout(() => {
+      const channelNum = parseInt(newInput, 10);
+      if (channelNum > 0 && channelNum <= channels.length) {
+        goToChannel(channelNum);
+      }
+      setChannelInput('');
+    }, 1500); // Wait 1.5 seconds after last digit
   };
 
   const isUploadedVideo = currentVideo && (currentVideo.video_url || !currentVideo.youtube_id);
