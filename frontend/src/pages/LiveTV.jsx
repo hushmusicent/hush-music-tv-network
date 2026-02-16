@@ -577,7 +577,7 @@ const LiveTV = () => {
           
           {/* Keyboard shortcuts */}
           <div className="p-3 border-t border-white/10 text-xs text-gray-500">
-            <p>↑↓ Switch • M Mute • F Fullscreen</p>
+            <p>↑↓ Switch • 0-9 Go to • C Remote</p>
           </div>
         </div>
       )}
