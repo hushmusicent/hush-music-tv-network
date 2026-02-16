@@ -400,6 +400,29 @@ const LiveTV = () => {
     }
   };
 
+  const togglePlayPause = () => {
+    if (youtubePlayerRef.current) {
+      const playerState = youtubePlayerRef.current.getPlayerState();
+      if (playerState === window.YT.PlayerState.PLAYING) {
+        youtubePlayerRef.current.pauseVideo();
+        setIsPaused(true);
+      } else {
+        youtubePlayerRef.current.playVideo();
+        setIsPaused(false);
+      }
+    }
+    if (videoRef.current) {
+      if (videoRef.current.paused) {
+        videoRef.current.play();
+        setIsPaused(false);
+      } else {
+        videoRef.current.pause();
+        setIsPaused(true);
+      }
+    }
+    showOSD();
+  };
+
   const toggleFullscreen = () => {
     const player = playerRef.current;
     if (!player) return;
