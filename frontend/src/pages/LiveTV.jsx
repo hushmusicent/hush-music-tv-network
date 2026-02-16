@@ -643,6 +643,70 @@ const LiveTV = () => {
             </div>
           )}
 
+          {/* Channel Changer OSD */}
+          {showChannelOSD && currentChannel && (
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-30 pointer-events-none">
+              <div className="bg-black/90 backdrop-blur-sm rounded-xl p-6 text-center min-w-[200px]">
+                <div className="text-6xl font-bold text-primary mb-2">
+                  {channelInput || (getCurrentChannelIndex() + 1)}
+                </div>
+                <p className="text-lg font-medium text-white">
+                  {channelInput ? 'Entering...' : currentChannel.name}
+                </p>
+                {!channelInput && currentVideo && (
+                  <p className="text-sm text-gray-400 mt-1 truncate max-w-[250px]">
+                    {currentVideo.title}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Channel Changer Remote */}
+          {showChannelChanger && (
+            <div className="absolute bottom-20 right-4 z-20" data-testid="channel-changer">
+              <div className="bg-[#12121a]/95 backdrop-blur-sm border border-white/10 rounded-xl p-3 flex flex-col items-center gap-2">
+                {/* Channel Up */}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={channelUp}
+                  className="h-10 w-10 rounded-full hover:bg-primary/20 hover:text-primary"
+                  data-testid="channel-up"
+                >
+                  <ChevronUp size={24} />
+                </Button>
+                
+                {/* Channel Number Display */}
+                <div 
+                  className="w-14 h-14 rounded-lg bg-black flex items-center justify-center cursor-pointer hover:bg-white/5"
+                  onClick={showOSD}
+                  data-testid="channel-number-display"
+                >
+                  <span className="text-2xl font-bold text-primary">
+                    {channelInput || (getCurrentChannelIndex() + 1)}
+                  </span>
+                </div>
+                
+                {/* Channel Down */}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={channelDown}
+                  className="h-10 w-10 rounded-full hover:bg-primary/20 hover:text-primary"
+                  data-testid="channel-down"
+                >
+                  <ChevronDown size={24} />
+                </Button>
+                
+                {/* Channel count */}
+                <span className="text-[10px] text-gray-500">
+                  of {channels.length}
+                </span>
+              </div>
+            </div>
+          )}
+
           {/* Player controls */}
           <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4">
             <div className="flex items-center justify-between">
