@@ -652,13 +652,13 @@ const LiveTV = () => {
                 className={`${isFullscreen ? 'w-full h-full' : 'w-full h-full'}`}
               />
               
-              {/* Lock Overlay - Prevents interaction with YouTube controls */}
+              {/* Lock Overlay - Click to play/pause, Double-click for fullscreen */}
               <div 
-                className="absolute inset-0 z-10 cursor-default"
+                className="absolute inset-0 z-10 cursor-pointer"
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  showOSD();
+                  togglePlayPause();
                 }}
                 onDoubleClick={(e) => {
                   e.preventDefault();
@@ -681,13 +681,13 @@ const LiveTV = () => {
                 muted={isMuted}
                 playsInline
               />
-              {/* Lock Overlay for uploaded videos too */}
+              {/* Lock Overlay for uploaded videos - Click to play/pause */}
               <div 
-                className="absolute inset-0 z-10 cursor-default"
+                className="absolute inset-0 z-10 cursor-pointer"
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  showOSD();
+                  togglePlayPause();
                 }}
                 onDoubleClick={(e) => {
                   e.preventDefault();
