@@ -401,16 +401,21 @@ const LiveTV = () => {
     const handleKeyDown = (e) => {
       if (e.target.tagName === 'INPUT') return;
       
+      // Handle number keys for channel selection
+      if (e.key >= '0' && e.key <= '9') {
+        e.preventDefault();
+        handleChannelNumberInput(e.key);
+        return;
+      }
+      
       switch (e.key) {
         case 'ArrowUp':
           e.preventDefault();
-          const prevIndex = channels.findIndex(c => c.id === currentChannel?.id);
-          if (prevIndex > 0) selectChannel(channels[prevIndex - 1]);
+          channelUp();
           break;
         case 'ArrowDown':
           e.preventDefault();
-          const nextIndex = channels.findIndex(c => c.id === currentChannel?.id);
-          if (nextIndex < channels.length - 1) selectChannel(channels[nextIndex + 1]);
+          channelDown();
           break;
         case 'm':
         case 'M':
@@ -424,9 +429,17 @@ const LiveTV = () => {
         case 'L':
           setShowChannelList(prev => !prev);
           break;
+        case 'c':
+        case 'C':
+          setShowChannelChanger(prev => !prev);
+          break;
         case 'a':
         case 'A':
           if (isAdmin) setShowAdminPanel(prev => !prev);
+          break;
+        case 'Escape':
+          setChannelInput('');
+          setShowChannelOSD(false);
           break;
         default:
           break;
@@ -435,7 +448,7 @@ const LiveTV = () => {
     
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [channels, currentChannel, isAdmin, isMuted]);
+  }, [channels, currentChannel, isAdmin, isMuted, channelInput]);
 
   const formatTime = (date) => {
     return date.toLocaleTimeString('en-US', { 
