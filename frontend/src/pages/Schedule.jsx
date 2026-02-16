@@ -540,15 +540,16 @@ const Schedule = () => {
                     return (
                       <div
                         key={`${video.video_id}-${vidIdx}`}
-                        className={`absolute top-1 bottom-1 rounded cursor-pointer group transition-all
+                        className={`absolute top-1 bottom-1 rounded cursor-pointer transition-all hover:brightness-110 hover:scale-[1.02]
                           bg-gradient-to-r ${colors[vidIdx % colors.length]}
                           ${isCurrentlyPlaying ? 'ring-2 ring-red-500 ring-offset-1 ring-offset-[#0d0d12]' : ''}
                         `}
                         style={style}
                         onClick={() => handleVideoClick(video, schedule)}
                         title={`${video.title}\n${video.start_time} - ${video.end_time}\nClick to watch`}
+                        data-testid={`video-block-${video.video_id}`}
                       >
-                        <div className="absolute inset-0 p-1.5 flex flex-col justify-between overflow-hidden">
+                        <div className="absolute inset-0 p-1.5 flex flex-col justify-between overflow-hidden pointer-events-none">
                           <p className="text-[11px] font-medium truncate leading-tight">
                             {video.title}
                           </p>
@@ -565,7 +566,6 @@ const Schedule = () => {
                             )}
                           </div>
                         </div>
-                        <div className="absolute inset-0 bg-white/0 group-hover:bg-white/10 transition-colors rounded" />
                       </div>
                     );
                   })}
