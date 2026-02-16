@@ -638,7 +638,7 @@ const LiveTV = () => {
 
           {/* Channel info overlay */}
           {currentChannel && currentVideo && (
-            <div className="absolute top-4 right-4 bg-black/70 backdrop-blur-sm rounded-lg p-3 max-w-sm">
+            <div className={`${isFullscreen ? 'fixed' : 'absolute'} top-4 right-4 bg-black/70 backdrop-blur-sm rounded-lg p-3 max-w-sm z-40`}>
               <div className="flex items-center gap-2 mb-2">
                 <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
                 <span className="text-xs text-red-400 font-medium">LIVE</span>
