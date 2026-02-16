@@ -171,6 +171,18 @@ The admin dashboard includes a "Delete Channel" button for each channel. Users c
 - Frontend: All features tested and working
 - Test report: /app/test_reports/iteration_12.json (latest)
 
+## Data Migration (Feb 16, 2026)
+- Migrated all channels and videos from broadcaster.emergent.host
+- **16 Channels** total (6 new + 10 updated)
+- **1215 Videos** total
+- New channels added:
+  - Movies 4 Everyone (100 videos)
+  - Horror Channel (51 videos)
+  - Action Movies (51 videos)
+  - Romance Movies (52 videos)
+  - Biography Channel (64 videos)
+  - Spiritual Channel (157 videos)
+
 ## Recent Changes (Feb 16, 2026)
 - **24-Hour TV Guide Feature Enhanced** - TV Guide with zoom and synchronized playback
   - **Zoom controls**: 3h, 6h, 12h, 24h view options with zoom in/out buttons
