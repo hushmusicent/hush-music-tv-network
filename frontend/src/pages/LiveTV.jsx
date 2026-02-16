@@ -89,6 +89,7 @@ const LiveTV = () => {
   const [showPlayPauseOSD, setShowPlayPauseOSD] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
+  const [controlsVisible, setControlsVisible] = useState(true);
   const playerRef = useRef(null);
   const videoRef = useRef(null);
   const youtubePlayerRef = useRef(null);
@@ -96,6 +97,72 @@ const LiveTV = () => {
   const channelInputTimeoutRef = useRef(null);
   const osdTimeoutRef = useRef(null);
   const playPauseOsdTimeoutRef = useRef(null);
+  const controlsTimeoutRef = useRef(null);
+
+  // Auto-hide controls after inactivity
+  const CONTROLS_HIDE_DELAY = 3000; // 3 seconds
+
+  const showControls = useCallback(() => {
+    setControlsVisible(true);
+    
+    // Clear existing timeout
+    if (controlsTimeoutRef.current) {
+      clearTimeout(controlsTimeoutRef.current);
+    }
+    
+    // Set new timeout to hide controls
+    controlsTimeoutRef.current = setTimeout(() => {
+      if (!isPaused) {
+        setControlsVisible(false);
+      }
+    }, CONTROLS_HIDE_DELAY);
+  }, [isPaused]);
+
+  // Show controls on mouse move or touch
+  useEffect(() => {
+    const handleActivity = () => {
+      showControls();
+    };
+
+    const playerElement = playerRef.current;
+    if (playerElement) {
+      playerElement.addEventListener('mousemove', handleActivity);
+      playerElement.addEventListener('touchstart', handleActivity);
+      playerElement.addEventListener('click', handleActivity);
+    }
+
+    // Also listen on document for keyboard activity
+    document.addEventListener('keydown', handleActivity);
+
+    return () => {
+      if (playerElement) {
+        playerElement.removeEventListener('mousemove', handleActivity);
+        playerElement.removeEventListener('touchstart', handleActivity);
+        playerElement.removeEventListener('click', handleActivity);
+      }
+      document.removeEventListener('keydown', handleActivity);
+      if (controlsTimeoutRef.current) {
+        clearTimeout(controlsTimeoutRef.current);
+      }
+    };
+  }, [showControls]);
+
+  // Keep controls visible when paused
+  useEffect(() => {
+    if (isPaused) {
+      setControlsVisible(true);
+      if (controlsTimeoutRef.current) {
+        clearTimeout(controlsTimeoutRef.current);
+      }
+    } else {
+      showControls();
+    }
+  }, [isPaused, showControls]);
+
+  // Initial show controls
+  useEffect(() => {
+    showControls();
+  }, [showControls]);
 
   // Track fullscreen state
   useEffect(() => {
