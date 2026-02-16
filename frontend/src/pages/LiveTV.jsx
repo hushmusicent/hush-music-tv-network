@@ -405,6 +405,15 @@ const LiveTV = () => {
   };
 
   const togglePlayPause = () => {
+    // Show play/pause OSD
+    setShowPlayPauseOSD(true);
+    if (playPauseOsdTimeoutRef.current) {
+      clearTimeout(playPauseOsdTimeoutRef.current);
+    }
+    playPauseOsdTimeoutRef.current = setTimeout(() => {
+      setShowPlayPauseOSD(false);
+    }, 1000);
+
     if (youtubePlayerRef.current) {
       const playerState = youtubePlayerRef.current.getPlayerState();
       if (playerState === window.YT.PlayerState.PLAYING) {
@@ -424,7 +433,6 @@ const LiveTV = () => {
         setIsPaused(true);
       }
     }
-    showOSD();
   };
 
   const toggleFullscreen = () => {
