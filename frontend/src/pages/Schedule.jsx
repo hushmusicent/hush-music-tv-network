@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
-import api from '../api/api';
+import { useAuth } from '../context/AuthContext';
+import { channelsAPI } from '../lib/api';
 import { 
   ArrowLeft, 
   Calendar, 
@@ -13,6 +13,19 @@ import {
   Tv
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
+import axios from 'axios';
+
+const api = axios.create({
+  baseURL: process.env.REACT_APP_BACKEND_URL,
+});
+
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
 
 const Schedule = () => {
   const navigate = useNavigate();
