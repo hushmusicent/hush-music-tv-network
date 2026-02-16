@@ -422,11 +422,11 @@ const Schedule = () => {
                   style={{ left: `${marker.position}%` }}
                 >
                   <div className={`text-xs font-medium whitespace-nowrap ${
-                    marker.hour === new Date().getHours() 
+                    marker.hour === getEasternTime().getHours() 
                       ? 'text-red-400' 
                       : 'text-gray-400'
                   }`}>
-                    {formatTime(marker.hour)}
+                    {formatTime(marker.hour)} ET
                   </div>
                 </div>
               ))}
