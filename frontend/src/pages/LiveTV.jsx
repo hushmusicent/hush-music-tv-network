@@ -85,6 +85,7 @@ const LiveTV = () => {
   const [channelInput, setChannelInput] = useState('');
   const [showChannelOSD, setShowChannelOSD] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const playerRef = useRef(null);
   const videoRef = useRef(null);
   const youtubePlayerRef = useRef(null);
