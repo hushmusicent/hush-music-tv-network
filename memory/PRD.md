@@ -172,14 +172,17 @@ The admin dashboard includes a "Delete Channel" button for each channel. Users c
 - Test report: /app/test_reports/iteration_12.json (latest)
 
 ## Recent Changes (Feb 16, 2026)
-- **24-Hour TV Guide Feature** - New TV Guide style schedule page
+- **24-Hour TV Guide Feature Enhanced** - TV Guide with zoom and synchronized playback
+  - **Zoom controls**: 3h, 6h, 12h, 24h view options with zoom in/out buttons
   - Classic TV Guide grid layout showing all channels with their 24-hour schedules
-  - Time navigation with left/right scroll buttons (6 hours visible at once)
+  - **Synchronized video playback**: Click any video to watch it at the correct position based on current time
+  - **Video player modal**: Full-featured player with channel info, LIVE indicator, time slot display
+  - **No restart on channel switch**: Videos play at the correct time position regardless of which one you click
+  - Time navigation with left/right scroll buttons
   - "Now" button to jump to current time
-  - "Refresh" button to reload all schedules
   - Individual channel shuffle/regenerate buttons
-  - Current time indicator (red line) in the grid
-  - Legend showing "Live Now", "Click to preview", "Shuffle schedule"
+  - Current time indicator (red line) showing "now"
+  - Shows "Now: Video XX" for what's currently playing on each channel
   - Accessible from Dashboard via "TV Guide" button (cyan color)
 - **New Backend Endpoints**:
   - `GET /api/schedule/channels` - Returns 24-hour schedules for all channels
