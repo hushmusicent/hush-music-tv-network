@@ -334,12 +334,14 @@ const LiveTV = () => {
           controls: 0,  // Hide YouTube controls - we have our own
           start: Math.floor(seekTime),
           modestbranding: 1,
-          rel: 0,
+          rel: 0,  // Don't show related videos
           fs: 0,  // Disable YouTube's fullscreen button
           playsinline: 1,
           disablekb: 1,  // Disable keyboard controls
           iv_load_policy: 3,  // Hide video annotations
           showinfo: 0,  // Hide video info
+          cc_load_policy: 0,  // Hide closed captions by default
+          enablejsapi: 1,  // Enable JS API
         },
         events: {
           onReady: (event) => {
@@ -349,6 +351,7 @@ const LiveTV = () => {
             // Seek to live position
             event.target.seekTo(seekTime, true);
             event.target.playVideo();
+            setIsPaused(false);
             
             // Clear error timeout
             if (errorTimeout) {
@@ -356,9 +359,14 @@ const LiveTV = () => {
             }
           },
           onStateChange: (event) => {
-            // Video ended
-            if (event.data === window.YT.PlayerState.ENDED) {
+            // Update paused state based on player state
+            if (event.data === window.YT.PlayerState.PLAYING) {
+              setIsPaused(false);
+            } else if (event.data === window.YT.PlayerState.PAUSED) {
+              setIsPaused(true);
+            } else if (event.data === window.YT.PlayerState.ENDED) {
               // Schedule will handle next video automatically
+              setIsPaused(false);
             }
           },
           onError: (event) => {
