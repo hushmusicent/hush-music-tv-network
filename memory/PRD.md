@@ -184,6 +184,12 @@ The admin dashboard includes a "Delete Channel" button for each channel. Users c
   - Spiritual Channel (157 videos)
 
 ## Recent Changes (Feb 16, 2026)
+- **Schedule Synced with Live TV** - Schedule now persists and syncs across all viewers
+  - Schedule is stored in database and resets only at midnight Eastern time
+  - All viewers see the same video at the same time (synchronized playback)
+  - When switching channels, video starts at correct position (no restart)
+  - Both TV Guide and Live TV use the same stored schedule
+  - New public endpoint `/api/schedule/live` for Live TV access
 - **24-Hour TV Guide Feature Enhanced** - TV Guide with zoom and synchronized playback
   - **Zoom controls**: 3h, 6h, 12h, 24h view options with zoom in/out buttons
   - Classic TV Guide grid layout showing all channels with their 24-hour schedules
@@ -196,10 +202,12 @@ The admin dashboard includes a "Delete Channel" button for each channel. Users c
   - Current time indicator (red line) showing "now"
   - Shows "Now: Video XX" for what's currently playing on each channel
   - Accessible from Dashboard via "TV Guide" button (cyan color)
+  - All times displayed in Eastern time (ET)
 - **New Backend Endpoints**:
-  - `GET /api/schedule/channels` - Returns 24-hour schedules for all channels
-  - `GET /api/schedule/channel/{id}` - Returns schedule for specific channel
-  - `POST /api/schedule/regenerate/{id}` - Regenerates schedule with random order
+  - `GET /api/schedule/live` - Public endpoint for Live TV (returns all channel schedules)
+  - `GET /api/schedule/live/{channel_id}` - Public endpoint for single channel schedule
+  - `GET /api/schedule/channels` - Returns 24-hour schedules for all channels (admin)
+  - `POST /api/schedule/regenerate/{id}` - Regenerates schedule with random order (admin)
 
 ## Previous Changes (Feb 15, 2026)
 - **Analytics page auth fix** - Fixed redirect bug where analytics page was redirecting logged-in admins to home page
