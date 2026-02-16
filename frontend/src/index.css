@@ -176,9 +176,11 @@ body {
   height: 100vh !important;
 }
 
-/* Lock overlay for video */
+/* Lock overlay for video - fully blocks clicks */
 [data-testid="video-lock-overlay"] {
   background: transparent;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
 /* Animation delays for staggered reveals */
