@@ -228,7 +228,7 @@ const Schedule = () => {
   };
 
   const getCurrentTimePosition = () => {
-    const now = new Date();
+    const now = getEasternTime();
     const hours = now.getHours();
     const mins = now.getMinutes();
     const currentMinutes = hours * 60 + mins;
@@ -252,7 +252,7 @@ const Schedule = () => {
   };
 
   const goToNow = () => {
-    setStartHour(new Date().getHours());
+    setStartHour(getEasternTime().getHours());
   };
 
   const zoomIn = () => {
