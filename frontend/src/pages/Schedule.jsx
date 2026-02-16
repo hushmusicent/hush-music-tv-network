@@ -142,11 +142,11 @@ const Schedule = () => {
     return `${h}:${minutes.toString().padStart(2, '0')} ${ampm}`;
   };
 
-  // Get the current video that should be playing based on time
+  // Get the current video that should be playing based on time (Eastern)
   const getCurrentVideo = useCallback((schedule) => {
     if (!schedule?.videos) return null;
     
-    const now = new Date();
+    const now = getEasternTime();
     const currentSeconds = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
     
     for (const video of schedule.videos) {
@@ -163,9 +163,9 @@ const Schedule = () => {
     return null;
   }, []);
 
-  // Play video at the synchronized position
+  // Play video at the synchronized position (Eastern time)
   const playVideoAtPosition = (video, channel) => {
-    const now = new Date();
+    const now = getEasternTime();
     const currentSeconds = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
     const [startH, startM, startS] = video.start_time.split(':').map(Number);
     const videoStart = startH * 3600 + startM * 60 + (startS || 0);
