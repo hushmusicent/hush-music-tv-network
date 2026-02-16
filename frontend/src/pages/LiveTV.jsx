@@ -808,9 +808,9 @@ const LiveTV = () => {
             </div>
           )}
 
-          {/* Channel info overlay */}
+          {/* Channel info overlay - Fades in/out */}
           {currentChannel && currentVideo && (
-            <div className={`${isFullscreen ? 'fixed' : 'absolute'} top-4 right-4 bg-black/70 backdrop-blur-sm rounded-lg p-3 max-w-sm z-40`}>
+            <div className={`${isFullscreen ? 'fixed' : 'absolute'} top-4 right-4 bg-black/70 backdrop-blur-sm rounded-lg p-3 max-w-sm z-40 transition-opacity duration-300 ${controlsVisible ? 'opacity-100' : 'opacity-0'}`}>
               <div className="flex items-center gap-2 mb-2">
                 {isPaused ? (
                   <>
