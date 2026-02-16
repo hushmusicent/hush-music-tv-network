@@ -1041,6 +1041,146 @@ async def get_analytics(user: dict = Depends(require_user)):
         "channel_stats": channel_stats
     }
 
+# ===================== 24-HOUR SCHEDULE =====================
+
+import random
+
+class ScheduledVideo(BaseModel):
+    video_id: str
+    title: str
+    thumbnail: Optional[str] = None
+    youtube_id: Optional[str] = None
+    start_time: str  # HH:MM:SS format
+    end_time: str  # HH:MM:SS format
+    duration: int  # seconds
+
+class ChannelSchedule(BaseModel):
+    channel_id: str
+    channel_name: str
+    channel_thumbnail: Optional[str] = None
+    schedule_date: str  # YYYY-MM-DD
+    videos: List[ScheduledVideo]
+    total_duration: int  # seconds
+
+@api_router.get("/schedule/channels")
+async def get_all_channel_schedules(user: dict = Depends(require_user)):
+    """Get 24-hour schedules for all channels (admin only)"""
+    if not user.get("is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    channels = await db.channels.find({}, {"_id": 0}).to_list(100)
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    
+    schedules = []
+    for channel in channels:
+        if not channel.get("videos"):
+            continue
+        
+        schedule = generate_24h_schedule(channel, today)
+        schedules.append(schedule)
+    
+    return {"date": today, "schedules": schedules}
+
+@api_router.get("/schedule/channel/{channel_id}")
+async def get_channel_schedule(channel_id: str, user: dict = Depends(require_user)):
+    """Get 24-hour schedule for a specific channel (admin only)"""
+    if not user.get("is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    channel = await db.channels.find_one({"id": channel_id}, {"_id": 0})
+    if not channel:
+        raise HTTPException(status_code=404, detail="Channel not found")
+    
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    schedule = generate_24h_schedule(channel, today)
+    
+    return schedule
+
+@api_router.post("/schedule/regenerate/{channel_id}")
+async def regenerate_channel_schedule(channel_id: str, user: dict = Depends(require_user)):
+    """Regenerate 24-hour schedule for a channel (admin only)"""
+    if not user.get("is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    channel = await db.channels.find_one({"id": channel_id}, {"_id": 0})
+    if not channel:
+        raise HTTPException(status_code=404, detail="Channel not found")
+    
+    # Generate new random schedule
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    schedule = generate_24h_schedule(channel, today, force_random=True)
+    
+    return schedule
+
+def generate_24h_schedule(channel: dict, date: str, force_random: bool = False) -> dict:
+    """Generate a 24-hour schedule for a channel by randomly distributing videos"""
+    videos = channel.get("videos", [])
+    if not videos:
+        return {
+            "channel_id": channel.get("id", ""),
+            "channel_name": channel.get("name", ""),
+            "channel_thumbnail": channel.get("thumbnail"),
+            "schedule_date": date,
+            "videos": [],
+            "total_duration": 0
+        }
+    
+    # Use date as seed for consistent daily schedule (unless force_random)
+    if not force_random:
+        seed_str = f"{channel.get('id', '')}-{date}"
+        random.seed(hash(seed_str))
+    
+    # Shuffle videos
+    shuffled_videos = videos.copy()
+    random.shuffle(shuffled_videos)
+    
+    # Reset random seed
+    if not force_random:
+        random.seed()
+    
+    # Fill 24 hours (86400 seconds) with videos
+    total_seconds = 24 * 60 * 60
+    scheduled = []
+    current_time = 0
+    video_index = 0
+    
+    while current_time < total_seconds:
+        video = shuffled_videos[video_index % len(shuffled_videos)]
+        duration = video.get("duration", 300)  # Default 5 min if no duration
+        if duration <= 0:
+            duration = 300
+        
+        start_h = current_time // 3600
+        start_m = (current_time % 3600) // 60
+        start_s = current_time % 60
+        
+        end_time = min(current_time + duration, total_seconds)
+        end_h = end_time // 3600
+        end_m = (end_time % 3600) // 60
+        end_s = end_time % 60
+        
+        scheduled.append({
+            "video_id": video.get("id", ""),
+            "title": video.get("title", "Untitled"),
+            "thumbnail": video.get("thumbnail"),
+            "youtube_id": video.get("youtube_id"),
+            "start_time": f"{start_h:02d}:{start_m:02d}:{start_s:02d}",
+            "end_time": f"{end_h:02d}:{end_m:02d}:{end_s:02d}",
+            "duration": duration
+        })
+        
+        current_time += duration
+        video_index += 1
+    
+    return {
+        "channel_id": channel.get("id", ""),
+        "channel_name": channel.get("name", ""),
+        "channel_thumbnail": channel.get("thumbnail"),
+        "schedule_date": date,
+        "videos": scheduled,
+        "total_duration": min(current_time, total_seconds)
+    }
+
 # Include router and middleware
 app.include_router(api_router)
 
