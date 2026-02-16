@@ -17,9 +17,10 @@ import {
   Edit,
   Plus,
   X,
-  Shuffle
+  Calendar
 } from 'lucide-react';
 import { toast } from 'sonner';
+import axios from 'axios';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 
@@ -33,74 +34,35 @@ const getViewerId = () => {
   return viewerId;
 };
 
-// Seeded random function for consistent shuffling across all viewers
-const seededRandom = (seed) => {
-  const x = Math.sin(seed) * 10000;
-  return x - Math.floor(x);
+// Get current time in Eastern timezone
+const getEasternTime = () => {
+  return new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
 };
 
-// Shuffle array using a seed (date-based so all viewers see same order)
-const shuffleWithSeed = (array, seed) => {
-  const shuffled = [...array];
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(seededRandom(seed + i) * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+// Calculate current video from schedule based on Eastern time
+const getCurrentVideoFromSchedule = (schedule) => {
+  if (!schedule?.videos || schedule.videos.length === 0) {
+    return { video: null, seekTime: 0, videoIndex: -1 };
   }
-  return shuffled;
-};
-
-// Get today's seed - changes daily so playlist order changes each day
-const getDailySeed = () => {
-  const now = new Date();
-  return now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
-};
-
-// Get playlist videos (shuffled if random play enabled)
-const getPlaylistVideos = (videos, randomPlay = false) => {
-  if (!videos || videos.length === 0) return [];
-  return randomPlay ? shuffleWithSeed(videos, getDailySeed()) : videos;
-};
-
-// Calculate live position - where should we be in the playlist right now?
-// Uses video durations to sync all viewers to the same point
-const calculateLivePosition = (videos, randomPlay = false) => {
-  if (!videos || videos.length === 0) return { videoIndex: 0, seekTime: 0, playlist: [] };
   
-  const playlist = randomPlay ? shuffleWithSeed(videos, getDailySeed()) : videos;
+  const now = getEasternTime();
+  const currentSeconds = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
   
-  const now = new Date();
-  const startOfDay = new Date(now);
-  startOfDay.setHours(0, 0, 0, 0);
-  
-  // Seconds since midnight
-  const secondsSinceMidnight = Math.floor((now - startOfDay) / 1000);
-  
-  // Calculate total playlist duration (use actual durations, default to 4 min for unknown)
-  let totalDuration = 0;
-  playlist.forEach(v => {
-    totalDuration += v.duration || 240; // Default 4 min if no duration set
-  });
-  
-  if (totalDuration === 0) return { videoIndex: 0, seekTime: 0, playlist };
-  
-  // Find position in the looped playlist
-  const positionInPlaylist = secondsSinceMidnight % totalDuration;
-  
-  // Find which video and at what seek time
-  let accumulated = 0;
-  for (let i = 0; i < playlist.length; i++) {
-    const videoDuration = playlist[i].duration || 240;
-    if (accumulated + videoDuration > positionInPlaylist) {
-      return {
-        videoIndex: i,
-        seekTime: Math.floor(positionInPlaylist - accumulated),
-        playlist
-      };
+  for (let i = 0; i < schedule.videos.length; i++) {
+    const video = schedule.videos[i];
+    const [startH, startM, startS] = video.start_time.split(':').map(Number);
+    const [endH, endM, endS] = video.end_time.split(':').map(Number);
+    const videoStart = startH * 3600 + startM * 60 + (startS || 0);
+    const videoEnd = endH * 3600 + endM * 60 + (endS || 0);
+    
+    if (currentSeconds >= videoStart && currentSeconds < videoEnd) {
+      const seekTime = currentSeconds - videoStart;
+      return { video, seekTime, videoIndex: i };
     }
-    accumulated += videoDuration;
   }
   
-  return { videoIndex: 0, seekTime: 0, playlist };
+  // If no video found (shouldn't happen with 24h schedule), return first
+  return { video: schedule.videos[0], seekTime: 0, videoIndex: 0 };
 };
 
 const LiveTV = () => {
@@ -109,18 +71,20 @@ const LiveTV = () => {
   const isAdmin = user?.is_admin;
   
   const [channels, setChannels] = useState([]);
+  const [schedules, setSchedules] = useState({}); // channel_id -> schedule
   const [currentChannel, setCurrentChannel] = useState(null);
-  const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
+  const [currentVideo, setCurrentVideo] = useState(null);
   const [seekTime, setSeekTime] = useState(0);
-  const [playlistVideos, setPlaylistVideos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isMuted, setIsMuted] = useState(false);
   const [showChannelList, setShowChannelList] = useState(true);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [scheduleDate, setScheduleDate] = useState('');
   const playerRef = useRef(null);
   const videoRef = useRef(null);
   const youtubePlayerRef = useRef(null);
+  const scheduleCheckRef = useRef(null);
 
   // Load YouTube IFrame API
   useEffect(() => {
@@ -132,8 +96,9 @@ const LiveTV = () => {
     }
   }, []);
 
+  // Load channels and schedules
   useEffect(() => {
-    loadChannels();
+    loadChannelsAndSchedules();
     
     // Update time every second for live feel
     const timeInterval = setInterval(() => {
@@ -143,7 +108,7 @@ const LiveTV = () => {
     return () => clearInterval(timeInterval);
   }, []);
 
-  // Periodic view tracking for "current viewers" count (every 2 minutes)
+  // Periodic view tracking
   useEffect(() => {
     if (!currentChannel) return;
     
@@ -151,39 +116,96 @@ const LiveTV = () => {
       try {
         analyticsAPI.recordView(currentChannel.id, getViewerId());
       } catch (e) {}
-    }, 120000); // Every 2 minutes
+    }, 120000);
     
     return () => clearInterval(trackInterval);
   }, [currentChannel]);
 
-  // Get current video from playlist
-  const currentVideo = playlistVideos[currentVideoIndex];
-  const isUploadedVideo = currentVideo && (currentVideo.video_url || !currentVideo.youtube_id);
-
-  // Use refs to avoid dependency cycles in callbacks
-  const playlistRef = useRef(playlistVideos);
-  const indexRef = useRef(currentVideoIndex);
-  
+  // Check for video changes based on schedule (every second)
   useEffect(() => {
-    playlistRef.current = playlistVideos;
-    indexRef.current = currentVideoIndex;
-  }, [playlistVideos, currentVideoIndex]);
+    if (!currentChannel || !schedules[currentChannel.id]) return;
+    
+    const checkSchedule = () => {
+      const schedule = schedules[currentChannel.id];
+      const { video, seekTime: newSeekTime, videoIndex } = getCurrentVideoFromSchedule(schedule);
+      
+      if (video && (!currentVideo || video.video_id !== currentVideo.video_id)) {
+        console.log('Schedule video change:', video.title);
+        setCurrentVideo(video);
+        setSeekTime(newSeekTime);
+      }
+    };
+    
+    // Check immediately and then every second
+    checkSchedule();
+    scheduleCheckRef.current = setInterval(checkSchedule, 1000);
+    
+    return () => {
+      if (scheduleCheckRef.current) {
+        clearInterval(scheduleCheckRef.current);
+      }
+    };
+  }, [currentChannel, schedules, currentVideo]);
 
-  // Play next video in playlist (for when video ends naturally or on error)
-  const playNextVideo = useCallback(() => {
-    if (playlistRef.current.length === 0) return;
-    const nextIndex = (indexRef.current + 1) % playlistRef.current.length;
-    console.log(`Skipping to next video: index ${nextIndex}`);
-    setCurrentVideoIndex(nextIndex);
-    setSeekTime(0); // Start next video from beginning
-  }, []);
-
-  // Handle uploaded video ending
-  const handleUploadedVideoEnd = () => {
-    playNextVideo();
+  const loadChannelsAndSchedules = async () => {
+    try {
+      setLoading(true);
+      
+      // Load schedules from the public endpoint
+      const scheduleResponse = await axios.get(`${BACKEND_URL}/api/schedule/live`);
+      const { schedules: scheduleList, date } = scheduleResponse.data;
+      
+      setScheduleDate(date);
+      
+      // Convert to map
+      const scheduleMap = {};
+      const channelList = [];
+      
+      for (const schedule of scheduleList) {
+        scheduleMap[schedule.channel_id] = schedule;
+        channelList.push({
+          id: schedule.channel_id,
+          name: schedule.channel_name,
+          thumbnail: schedule.channel_thumbnail,
+          videos: schedule.videos,
+          schedule: schedule
+        });
+      }
+      
+      setSchedules(scheduleMap);
+      setChannels(channelList);
+      
+      // Select first channel
+      if (channelList.length > 0 && !currentChannel) {
+        selectChannel(channelList[0], scheduleMap);
+      }
+    } catch (error) {
+      console.error('Failed to load schedules:', error);
+      toast.error('Failed to load channels');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // Initialize YouTube player when video changes - starts at live position
+  const selectChannel = (channel, scheduleMap = schedules) => {
+    setCurrentChannel(channel);
+    
+    const schedule = scheduleMap[channel.id];
+    if (schedule) {
+      const { video, seekTime: newSeekTime } = getCurrentVideoFromSchedule(schedule);
+      setCurrentVideo(video);
+      setSeekTime(newSeekTime);
+    }
+    
+    // Track view
+    try {
+      analyticsAPI.recordView(channel.id, getViewerId());
+    } catch (e) {}
+  };
+
+  const isUploadedVideo = currentVideo && (currentVideo.video_url || !currentVideo.youtube_id);
+
+  // Initialize YouTube player when video changes
   useEffect(() => {
     if (!currentVideo?.youtube_id || isUploadedVideo) return;
     
@@ -197,505 +219,472 @@ const LiveTV = () => {
 
     let errorTimeout = null;
 
-    // Wait for YT API to load
     const initPlayer = () => {
       if (!window.YT || !window.YT.Player) {
         setTimeout(initPlayer, 100);
         return;
       }
 
-      youtubePlayerRef.current = new window.YT.Player('youtube-player', {
+      const container = document.getElementById('youtube-player');
+      if (!container) return;
+      
+      container.innerHTML = '';
+      
+      const playerDiv = document.createElement('div');
+      playerDiv.id = 'yt-player-instance';
+      container.appendChild(playerDiv);
+
+      youtubePlayerRef.current = new window.YT.Player('yt-player-instance', {
         videoId: currentVideo.youtube_id,
         playerVars: {
           autoplay: 1,
-          mute: isMuted ? 1 : 0,
-          start: seekTime, // Start at live position
-          rel: 0,
+          controls: 1,
+          start: Math.floor(seekTime),
           modestbranding: 1,
+          rel: 0,
+          fs: 1,
           playsinline: 1,
         },
         events: {
           onReady: (event) => {
-            // Set a timeout - if video doesn't start playing within 5 seconds, skip it
-            errorTimeout = setTimeout(() => {
-              const state = event.target.getPlayerState();
-              // -1 = unstarted, 5 = video cued (not playing)
-              if (state === -1 || state === 5) {
-                console.log('Video not playing, skipping...');
-                playNextVideo();
-              }
-            }, 5000);
+            if (isMuted) {
+              event.target.mute();
+            }
+            // Seek to live position
+            event.target.seekTo(seekTime, true);
+            event.target.playVideo();
+            
+            // Clear error timeout
+            if (errorTimeout) {
+              clearTimeout(errorTimeout);
+            }
           },
           onStateChange: (event) => {
-            // Clear error timeout if video starts playing
-            if (event.data === 1) { // YT.PlayerState.PLAYING
-              if (errorTimeout) {
-                clearTimeout(errorTimeout);
-                errorTimeout = null;
-              }
-            }
-            // YT.PlayerState.ENDED = 0
-            if (event.data === 0) {
-              playNextVideo();
+            // Video ended
+            if (event.data === window.YT.PlayerState.ENDED) {
+              // Schedule will handle next video automatically
             }
           },
           onError: (event) => {
-            // Skip to next video on error
-            if (errorTimeout) {
-              clearTimeout(errorTimeout);
-              errorTimeout = null;
-            }
-            console.log('YouTube error:', event.data);
-            playNextVideo();
+            console.error('YouTube error:', event.data);
+            // Schedule will handle next video
           }
         }
       });
+
+      // Timeout for unavailable videos
+      errorTimeout = setTimeout(() => {
+        console.log('Video timeout - may be unavailable');
+      }, 10000);
     };
 
     initPlayer();
 
     return () => {
-      if (errorTimeout) {
-        clearTimeout(errorTimeout);
-      }
-      if (youtubePlayerRef.current) {
-        try {
-          youtubePlayerRef.current.destroy();
-        } catch (e) {}
-        youtubePlayerRef.current = null;
-      }
+      if (errorTimeout) clearTimeout(errorTimeout);
     };
-  }, [currentVideo?.youtube_id, isUploadedVideo, isMuted, seekTime, playNextVideo]);
+  }, [currentVideo, seekTime, isMuted, isUploadedVideo]);
 
-  // Handle uploaded video playback - starts at live position
+  // Handle uploaded video
   useEffect(() => {
-    if (isUploadedVideo && videoRef.current) {
-      const video = videoRef.current;
-      video.currentTime = seekTime; // Start at live position
-      video.muted = isMuted;
-      video.play().catch(() => {});
-    }
-  }, [currentVideoIndex, isUploadedVideo, isMuted, seekTime]);
+    if (!isUploadedVideo || !currentVideo || !videoRef.current) return;
+    
+    const video = videoRef.current;
+    video.currentTime = seekTime;
+    video.play().catch(e => console.log('Autoplay blocked:', e));
+  }, [currentVideo, seekTime, isUploadedVideo]);
 
-  const loadChannels = async () => {
-    try {
-      const response = await channelsAPI.getAll({});
-      const activeChannels = response.data.filter(c => c.videos?.length > 0);
-      setChannels(activeChannels);
-      
-      if (activeChannels.length > 0) {
-        selectChannel(activeChannels[0]);
+  const toggleMute = () => {
+    setIsMuted(!isMuted);
+    if (youtubePlayerRef.current) {
+      if (isMuted) {
+        youtubePlayerRef.current.unMute();
+      } else {
+        youtubePlayerRef.current.mute();
       }
-    } catch (error) {
-      console.error('Failed to load channels:', error);
-    } finally {
-      setLoading(false);
     }
-  };
-
-  const selectChannel = useCallback((channel) => {
-    // Calculate live position - where should we be in this channel right now?
-    const { videoIndex, seekTime: startTime, playlist } = calculateLivePosition(
-      channel.videos, 
-      channel.random_play
-    );
-    setCurrentChannel(channel);
-    setPlaylistVideos(playlist);
-    setCurrentVideoIndex(videoIndex);
-    setSeekTime(startTime); // Start at the live position
-    
-    // Record view for analytics
-    try {
-      analyticsAPI.recordView(channel.id, getViewerId());
-    } catch (e) {
-      // Silently fail - don't interrupt viewing experience
+    if (videoRef.current) {
+      videoRef.current.muted = !isMuted;
     }
-  }, []);
-
-  const changeChannel = (direction) => {
-    if (channels.length === 0) return;
-    
-    const currentIndex = channels.findIndex(c => c.id === currentChannel?.id);
-    let newIndex;
-    
-    if (direction === 'up') {
-      newIndex = currentIndex <= 0 ? channels.length - 1 : currentIndex - 1;
-    } else {
-      newIndex = currentIndex >= channels.length - 1 ? 0 : currentIndex + 1;
-    }
-    
-    selectChannel(channels[newIndex]);
   };
 
   const toggleFullscreen = () => {
-    if (playerRef.current) {
-      if (document.fullscreenElement) {
-        document.exitFullscreen();
-      } else {
-        playerRef.current.requestFullscreen();
-      }
+    const player = playerRef.current;
+    if (!player) return;
+    
+    if (document.fullscreenElement) {
+      document.exitFullscreen();
+    } else {
+      player.requestFullscreen();
     }
   };
 
   // Keyboard controls
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        changeChannel('up');
-      } else if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        changeChannel('down');
-      } else if (e.key === 'm') {
-        setIsMuted(prev => !prev);
-      } else if (e.key === 'g') {
-        setShowChannelList(prev => !prev);
-      } else if (e.key === 'a' && isAdmin) {
-        setShowAdminPanel(prev => !prev);
+      if (e.target.tagName === 'INPUT') return;
+      
+      switch (e.key) {
+        case 'ArrowUp':
+          e.preventDefault();
+          const prevIndex = channels.findIndex(c => c.id === currentChannel?.id);
+          if (prevIndex > 0) selectChannel(channels[prevIndex - 1]);
+          break;
+        case 'ArrowDown':
+          e.preventDefault();
+          const nextIndex = channels.findIndex(c => c.id === currentChannel?.id);
+          if (nextIndex < channels.length - 1) selectChannel(channels[nextIndex + 1]);
+          break;
+        case 'm':
+        case 'M':
+          toggleMute();
+          break;
+        case 'f':
+        case 'F':
+          toggleFullscreen();
+          break;
+        case 'l':
+        case 'L':
+          setShowChannelList(prev => !prev);
+          break;
+        case 'a':
+        case 'A':
+          if (isAdmin) setShowAdminPanel(prev => !prev);
+          break;
+        default:
+          break;
       }
     };
     
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [channels, currentChannel, isAdmin]);
+  }, [channels, currentChannel, isAdmin, isMuted]);
+
+  const formatTime = (date) => {
+    return date.toLocaleTimeString('en-US', { 
+      hour: 'numeric', 
+      minute: '2-digit',
+      hour12: true,
+      timeZone: 'America/New_York'
+    });
+  };
+
+  const formatScheduleTime = (timeStr) => {
+    if (!timeStr) return '';
+    const [h, m] = timeStr.split(':').map(Number);
+    const hour = h % 12 || 12;
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    return `${hour}:${m.toString().padStart(2, '0')} ${ampm}`;
+  };
+
+  // Get upcoming videos from schedule
+  const getUpcomingVideos = () => {
+    if (!currentChannel || !schedules[currentChannel.id]) return [];
+    
+    const schedule = schedules[currentChannel.id];
+    const { videoIndex } = getCurrentVideoFromSchedule(schedule);
+    
+    // Return next 3 videos
+    const upcoming = [];
+    for (let i = 1; i <= 3; i++) {
+      const idx = (videoIndex + i) % schedule.videos.length;
+      upcoming.push(schedule.videos[idx]);
+    }
+    return upcoming;
+  };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center" style={{ minHeight: 'calc(100vh - 100px)' }}>
+      <div className="min-h-screen bg-black flex items-center justify-center">
         <div className="text-center">
-          <Tv size={48} className="mx-auto mb-4 text-primary animate-pulse" />
+          <Radio size={48} className="mx-auto mb-4 text-primary animate-pulse" />
           <p className="text-gray-400">Loading Live TV...</p>
         </div>
       </div>
     );
   }
 
-  // Build uploaded video URL
-  const uploadedVideoUrl = currentVideo?.video_url 
-    ? `${BACKEND_URL}${currentVideo.video_url}`
-    : null;
+  const upcomingVideos = getUpcomingVideos();
 
   return (
-    <div className="px-4 md:px-8 py-4" data-testid="live-tv-page">
-      <div className="flex gap-4" style={{ height: 'calc(100vh - 140px)' }}>
-        {/* Channel List Sidebar */}
-        {showChannelList && (
-          <div className="w-64 bg-surface rounded-lg border border-white/10 flex flex-col overflow-hidden flex-shrink-0">
-            <div className="p-4 border-b border-white/10">
-              <h2 className="font-heading text-lg tracking-wide flex items-center gap-2">
-                <Radio size={18} className="text-primary" />
-                CHANNELS
-              </h2>
-              <p className="text-xs text-gray-500 mt-1">
-                {channels.length} channels • ↑↓ to switch
-              </p>
-            </div>
-            
-            <div className="flex-1 overflow-y-auto">
-              {channels.map((channel, index) => (
-                <button
-                  key={channel.id}
-                  onClick={() => selectChannel(channel)}
-                  className={`w-full p-3 flex items-center gap-3 text-left transition-all border-l-2 ${
-                    currentChannel?.id === channel.id
-                      ? 'bg-primary/20 border-l-primary'
-                      : 'hover:bg-white/5 border-l-transparent'
-                  }`}
-                  data-testid={`channel-btn-${channel.id}`}
-                >
-                  <div className="w-8 h-8 rounded bg-black/50 flex items-center justify-center text-sm font-bold text-primary flex-shrink-0">
-                    {index + 1}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h4 className="font-medium text-sm truncate flex items-center gap-1">
-                      {channel.name}
-                      {channel.random_play && (
-                        <Shuffle size={12} className="text-purple-400 flex-shrink-0" />
-                      )}
-                    </h4>
-                    <p className="text-xs text-gray-500 truncate">{channel.category}</p>
-                  </div>
-                  {currentChannel?.id === channel.id && (
-                    <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse flex-shrink-0" />
-                  )}
-                </button>
-              ))}
-            </div>
-            
-            {/* Admin Controls at bottom */}
-            {isAdmin && (
-              <div className="p-3 border-t border-white/10">
-                <Button
-                  size="sm"
-                  onClick={() => setShowAdminPanel(!showAdminPanel)}
-                  className={`w-full ${showAdminPanel ? 'bg-primary' : 'bg-white/10'}`}
-                >
-                  <Settings size={14} className="mr-2" />
-                  Admin Panel
-                </Button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Main Content */}
-        <div className="flex-1 flex flex-col gap-4 min-w-0">
-          {/* Video Player */}
-          <div 
-            ref={playerRef}
-            className="relative bg-black rounded-lg overflow-hidden group"
-            style={{ aspectRatio: '16/9', maxHeight: 'calc(100vh - 300px)' }}
-          >
-            {currentVideo ? (
-              <>
-                {/* Uploaded Video Player */}
-                {isUploadedVideo && uploadedVideoUrl ? (
-                  <video
-                    ref={videoRef}
-                    src={uploadedVideoUrl}
-                    className="absolute inset-0 w-full h-full object-contain"
-                    autoPlay
-                    muted={isMuted}
-                    onEnded={handleUploadedVideoEnd}
-                    playsInline
-                    data-testid="live-uploaded-video"
-                  />
-                ) : currentVideo.youtube_id ? (
-                  /* YouTube Player using IFrame API - plays to completion */
-                  <div 
-                    id="youtube-player" 
-                    className="absolute inset-0 w-full h-full"
-                    data-testid="live-youtube-video"
-                  />
-                ) : (
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <p className="text-gray-400">Video not available</p>
-                  </div>
-                )}
-
-                {/* LIVE Badge */}
-                <div className="absolute top-4 left-4 flex items-center gap-2 bg-red-600 px-3 py-1 rounded z-10">
-                  <span className="w-2 h-2 bg-white rounded-full animate-pulse" />
-                  <span className="text-xs font-bold tracking-wider">LIVE</span>
-                </div>
-
-                {/* Current Time */}
-                <div className="absolute top-4 right-4 bg-black/70 px-3 py-1 rounded text-sm z-10">
-                  <Clock size={14} className="inline mr-1" />
-                  {currentTime.toLocaleTimeString()}
-                </div>
-
-                {/* Video Info Overlay */}
-                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent p-4">
-                  <h3 className="font-heading text-xl md:text-2xl">{currentChannel?.name}</h3>
-                  <p className="text-sm text-gray-300">{currentVideo?.title}</p>
-                </div>
-
-                {/* Controls */}
-                <div className="absolute bottom-4 right-4 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => setIsMuted(!isMuted)}
-                    className="bg-black/50 hover:bg-black/70"
-                  >
-                    {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={toggleFullscreen}
-                    className="bg-black/50 hover:bg-black/70"
-                  >
-                    <Maximize size={18} />
-                  </Button>
-                  {isAdmin && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => navigate(`/edit/${currentChannel?.id}`)}
-                      className="bg-black/50 hover:bg-primary/70"
-                    >
-                      <Edit size={18} />
-                    </Button>
-                  )}
-                </div>
-
-                {/* Channel Navigation */}
-                <div className="absolute right-4 top-1/2 -translate-y-1/2 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => changeChannel('up')}
-                    className="bg-black/50 hover:bg-black/70"
-                  >
-                    <ChevronUp size={18} />
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => changeChannel('down')}
-                    className="bg-black/50 hover:bg-black/70"
-                  >
-                    <ChevronDown size={18} />
-                  </Button>
-                </div>
-              </>
-            ) : (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="text-center">
-                  <Radio size={48} className="mx-auto mb-4 text-gray-600" />
-                  <p className="text-gray-400">No channel selected</p>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Playlist Bar */}
-          <div className="bg-surface rounded-lg border border-white/10 p-4">
-            <div className="flex items-center gap-2 mb-3">
-              <Clock size={16} className="text-primary" />
-              <h3 className="font-heading text-sm tracking-wide">UP NEXT</h3>
-              <span className="text-xs text-gray-500 ml-auto">{currentChannel?.name}</span>
-            </div>
-            
-            <div className="flex gap-2 overflow-x-auto pb-2 hide-scrollbar">
-              {playlistVideos.slice(currentVideoIndex, currentVideoIndex + 10).map((video, index) => (
-                <div
-                  key={video.id}
-                  className={`flex-shrink-0 p-3 rounded-lg min-w-[150px] transition-all ${
-                    index === 0
-                      ? 'bg-primary/20 border border-primary/50'
-                      : 'bg-black/30 border border-white/5'
-                  }`}
-                >
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-xs font-medium">#{currentVideoIndex + index + 1}</span>
-                    {index === 0 && (
-                      <span className="text-[10px] bg-red-600 px-1.5 py-0.5 rounded font-bold">NOW</span>
-                    )}
-                  </div>
-                  <p className="text-sm truncate">{video.title}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Admin Panel Sidebar */}
-        {isAdmin && showAdminPanel && (
-          <div className="w-80 bg-surface rounded-lg border border-white/10 flex flex-col overflow-hidden flex-shrink-0">
-            <div className="p-4 border-b border-white/10 flex items-center justify-between">
-              <h2 className="font-heading text-lg tracking-wide flex items-center gap-2">
-                <Settings size={18} className="text-primary" />
-                ADMIN PANEL
+    <div className="min-h-screen bg-black text-white flex" data-testid="live-tv-page">
+      {/* Channel Sidebar */}
+      {showChannelList && (
+        <div className="w-72 bg-[#0a0a0f] border-r border-white/10 flex flex-col h-screen overflow-hidden">
+          {/* Header */}
+          <div className="p-4 border-b border-white/10">
+            <div className="flex items-center justify-between">
+              <h2 className="font-bold text-lg flex items-center gap-2">
+                <Tv size={20} className="text-primary" />
+                Channels
               </h2>
               <Button
-                size="sm"
                 variant="ghost"
-                onClick={() => setShowAdminPanel(false)}
+                size="icon"
+                onClick={() => setShowChannelList(false)}
+                className="h-8 w-8"
               >
                 <X size={16} />
               </Button>
             </div>
-            
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              {/* Current Channel Info */}
-              {currentChannel && (
-                <div className="space-y-3">
-                  <h3 className="text-sm font-medium text-gray-400">Current Channel</h3>
-                  <div className="bg-black/30 rounded-lg p-3">
-                    <p className="font-semibold">{currentChannel.name}</p>
-                    <p className="text-xs text-gray-500">{currentChannel.category}</p>
-                    <div className="flex gap-2 mt-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => navigate(`/edit/${currentChannel.id}`)}
-                        className="flex-1 border-white/20 text-xs"
-                      >
-                        <Edit size={12} className="mr-1" />
-                        Edit Channel
-                      </Button>
-                    </div>
-                  </div>
-                  
-                  {/* Videos in Channel */}
-                  <h3 className="text-sm font-medium text-gray-400 mt-4">
-                    Videos ({playlistVideos.length || 0})
-                    {currentChannel.random_play && <Shuffle size={12} className="inline ml-2 text-purple-400" />}
-                  </h3>
-                  <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                    {playlistVideos.map((video, index) => (
-                      <div
-                        key={video.id}
-                        className={`bg-black/30 rounded-lg p-2 flex items-center gap-2 ${
-                          index === currentVideoIndex ? 'ring-1 ring-primary' : ''
-                        }`}
-                      >
-                        <span className="w-5 text-center text-xs text-gray-500">{index + 1}</span>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-medium truncate">{video.title}</p>
-                          <p className="text-[10px] text-gray-500">
-                            {index === currentVideoIndex && (
-                              <span className="text-red-400">• Playing</span>
-                            )}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+            <div className="flex items-center gap-2 mt-2 text-xs text-gray-400">
+              <Calendar size={12} />
+              <span>Schedule: {scheduleDate} (ET)</span>
+            </div>
+          </div>
+          
+          {/* Channel List */}
+          <div className="flex-1 overflow-y-auto">
+            {channels.map((channel, index) => {
+              const isActive = currentChannel?.id === channel.id;
+              const schedule = schedules[channel.id];
+              const { video: nowPlaying } = schedule ? getCurrentVideoFromSchedule(schedule) : {};
               
-              {/* Quick Actions */}
-              <div className="pt-4 border-t border-white/10 space-y-2">
-                <h3 className="text-sm font-medium text-gray-400">Quick Actions</h3>
-                <Button
-                  size="sm"
-                  onClick={() => navigate('/create')}
-                  className="w-full bg-primary hover:bg-primary-hover text-xs"
+              return (
+                <button
+                  key={channel.id}
+                  onClick={() => selectChannel(channel)}
+                  className={`w-full p-3 flex items-center gap-3 transition-colors ${
+                    isActive 
+                      ? 'bg-primary/20 border-l-2 border-primary' 
+                      : 'hover:bg-white/5 border-l-2 border-transparent'
+                  }`}
+                  data-testid={`channel-${channel.id}`}
                 >
-                  <Plus size={14} className="mr-1" />
-                  Create New Channel
-                </Button>
+                  <div className="relative">
+                    {channel.thumbnail ? (
+                      <img 
+                        src={channel.thumbnail} 
+                        alt={channel.name}
+                        className="w-12 h-12 rounded object-cover"
+                      />
+                    ) : (
+                      <div className="w-12 h-12 rounded bg-primary/20 flex items-center justify-center">
+                        <Tv size={20} className="text-primary" />
+                      </div>
+                    )}
+                    {isActive && (
+                      <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-pulse" />
+                    )}
+                  </div>
+                  <div className="flex-1 text-left min-w-0">
+                    <p className="font-medium text-sm truncate">{channel.name}</p>
+                    {nowPlaying && (
+                      <p className="text-xs text-gray-500 truncate">
+                        {isActive ? (
+                          <span className="text-red-400">Now: {nowPlaying.title}</span>
+                        ) : (
+                          nowPlaying.title
+                        )}
+                      </p>
+                    )}
+                  </div>
+                  <span className="text-xs text-gray-600">{index + 1}</span>
+                </button>
+              );
+            })}
+          </div>
+          
+          {/* Keyboard shortcuts */}
+          <div className="p-3 border-t border-white/10 text-xs text-gray-500">
+            <p>↑↓ Switch • M Mute • F Fullscreen</p>
+          </div>
+        </div>
+      )}
+
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col">
+        {/* Video Player */}
+        <div className="flex-1 relative bg-black" ref={playerRef}>
+          {/* Toggle channel list button */}
+          {!showChannelList && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setShowChannelList(true)}
+              className="absolute top-4 left-4 z-20 bg-black/50 hover:bg-black/70"
+            >
+              <List size={20} />
+            </Button>
+          )}
+
+          {/* YouTube Player */}
+          {currentVideo?.youtube_id && !isUploadedVideo && (
+            <div id="youtube-player" className="w-full h-full" />
+          )}
+
+          {/* Uploaded Video Player */}
+          {isUploadedVideo && currentVideo && (
+            <video
+              ref={videoRef}
+              src={`${BACKEND_URL}${currentVideo.video_url || `/api/videos/${currentVideo.youtube_id}`}`}
+              className="w-full h-full object-contain"
+              autoPlay
+              muted={isMuted}
+              playsInline
+            />
+          )}
+
+          {/* No video state */}
+          {!currentVideo && (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="text-center">
+                <Tv size={64} className="mx-auto mb-4 text-gray-600" />
+                <p className="text-gray-400">Select a channel to start watching</p>
+              </div>
+            </div>
+          )}
+
+          {/* Channel info overlay */}
+          {currentChannel && currentVideo && (
+            <div className="absolute top-4 right-4 bg-black/70 backdrop-blur-sm rounded-lg p-3 max-w-sm">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                <span className="text-xs text-red-400 font-medium">LIVE</span>
+                <span className="text-xs text-gray-400">
+                  {formatTime(getEasternTime())} ET
+                </span>
+              </div>
+              <p className="font-medium text-sm">{currentChannel.name}</p>
+              <p className="text-xs text-gray-400 truncate mt-1">{currentVideo.title}</p>
+              <p className="text-xs text-gray-500 mt-1">
+                {formatScheduleTime(currentVideo.start_time)} - {formatScheduleTime(currentVideo.end_time)}
+              </p>
+            </div>
+          )}
+
+          {/* Player controls */}
+          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
                 <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => navigate('/dashboard')}
-                  className="w-full border-white/20 text-xs"
+                  variant="ghost"
+                  size="icon"
+                  onClick={toggleMute}
+                  className="hover:bg-white/10"
                 >
-                  <Settings size={14} className="mr-1" />
-                  Go to Dashboard
+                  {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} />}
                 </Button>
+              </div>
+              
+              <div className="flex items-center gap-2">
+                {isAdmin && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowAdminPanel(!showAdminPanel)}
+                    className="hover:bg-white/10"
+                  >
+                    <Settings size={16} className="mr-1" />
+                    Admin
+                  </Button>
+                )}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={toggleFullscreen}
+                  className="hover:bg-white/10"
+                >
+                  <Maximize size={20} />
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Schedule Bar */}
+        {currentChannel && upcomingVideos.length > 0 && (
+          <div className="bg-[#0a0a0f] border-t border-white/10 p-3">
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2 text-xs text-gray-400 shrink-0">
+                <Clock size={14} />
+                <span>Up Next</span>
+              </div>
+              <div className="flex gap-3 overflow-x-auto">
+                {upcomingVideos.map((video, idx) => (
+                  <div 
+                    key={`${video.video_id}-${idx}`}
+                    className="flex items-center gap-2 bg-white/5 rounded px-2 py-1 shrink-0"
+                  >
+                    <span className="text-xs text-gray-500">
+                      {formatScheduleTime(video.start_time)}
+                    </span>
+                    <span className="text-xs text-gray-300 truncate max-w-[150px]">
+                      {video.title}
+                    </span>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
         )}
       </div>
 
-      {/* Bottom Controls Bar */}
-      <div className="mt-4 flex items-center justify-between text-xs text-gray-500">
-        <div className="flex items-center gap-4">
-          <span>Press <kbd className="px-1.5 py-0.5 bg-white/10 rounded text-[10px]">↑↓</kbd> to switch channels</span>
-          <span>Press <kbd className="px-1.5 py-0.5 bg-white/10 rounded text-[10px]">M</kbd> to mute</span>
-          <span>Press <kbd className="px-1.5 py-0.5 bg-white/10 rounded text-[10px]">G</kbd> to toggle guide</span>
-          {isAdmin && (
-            <span>Press <kbd className="px-1.5 py-0.5 bg-white/10 rounded text-[10px]">A</kbd> for admin panel</span>
-          )}
+      {/* Admin Panel */}
+      {showAdminPanel && isAdmin && (
+        <div className="w-80 bg-[#0a0a0f] border-l border-white/10 p-4 h-screen overflow-y-auto">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-bold flex items-center gap-2">
+              <Settings size={18} className="text-primary" />
+              Admin Panel
+            </h3>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setShowAdminPanel(false)}
+              className="h-8 w-8"
+            >
+              <X size={16} />
+            </Button>
+          </div>
+          
+          <div className="space-y-4">
+            <Button
+              onClick={() => navigate('/dashboard')}
+              className="w-full bg-primary hover:bg-primary/90"
+            >
+              <Settings size={16} className="mr-2" />
+              Dashboard
+            </Button>
+            
+            <Button
+              onClick={() => navigate('/schedule')}
+              variant="outline"
+              className="w-full border-cyan-500/50 text-cyan-400"
+            >
+              <Calendar size={16} className="mr-2" />
+              TV Guide
+            </Button>
+            
+            {currentChannel && (
+              <Button
+                onClick={() => navigate(`/edit/${currentChannel.id}`)}
+                variant="outline"
+                className="w-full"
+              >
+                <Edit size={16} className="mr-2" />
+                Edit Channel
+              </Button>
+            )}
+            
+            <Button
+              onClick={() => navigate('/create')}
+              variant="outline"
+              className="w-full"
+            >
+              <Plus size={16} className="mr-2" />
+              Create Channel
+            </Button>
+          </div>
+          
+          <div className="mt-6 p-3 bg-white/5 rounded-lg text-xs text-gray-400">
+            <p className="font-medium text-gray-300 mb-2">Schedule Info</p>
+            <p>Date: {scheduleDate}</p>
+            <p>Timezone: Eastern (ET)</p>
+            <p className="mt-2">Resets at midnight ET</p>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => setShowChannelList(!showChannelList)}
-            className="text-xs"
-          >
-            <List size={14} className="mr-1" />
-            {showChannelList ? 'Hide' : 'Show'} Channels
-          </Button>
-        </div>
-      </div>
+      )}
     </div>
   );
 };
