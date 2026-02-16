@@ -598,7 +598,7 @@ const LiveTV = () => {
         {/* Video Player */}
         <div className="flex-1 relative bg-black" ref={playerRef}>
           {/* Toggle channel list button */}
-          {!showChannelList && (
+          {!showChannelList && !isFullscreen && (
             <Button
               variant="ghost"
               size="icon"
@@ -609,21 +609,59 @@ const LiveTV = () => {
             </Button>
           )}
 
-          {/* YouTube Player */}
+          {/* YouTube Player Container */}
           {currentVideo?.youtube_id && !isUploadedVideo && (
-            <div id="youtube-player" className="w-full h-full" />
+            <div className={`relative ${isFullscreen ? 'w-full h-full' : 'w-full h-full'}`}>
+              {/* YouTube Player */}
+              <div 
+                id="youtube-player" 
+                className={`${isFullscreen ? 'w-full h-full' : 'w-full h-full'}`}
+              />
+              
+              {/* Lock Overlay - Prevents interaction with YouTube controls */}
+              <div 
+                className="absolute inset-0 z-10 cursor-default"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  showOSD();
+                }}
+                onDoubleClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  toggleFullscreen();
+                }}
+                data-testid="video-lock-overlay"
+              />
+            </div>
           )}
 
           {/* Uploaded Video Player */}
           {isUploadedVideo && currentVideo && (
-            <video
-              ref={videoRef}
-              src={`${BACKEND_URL}${currentVideo.video_url || `/api/videos/${currentVideo.youtube_id}`}`}
-              className="w-full h-full object-contain"
-              autoPlay
-              muted={isMuted}
-              playsInline
-            />
+            <div className="relative w-full h-full">
+              <video
+                ref={videoRef}
+                src={`${BACKEND_URL}${currentVideo.video_url || `/api/videos/${currentVideo.youtube_id}`}`}
+                className="w-full h-full object-contain"
+                autoPlay
+                muted={isMuted}
+                playsInline
+              />
+              {/* Lock Overlay for uploaded videos too */}
+              <div 
+                className="absolute inset-0 z-10 cursor-default"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  showOSD();
+                }}
+                onDoubleClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  toggleFullscreen();
+                }}
+              />
+            </div>
           )}
 
           {/* No video state */}
