@@ -854,10 +854,10 @@ const LiveTV = () => {
             </div>
           )}
 
-          {/* Channel Changer Remote */}
+          {/* Channel Changer Remote - Fades in/out */}
           {showChannelChanger && (
             <div 
-              className={`${isFullscreen ? 'fixed bottom-24 right-6' : 'absolute bottom-20 right-4'} z-50`} 
+              className={`${isFullscreen ? 'fixed bottom-24 right-6' : 'absolute bottom-20 right-4'} z-50 transition-opacity duration-300 ${controlsVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`} 
               data-testid="channel-changer"
             >
               <div className="bg-[#12121a]/95 backdrop-blur-sm border border-white/10 rounded-xl p-3 flex flex-col items-center gap-2">
