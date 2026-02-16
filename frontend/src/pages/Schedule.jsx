@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { 
@@ -9,10 +9,17 @@ import {
   Play,
   Tv,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  ZoomIn,
+  ZoomOut,
+  X,
+  Volume2,
+  VolumeX,
+  Maximize2
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import axios from 'axios';
+import YouTube from 'react-youtube';
 
 const api = axios.create({
   baseURL: process.env.REACT_APP_BACKEND_URL,
@@ -26,6 +33,14 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+// Zoom levels: hours visible at once
+const ZOOM_LEVELS = [
+  { hours: 3, label: '3h' },
+  { hours: 6, label: '6h' },
+  { hours: 12, label: '12h' },
+  { hours: 24, label: '24h' },
+];
+
 const Schedule = () => {
   const navigate = useNavigate();
   const { user, isAuthenticated, loading: authLoading } = useAuth();
@@ -33,23 +48,33 @@ const Schedule = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [currentDate, setCurrentDate] = useState('');
-  const [currentHour, setCurrentHour] = useState(new Date().getHours());
+  const [startHour, setStartHour] = useState(new Date().getHours());
+  const [zoomLevel, setZoomLevel] = useState(1); // Index into ZOOM_LEVELS (default 6h)
   const [visibleHours, setVisibleHours] = useState([]);
   const timelineRef = useRef(null);
+  
+  // Video player state
+  const [selectedVideo, setSelectedVideo] = useState(null);
+  const [selectedChannel, setSelectedChannel] = useState(null);
+  const [isMuted, setIsMuted] = useState(false);
+  const playerRef = useRef(null);
 
-  // Calculate visible hour range (6 hours at a time)
+  const hoursToShow = ZOOM_LEVELS[zoomLevel].hours;
+
+  // Calculate visible hour range based on zoom level
   useEffect(() => {
     const hours = [];
-    for (let i = 0; i < 6; i++) {
-      hours.push((currentHour + i) % 24);
+    for (let i = 0; i < hoursToShow; i++) {
+      hours.push((startHour + i) % 24);
     }
     setVisibleHours(hours);
-  }, [currentHour]);
+  }, [startHour, hoursToShow]);
 
-  // Update current time every minute
+  // Update current time every minute for live indicator
   useEffect(() => {
     const interval = setInterval(() => {
-      setCurrentHour(new Date().getHours());
+      // Force re-render for live indicator
+      setStartHour(prev => prev);
     }, 60000);
     return () => clearInterval(interval);
   }, []);
@@ -106,61 +131,173 @@ const Schedule = () => {
     return hour > 12 ? `${hour - 12} PM` : `${hour} AM`;
   };
 
-  const getVideosInTimeRange = (schedule, startHour, endHour) => {
+  const formatTimeWithMinutes = (hour, minutes) => {
+    const h = hour % 12 || 12;
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+    return `${h}:${minutes.toString().padStart(2, '0')} ${ampm}`;
+  };
+
+  // Get the current video that should be playing based on time
+  const getCurrentVideo = useCallback((schedule) => {
+    if (!schedule?.videos) return null;
+    
+    const now = new Date();
+    const currentSeconds = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
+    
+    for (const video of schedule.videos) {
+      const [startH, startM, startS] = video.start_time.split(':').map(Number);
+      const [endH, endM, endS] = video.end_time.split(':').map(Number);
+      const videoStart = startH * 3600 + startM * 60 + (startS || 0);
+      const videoEnd = endH * 3600 + endM * 60 + (endS || 0);
+      
+      if (currentSeconds >= videoStart && currentSeconds < videoEnd) {
+        const elapsedSeconds = currentSeconds - videoStart;
+        return { ...video, elapsedSeconds };
+      }
+    }
+    return null;
+  }, []);
+
+  // Play video at the synchronized position
+  const playVideoAtPosition = (video, channel) => {
+    const now = new Date();
+    const currentSeconds = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
+    const [startH, startM, startS] = video.start_time.split(':').map(Number);
+    const videoStart = startH * 3600 + startM * 60 + (startS || 0);
+    const elapsedSeconds = currentSeconds - videoStart;
+    
+    setSelectedVideo({ ...video, startAt: Math.max(0, elapsedSeconds) });
+    setSelectedChannel(channel);
+  };
+
+  // Handle clicking on a video block
+  const handleVideoClick = (video, schedule) => {
+    playVideoAtPosition(video, schedule);
+  };
+
+  // Handle clicking on channel to watch current live video
+  const handleChannelClick = (schedule) => {
+    const currentVideo = getCurrentVideo(schedule);
+    if (currentVideo) {
+      playVideoAtPosition(currentVideo, schedule);
+    }
+  };
+
+  const getVideosInTimeRange = (schedule, rangeStartHour, rangeEndHour) => {
     if (!schedule?.videos) return [];
     
     return schedule.videos.filter(video => {
-      const [videoStartH] = video.start_time.split(':').map(Number);
-      const [videoEndH] = video.end_time.split(':').map(Number);
+      const [videoStartH, videoStartM] = video.start_time.split(':').map(Number);
+      const [videoEndH, videoEndM] = video.end_time.split(':').map(Number);
+      const videoStartMinutes = videoStartH * 60 + videoStartM;
+      const videoEndMinutes = videoEndH * 60 + videoEndM;
+      const rangeStartMinutes = rangeStartHour * 60;
+      const rangeEndMinutes = rangeEndHour * 60;
       
-      // Check if video overlaps with the hour range
-      return (videoStartH >= startHour && videoStartH < endHour) ||
-             (videoStartH < startHour && videoEndH > startHour);
+      // Check if video overlaps with the time range
+      return (videoStartMinutes < rangeEndMinutes && videoEndMinutes > rangeStartMinutes);
     });
   };
 
-  const getVideoPosition = (video, hourStart) => {
+  const getVideoStyle = (video, cellStartHour, cellEndHour) => {
     const [startH, startM] = video.start_time.split(':').map(Number);
+    const [endH, endM] = video.end_time.split(':').map(Number);
+    
     const videoStartMinutes = startH * 60 + startM;
-    const hourStartMinutes = hourStart * 60;
+    const videoEndMinutes = endH * 60 + endM;
+    const cellStartMinutes = cellStartHour * 60;
+    const cellEndMinutes = cellEndHour * 60;
+    const cellDurationMinutes = cellEndMinutes - cellStartMinutes;
     
-    // Calculate left position within the hour cell
-    const offsetMinutes = Math.max(0, videoStartMinutes - hourStartMinutes);
-    const leftPercent = (offsetMinutes / 60) * 100;
+    // Calculate where video starts within this cell
+    const startInCell = Math.max(0, videoStartMinutes - cellStartMinutes);
+    const endInCell = Math.min(cellDurationMinutes, videoEndMinutes - cellStartMinutes);
     
-    // Calculate width
-    const durationMinutes = video.duration / 60;
-    const remainingInHour = 60 - offsetMinutes;
-    const widthMinutes = Math.min(durationMinutes, remainingInHour);
-    const widthPercent = Math.min((widthMinutes / 60) * 100, 100 - leftPercent);
+    const leftPercent = (startInCell / cellDurationMinutes) * 100;
+    const widthPercent = ((endInCell - startInCell) / cellDurationMinutes) * 100;
     
-    return { left: `${leftPercent}%`, width: `${Math.max(widthPercent, 5)}%` };
+    return { 
+      left: `${leftPercent}%`, 
+      width: `${Math.max(widthPercent, 2)}%`,
+    };
   };
 
   const getCurrentTimePosition = () => {
     const now = new Date();
     const hours = now.getHours();
     const mins = now.getMinutes();
+    const currentMinutes = hours * 60 + mins;
     
-    // Check if current time is in visible range
-    if (!visibleHours.includes(hours)) return null;
+    const startMinutes = startHour * 60;
+    const endMinutes = startMinutes + hoursToShow * 60;
     
-    const hourIndex = visibleHours.indexOf(hours);
-    const leftPercent = (hourIndex + mins / 60) * (100 / 6);
+    if (currentMinutes < startMinutes || currentMinutes >= endMinutes) return null;
     
-    return leftPercent;
+    const positionPercent = ((currentMinutes - startMinutes) / (hoursToShow * 60)) * 100;
+    return positionPercent;
   };
 
   const scrollHours = (direction) => {
+    const scrollAmount = Math.max(1, Math.floor(hoursToShow / 2));
     if (direction === 'left') {
-      setCurrentHour(prev => (prev - 3 + 24) % 24);
+      setStartHour(prev => (prev - scrollAmount + 24) % 24);
     } else {
-      setCurrentHour(prev => (prev + 3) % 24);
+      setStartHour(prev => (prev + scrollAmount) % 24);
     }
   };
 
   const goToNow = () => {
-    setCurrentHour(new Date().getHours());
+    setStartHour(new Date().getHours());
+  };
+
+  const zoomIn = () => {
+    if (zoomLevel > 0) {
+      setZoomLevel(prev => prev - 1);
+    }
+  };
+
+  const zoomOut = () => {
+    if (zoomLevel < ZOOM_LEVELS.length - 1) {
+      setZoomLevel(prev => prev + 1);
+    }
+  };
+
+  const closePlayer = () => {
+    setSelectedVideo(null);
+    setSelectedChannel(null);
+  };
+
+  const onPlayerReady = (event) => {
+    playerRef.current = event.target;
+    if (selectedVideo?.startAt) {
+      event.target.seekTo(selectedVideo.startAt, true);
+    }
+    if (isMuted) {
+      event.target.mute();
+    }
+  };
+
+  const toggleMute = () => {
+    if (playerRef.current) {
+      if (isMuted) {
+        playerRef.current.unMute();
+      } else {
+        playerRef.current.mute();
+      }
+      setIsMuted(!isMuted);
+    }
+  };
+
+  // Generate time markers for the header
+  const getTimeMarkers = () => {
+    const markers = [];
+    const interval = hoursToShow <= 6 ? 1 : hoursToShow <= 12 ? 2 : 3;
+    
+    for (let i = 0; i < hoursToShow; i += interval) {
+      const hour = (startHour + i) % 24;
+      markers.push({ hour, position: (i / hoursToShow) * 100 });
+    }
+    return markers;
   };
 
   if (authLoading || !user || loading) {
@@ -175,6 +312,7 @@ const Schedule = () => {
   }
 
   const currentTimePos = getCurrentTimePosition();
+  const timeMarkers = getTimeMarkers();
 
   return (
     <div className="min-h-screen bg-[#0a0a0f] text-white" data-testid="schedule-page">
@@ -202,7 +340,36 @@ const Schedule = () => {
             </div>
           </div>
           
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            {/* Zoom Controls */}
+            <div className="flex items-center gap-1 bg-white/5 rounded-lg p-1 mr-2">
+              <Button 
+                variant="ghost"
+                size="icon"
+                onClick={zoomIn}
+                disabled={zoomLevel === 0}
+                className="h-8 w-8 hover:bg-white/10"
+                title="Zoom in (show less time)"
+                data-testid="zoom-in-btn"
+              >
+                <ZoomIn size={16} />
+              </Button>
+              <span className="px-2 text-sm font-medium text-gray-300 min-w-[40px] text-center">
+                {ZOOM_LEVELS[zoomLevel].label}
+              </span>
+              <Button 
+                variant="ghost"
+                size="icon"
+                onClick={zoomOut}
+                disabled={zoomLevel === ZOOM_LEVELS.length - 1}
+                className="h-8 w-8 hover:bg-white/10"
+                title="Zoom out (show more time)"
+                data-testid="zoom-out-btn"
+              >
+                <ZoomOut size={16} />
+              </Button>
+            </div>
+
             <Button 
               variant="outline"
               size="sm"
@@ -227,57 +394,69 @@ const Schedule = () => {
         </div>
 
         {/* Time Navigation */}
-        <div className="flex items-center px-6 pb-4">
-          <div className="w-48 flex-shrink-0" />
+        <div className="flex items-center px-6 pb-3">
+          <div className="w-52 flex-shrink-0" />
           
           <div className="flex items-center flex-1">
             <Button
               variant="ghost"
               size="icon"
               onClick={() => scrollHours('left')}
-              className="hover:bg-white/10 mr-2"
+              className="hover:bg-white/10 mr-2 h-8 w-8"
               data-testid="scroll-left"
             >
-              <ChevronLeft size={20} />
+              <ChevronLeft size={18} />
             </Button>
             
-            <div className="flex-1 relative">
-              <div className="grid grid-cols-6 gap-px">
-                {visibleHours.map((hour, idx) => (
-                  <div 
-                    key={idx}
-                    className={`text-center py-2 text-sm font-medium border-b-2 ${
-                      hour === new Date().getHours() 
-                        ? 'text-red-400 border-red-500' 
-                        : 'text-gray-400 border-transparent'
-                    }`}
-                  >
-                    {formatTime(hour)}
+            <div className="flex-1 relative h-8">
+              {/* Time markers */}
+              {timeMarkers.map((marker, idx) => (
+                <div 
+                  key={idx}
+                  className="absolute top-0 bottom-0 flex items-center"
+                  style={{ left: `${marker.position}%` }}
+                >
+                  <div className={`text-xs font-medium whitespace-nowrap ${
+                    marker.hour === new Date().getHours() 
+                      ? 'text-red-400' 
+                      : 'text-gray-400'
+                  }`}>
+                    {formatTime(marker.hour)}
                   </div>
-                ))}
-              </div>
+                </div>
+              ))}
+              
+              {/* Current time indicator in header */}
+              {currentTimePos !== null && (
+                <div 
+                  className="absolute top-0 bottom-0 w-0.5 bg-red-500"
+                  style={{ left: `${currentTimePos}%` }}
+                />
+              )}
             </div>
             
             <Button
               variant="ghost"
               size="icon"
               onClick={() => scrollHours('right')}
-              className="hover:bg-white/10 ml-2"
+              className="hover:bg-white/10 ml-2 h-8 w-8"
               data-testid="scroll-right"
             >
-              <ChevronRight size={20} />
+              <ChevronRight size={18} />
             </Button>
           </div>
+          
+          <div className="w-10 flex-shrink-0" />
         </div>
       </div>
 
       {/* TV Guide Grid */}
       <div className="relative" ref={timelineRef}>
-        {/* Current Time Indicator */}
+        {/* Current Time Indicator Line */}
         {currentTimePos !== null && (
           <div 
             className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-10 pointer-events-none"
-            style={{ left: `calc(192px + ${currentTimePos}% * (100% - 192px - 56px) / 100)` }}
+            style={{ left: `calc(208px + (100% - 208px - 40px) * ${currentTimePos / 100})` }}
           >
             <div className="absolute -top-1 -left-1.5 w-3 h-3 bg-red-500 rounded-full" />
           </div>
@@ -285,100 +464,118 @@ const Schedule = () => {
 
         {/* Channel Rows */}
         <div className="divide-y divide-white/5">
-          {schedules.map((schedule) => (
-            <div 
-              key={schedule.channel_id} 
-              className="flex hover:bg-white/[0.02] transition-colors"
-              data-testid={`schedule-channel-${schedule.channel_id}`}
-            >
-              {/* Channel Info */}
-              <div className="w-48 flex-shrink-0 p-3 flex items-center gap-3 bg-[#12121a] border-r border-white/10">
-                {schedule.channel_thumbnail ? (
-                  <img 
-                    src={schedule.channel_thumbnail} 
-                    alt={schedule.channel_name}
-                    className="w-12 h-12 rounded object-cover"
-                  />
-                ) : (
-                  <div className="w-12 h-12 rounded bg-primary/20 flex items-center justify-center">
-                    <Tv size={20} className="text-primary" />
-                  </div>
-                )}
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-medium text-sm truncate">{schedule.channel_name}</h3>
-                  <p className="text-xs text-gray-500">{schedule.videos?.length || 0} videos</p>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => regenerateSchedule(schedule.channel_id)}
-                  disabled={refreshing}
-                  className="h-7 w-7 hover:bg-white/10"
-                  title="Shuffle schedule"
-                  data-testid={`regenerate-${schedule.channel_id}`}
+          {schedules.map((schedule) => {
+            const currentVideo = getCurrentVideo(schedule);
+            const isLive = currentVideo !== null;
+            
+            return (
+              <div 
+                key={schedule.channel_id} 
+                className="flex hover:bg-white/[0.02] transition-colors"
+                data-testid={`schedule-channel-${schedule.channel_id}`}
+              >
+                {/* Channel Info */}
+                <div 
+                  className="w-52 flex-shrink-0 p-3 flex items-center gap-3 bg-[#12121a] border-r border-white/10 cursor-pointer hover:bg-[#1a1a24] transition-colors"
+                  onClick={() => handleChannelClick(schedule)}
+                  title="Click to watch live"
                 >
-                  <RefreshCw size={12} className={refreshing ? 'animate-spin' : ''} />
-                </Button>
-              </div>
-
-              {/* Timeline Grid */}
-              <div className="flex-1 flex">
-                {visibleHours.map((hour, hourIdx) => {
-                  const videosInHour = getVideosInTimeRange(schedule, hour, hour + 1);
-                  const isCurrentHour = hour === new Date().getHours();
-                  
-                  return (
-                    <div 
-                      key={hourIdx}
-                      className={`flex-1 relative h-20 border-r border-white/5 ${
-                        isCurrentHour ? 'bg-red-500/5' : ''
-                      }`}
-                    >
-                      {videosInHour.slice(0, 3).map((video, vidIdx) => {
-                        const pos = getVideoPosition(video, hour);
-                        const colors = [
-                          'bg-gradient-to-r from-primary/80 to-primary/60',
-                          'bg-gradient-to-r from-purple-600/80 to-purple-600/60',
-                          'bg-gradient-to-r from-cyan-600/80 to-cyan-600/60',
-                          'bg-gradient-to-r from-amber-600/80 to-amber-600/60',
-                          'bg-gradient-to-r from-rose-600/80 to-rose-600/60',
-                        ];
-                        
-                        return (
-                          <div
-                            key={`${video.video_id}-${vidIdx}`}
-                            className={`absolute top-1 bottom-1 rounded overflow-hidden cursor-pointer group ${colors[vidIdx % colors.length]}`}
-                            style={{ left: pos.left, width: pos.width, minWidth: '40px' }}
-                            title={`${video.title}\n${video.start_time} - ${video.end_time}`}
-                          >
-                            <div className="absolute inset-0 p-1.5 flex flex-col justify-between">
-                              <p className="text-[10px] font-medium truncate leading-tight">
-                                {video.title}
-                              </p>
-                              <div className="flex items-center gap-1 text-[9px] text-white/70">
-                                <Clock size={8} />
-                                {video.start_time.slice(0, 5)}
-                              </div>
-                            </div>
-                            <div className="absolute inset-0 bg-white/0 group-hover:bg-white/10 transition-colors" />
-                          </div>
-                        );
-                      })}
-                      
-                      {videosInHour.length === 0 && (
-                        <div className="absolute inset-1 rounded bg-white/5 flex items-center justify-center">
-                          <span className="text-[10px] text-gray-600">-</span>
-                        </div>
+                  <div className="relative">
+                    {schedule.channel_thumbnail ? (
+                      <img 
+                        src={schedule.channel_thumbnail} 
+                        alt={schedule.channel_name}
+                        className="w-12 h-12 rounded object-cover"
+                      />
+                    ) : (
+                      <div className="w-12 h-12 rounded bg-primary/20 flex items-center justify-center">
+                        <Tv size={20} className="text-primary" />
+                      </div>
+                    )}
+                    {isLive && (
+                      <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-pulse" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-medium text-sm truncate">{schedule.channel_name}</h3>
+                    <p className="text-xs text-gray-500 truncate">
+                      {isLive ? (
+                        <span className="text-red-400">Now: {currentVideo.title}</span>
+                      ) : (
+                        `${schedule.videos?.length || 0} videos`
                       )}
-                    </div>
-                  );
-                })}
+                    </p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      regenerateSchedule(schedule.channel_id);
+                    }}
+                    disabled={refreshing}
+                    className="h-7 w-7 hover:bg-white/10"
+                    title="Shuffle schedule"
+                    data-testid={`regenerate-${schedule.channel_id}`}
+                  >
+                    <RefreshCw size={12} className={refreshing ? 'animate-spin' : ''} />
+                  </Button>
+                </div>
+
+                {/* Timeline - Single continuous row */}
+                <div className="flex-1 relative h-16 bg-[#0d0d12]">
+                  {/* Get all videos in the visible time range */}
+                  {getVideosInTimeRange(schedule, startHour, startHour + hoursToShow).map((video, vidIdx) => {
+                    const style = getVideoStyle(video, startHour, startHour + hoursToShow);
+                    const isCurrentlyPlaying = currentVideo?.video_id === video.video_id;
+                    const colors = [
+                      'from-primary/90 to-primary/70',
+                      'from-purple-600/90 to-purple-600/70',
+                      'from-cyan-600/90 to-cyan-600/70',
+                      'from-amber-600/90 to-amber-600/70',
+                      'from-rose-600/90 to-rose-600/70',
+                      'from-emerald-600/90 to-emerald-600/70',
+                    ];
+                    
+                    return (
+                      <div
+                        key={`${video.video_id}-${vidIdx}`}
+                        className={`absolute top-1 bottom-1 rounded cursor-pointer group transition-all
+                          bg-gradient-to-r ${colors[vidIdx % colors.length]}
+                          ${isCurrentlyPlaying ? 'ring-2 ring-red-500 ring-offset-1 ring-offset-[#0d0d12]' : ''}
+                        `}
+                        style={style}
+                        onClick={() => handleVideoClick(video, schedule)}
+                        title={`${video.title}\n${video.start_time} - ${video.end_time}\nClick to watch`}
+                      >
+                        <div className="absolute inset-0 p-1.5 flex flex-col justify-between overflow-hidden">
+                          <p className="text-[11px] font-medium truncate leading-tight">
+                            {video.title}
+                          </p>
+                          <div className="flex items-center justify-between text-[9px] text-white/80">
+                            <span className="flex items-center gap-0.5">
+                              <Clock size={8} />
+                              {video.start_time.slice(0, 5)}
+                            </span>
+                            {isCurrentlyPlaying && (
+                              <span className="flex items-center gap-0.5 text-red-300 font-medium">
+                                <div className="w-1.5 h-1.5 bg-red-400 rounded-full animate-pulse" />
+                                LIVE
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="absolute inset-0 bg-white/0 group-hover:bg-white/10 transition-colors rounded" />
+                      </div>
+                    );
+                  })}
+                </div>
+                
+                {/* Spacer for scroll buttons */}
+                <div className="w-10 flex-shrink-0" />
               </div>
-              
-              {/* Spacer for scroll buttons */}
-              <div className="w-14 flex-shrink-0" />
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         {/* Empty State */}
@@ -396,6 +593,103 @@ const Schedule = () => {
         )}
       </div>
 
+      {/* Video Player Modal */}
+      {selectedVideo && selectedChannel && (
+        <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4">
+          <div className="relative w-full max-w-5xl">
+            {/* Close button */}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={closePlayer}
+              className="absolute -top-12 right-0 hover:bg-white/10 text-white"
+              data-testid="close-player"
+            >
+              <X size={24} />
+            </Button>
+            
+            {/* Channel info */}
+            <div className="absolute -top-12 left-0 flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                {selectedChannel.channel_thumbnail ? (
+                  <img 
+                    src={selectedChannel.channel_thumbnail} 
+                    alt={selectedChannel.channel_name}
+                    className="w-8 h-8 rounded"
+                  />
+                ) : (
+                  <div className="w-8 h-8 rounded bg-primary/20 flex items-center justify-center">
+                    <Tv size={16} className="text-primary" />
+                  </div>
+                )}
+                <span className="font-medium">{selectedChannel.channel_name}</span>
+              </div>
+              <span className="text-gray-400">•</span>
+              <span className="text-gray-400 text-sm">{selectedVideo.title}</span>
+              <div className="flex items-center gap-1 text-red-400 text-sm">
+                <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                LIVE
+              </div>
+            </div>
+            
+            {/* YouTube Player */}
+            <div className="aspect-video bg-black rounded-lg overflow-hidden">
+              {selectedVideo.youtube_id ? (
+                <YouTube
+                  videoId={selectedVideo.youtube_id}
+                  opts={{
+                    width: '100%',
+                    height: '100%',
+                    playerVars: {
+                      autoplay: 1,
+                      start: Math.floor(selectedVideo.startAt || 0),
+                      controls: 1,
+                      modestbranding: 1,
+                      rel: 0,
+                    },
+                  }}
+                  onReady={onPlayerReady}
+                  className="w-full h-full"
+                  iframeClassName="w-full h-full"
+                />
+              ) : (
+                <video
+                  src={`${process.env.REACT_APP_BACKEND_URL}${selectedVideo.video_url}`}
+                  autoPlay
+                  controls
+                  className="w-full h-full"
+                  ref={(el) => {
+                    if (el && selectedVideo.startAt) {
+                      el.currentTime = selectedVideo.startAt;
+                    }
+                  }}
+                />
+              )}
+            </div>
+            
+            {/* Player controls */}
+            <div className="absolute -bottom-12 left-0 right-0 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={toggleMute}
+                  className="hover:bg-white/10 text-white"
+                >
+                  {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} />}
+                </Button>
+                <span className="text-sm text-gray-400">
+                  {selectedVideo.start_time.slice(0, 5)} - {selectedVideo.end_time.slice(0, 5)}
+                </span>
+              </div>
+              <div className="text-sm text-gray-400">
+                Click anywhere outside or press X to close
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Legend */}
       <div className="fixed bottom-4 left-1/2 -translate-x-1/2 bg-[#12121a] border border-white/10 rounded-full px-4 py-2 flex items-center gap-4 text-xs text-gray-400">
         <div className="flex items-center gap-1.5">
@@ -405,12 +699,13 @@ const Schedule = () => {
         <div className="w-px h-4 bg-white/20" />
         <div className="flex items-center gap-1.5">
           <Play size={12} className="text-primary" />
-          <span>Click to preview</span>
+          <span>Click video to watch</span>
         </div>
         <div className="w-px h-4 bg-white/20" />
         <div className="flex items-center gap-1.5">
-          <RefreshCw size={12} />
-          <span>Shuffle schedule</span>
+          <ZoomIn size={12} />
+          <ZoomOut size={12} />
+          <span>Zoom: {ZOOM_LEVELS[zoomLevel].label}</span>
         </div>
       </div>
     </div>
