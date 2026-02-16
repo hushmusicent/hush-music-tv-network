@@ -447,6 +447,10 @@ const LiveTV = () => {
       }
       
       switch (e.key) {
+        case ' ':  // Spacebar for play/pause
+          e.preventDefault();
+          togglePlayPause();
+          break;
         case 'ArrowUp':
           e.preventDefault();
           channelUp();
