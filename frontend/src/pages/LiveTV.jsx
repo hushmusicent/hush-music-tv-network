@@ -326,12 +326,15 @@ const LiveTV = () => {
         videoId: currentVideo.youtube_id,
         playerVars: {
           autoplay: 1,
-          controls: 1,
+          controls: 0,  // Hide YouTube controls - we have our own
           start: Math.floor(seekTime),
           modestbranding: 1,
           rel: 0,
-          fs: 1,
+          fs: 0,  // Disable YouTube's fullscreen button
           playsinline: 1,
+          disablekb: 1,  // Disable keyboard controls
+          iv_load_policy: 3,  // Hide video annotations
+          showinfo: 0,  // Hide video info
         },
         events: {
           onReady: (event) => {
