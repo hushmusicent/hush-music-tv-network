@@ -1044,6 +1044,14 @@ async def get_analytics(user: dict = Depends(require_user)):
 # ===================== 24-HOUR SCHEDULE =====================
 
 import random
+from zoneinfo import ZoneInfo
+
+# Eastern timezone for schedule resets at midnight ET
+EASTERN_TZ = ZoneInfo("America/New_York")
+
+def get_eastern_date():
+    """Get current date in Eastern time"""
+    return datetime.now(EASTERN_TZ).strftime("%Y-%m-%d")
 
 class ScheduledVideo(BaseModel):
     video_id: str
@@ -1062,6 +1070,30 @@ class ChannelSchedule(BaseModel):
     videos: List[ScheduledVideo]
     total_duration: int  # seconds
 
+async def get_or_create_schedule(channel: dict, date: str) -> dict:
+    """Get schedule from database or create if doesn't exist for the date"""
+    channel_id = channel.get("id", "")
+    
+    # Check if schedule exists for this channel and date
+    existing = await db.schedules.find_one(
+        {"channel_id": channel_id, "schedule_date": date},
+        {"_id": 0}
+    )
+    
+    if existing:
+        return existing
+    
+    # Generate new schedule for this date
+    schedule = generate_24h_schedule(channel, date)
+    
+    # Store in database
+    await db.schedules.insert_one(schedule)
+    
+    # Remove _id if added by MongoDB
+    schedule.pop("_id", None)
+    
+    return schedule
+
 @api_router.get("/schedule/channels")
 async def get_all_channel_schedules(user: dict = Depends(require_user)):
     """Get 24-hour schedules for all channels (admin only)"""
@@ -1069,14 +1101,14 @@ async def get_all_channel_schedules(user: dict = Depends(require_user)):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     channels = await db.channels.find({}, {"_id": 0}).to_list(100)
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    today = get_eastern_date()
     
     schedules = []
     for channel in channels:
         if not channel.get("videos"):
             continue
         
-        schedule = generate_24h_schedule(channel, today)
+        schedule = await get_or_create_schedule(channel, today)
         schedules.append(schedule)
     
     return {"date": today, "schedules": schedules}
@@ -1091,10 +1123,40 @@ async def get_channel_schedule(channel_id: str, user: dict = Depends(require_use
     if not channel:
         raise HTTPException(status_code=404, detail="Channel not found")
     
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    schedule = generate_24h_schedule(channel, today)
+    today = get_eastern_date()
+    schedule = await get_or_create_schedule(channel, today)
     
     return schedule
+
+# Public endpoint for Live TV - no auth required
+@api_router.get("/schedule/live")
+async def get_live_schedules():
+    """Get 24-hour schedules for all public channels (for Live TV)"""
+    channels = await db.channels.find({"is_public": True}, {"_id": 0}).to_list(100)
+    today = get_eastern_date()
+    
+    schedules = []
+    for channel in channels:
+        if not channel.get("videos"):
+            continue
+        
+        schedule = await get_or_create_schedule(channel, today)
+        schedules.append(schedule)
+    
+    return {"date": today, "timezone": "America/New_York", "schedules": schedules}
+
+# Public endpoint for single channel schedule
+@api_router.get("/schedule/live/{channel_id}")
+async def get_live_channel_schedule(channel_id: str):
+    """Get 24-hour schedule for a specific channel (for Live TV)"""
+    channel = await db.channels.find_one({"id": channel_id, "is_public": True}, {"_id": 0})
+    if not channel:
+        raise HTTPException(status_code=404, detail="Channel not found")
+    
+    today = get_eastern_date()
+    schedule = await get_or_create_schedule(channel, today)
+    
+    return {"date": today, "timezone": "America/New_York", "schedule": schedule}
 
 @api_router.post("/schedule/regenerate/{channel_id}")
 async def regenerate_channel_schedule(channel_id: str, user: dict = Depends(require_user)):
@@ -1106,9 +1168,17 @@ async def regenerate_channel_schedule(channel_id: str, user: dict = Depends(requ
     if not channel:
         raise HTTPException(status_code=404, detail="Channel not found")
     
+    today = get_eastern_date()
+    
+    # Delete existing schedule for today
+    await db.schedules.delete_one({"channel_id": channel_id, "schedule_date": today})
+    
     # Generate new random schedule
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     schedule = generate_24h_schedule(channel, today, force_random=True)
+    
+    # Store in database
+    await db.schedules.insert_one(schedule)
+    schedule.pop("_id", None)
     
     return schedule
 
