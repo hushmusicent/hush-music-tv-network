@@ -41,6 +41,11 @@ const ZOOM_LEVELS = [
   { hours: 24, label: '24h' },
 ];
 
+// Get current time in Eastern timezone
+const getEasternTime = () => {
+  return new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
+};
+
 const Schedule = () => {
   const navigate = useNavigate();
   const { user, isAuthenticated, loading: authLoading } = useAuth();
@@ -48,7 +53,7 @@ const Schedule = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [currentDate, setCurrentDate] = useState('');
-  const [startHour, setStartHour] = useState(new Date().getHours());
+  const [startHour, setStartHour] = useState(getEasternTime().getHours());
   const [zoomLevel, setZoomLevel] = useState(1); // Index into ZOOM_LEVELS (default 6h)
   const [visibleHours, setVisibleHours] = useState([]);
   const timelineRef = useRef(null);
