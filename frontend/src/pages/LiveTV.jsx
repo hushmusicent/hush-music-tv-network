@@ -110,7 +110,7 @@ const LiveTV = () => {
       clearTimeout(controlsTimeoutRef.current);
     }
     
-    // Set new timeout to hide controls
+    // Set new timeout to hide controls (only if not paused)
     controlsTimeoutRef.current = setTimeout(() => {
       if (!isPaused) {
         setControlsVisible(false);
@@ -124,22 +124,17 @@ const LiveTV = () => {
       showControls();
     };
 
-    const playerElement = playerRef.current;
-    if (playerElement) {
-      playerElement.addEventListener('mousemove', handleActivity);
-      playerElement.addEventListener('touchstart', handleActivity);
-      playerElement.addEventListener('click', handleActivity);
-    }
-
-    // Also listen on document for keyboard activity
+    // Listen on the whole document for mouse/touch activity
+    document.addEventListener('mousemove', handleActivity);
+    document.addEventListener('touchstart', handleActivity);
     document.addEventListener('keydown', handleActivity);
 
+    // Initial show
+    showControls();
+
     return () => {
-      if (playerElement) {
-        playerElement.removeEventListener('mousemove', handleActivity);
-        playerElement.removeEventListener('touchstart', handleActivity);
-        playerElement.removeEventListener('click', handleActivity);
-      }
+      document.removeEventListener('mousemove', handleActivity);
+      document.removeEventListener('touchstart', handleActivity);
       document.removeEventListener('keydown', handleActivity);
       if (controlsTimeoutRef.current) {
         clearTimeout(controlsTimeoutRef.current);
@@ -158,11 +153,6 @@ const LiveTV = () => {
       showControls();
     }
   }, [isPaused, showControls]);
-
-  // Initial show controls
-  useEffect(() => {
-    showControls();
-  }, [showControls]);
 
   // Track fullscreen state
   useEffect(() => {
