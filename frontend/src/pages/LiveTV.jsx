@@ -86,6 +86,7 @@ const LiveTV = () => {
   const [showChannelChanger, setShowChannelChanger] = useState(true);
   const [channelInput, setChannelInput] = useState('');
   const [showChannelOSD, setShowChannelOSD] = useState(false);
+  const [showPlayPauseOSD, setShowPlayPauseOSD] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const playerRef = useRef(null);
@@ -94,6 +95,7 @@ const LiveTV = () => {
   const scheduleCheckRef = useRef(null);
   const channelInputTimeoutRef = useRef(null);
   const osdTimeoutRef = useRef(null);
+  const playPauseOsdTimeoutRef = useRef(null);
 
   // Track fullscreen state
   useEffect(() => {
