@@ -710,12 +710,34 @@ const LiveTV = () => {
             </div>
           )}
 
+          {/* Play/Pause Indicator - Shows briefly when toggling */}
+          {showChannelOSD && currentVideo && (
+            <div className={`${isFullscreen ? 'fixed' : 'absolute'} top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 pointer-events-none`}>
+              <div className="bg-black/80 backdrop-blur-sm rounded-full p-6">
+                {isPaused ? (
+                  <Play size={48} className="text-white" fill="white" />
+                ) : (
+                  <Pause size={48} className="text-white" fill="white" />
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Channel info overlay */}
           {currentChannel && currentVideo && (
             <div className={`${isFullscreen ? 'fixed' : 'absolute'} top-4 right-4 bg-black/70 backdrop-blur-sm rounded-lg p-3 max-w-sm z-40`}>
               <div className="flex items-center gap-2 mb-2">
-                <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-                <span className="text-xs text-red-400 font-medium">LIVE</span>
+                {isPaused ? (
+                  <>
+                    <Pause size={12} className="text-yellow-400" />
+                    <span className="text-xs text-yellow-400 font-medium">PAUSED</span>
+                  </>
+                ) : (
+                  <>
+                    <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                    <span className="text-xs text-red-400 font-medium">LIVE</span>
+                  </>
+                )}
                 <span className="text-xs text-gray-400">
                   {formatTime(getEasternTime())} ET
                 </span>
