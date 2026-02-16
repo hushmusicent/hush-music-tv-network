@@ -346,6 +346,15 @@ const Dashboard = () => {
 
         <div className="flex gap-3">
           <Button
+            onClick={() => navigate('/schedule')}
+            variant="outline"
+            className="border-cyan-500/50 text-cyan-400 hover:bg-cyan-500/10"
+            data-testid="schedule-btn"
+          >
+            <Calendar size={18} className="mr-2" />
+            TV Guide
+          </Button>
+          <Button
             onClick={() => navigate('/analytics')}
             variant="outline"
             className="border-purple-500/50 text-purple-400 hover:bg-purple-500/10"
