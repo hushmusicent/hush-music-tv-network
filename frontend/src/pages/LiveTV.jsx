@@ -81,10 +81,15 @@ const LiveTV = () => {
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [scheduleDate, setScheduleDate] = useState('');
+  const [showChannelChanger, setShowChannelChanger] = useState(true);
+  const [channelInput, setChannelInput] = useState('');
+  const [showChannelOSD, setShowChannelOSD] = useState(false);
   const playerRef = useRef(null);
   const videoRef = useRef(null);
   const youtubePlayerRef = useRef(null);
   const scheduleCheckRef = useRef(null);
+  const channelInputTimeoutRef = useRef(null);
+  const osdTimeoutRef = useRef(null);
 
   // Load YouTube IFrame API
   useEffect(() => {
