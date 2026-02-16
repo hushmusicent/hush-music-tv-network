@@ -785,6 +785,157 @@ class TestImageUpload:
         )
 
 
+class TestScheduleEndpoints:
+    """24-Hour Schedule endpoints tests (TV Guide feature)"""
+    
+    @pytest.fixture
+    def auth_token(self):
+        response = requests.post(f"{BASE_URL}/api/auth/login", json={
+            "email": ADMIN_EMAIL,
+            "password": ADMIN_PASSWORD
+        })
+        return response.json()["access_token"]
+    
+    def test_get_all_channel_schedules(self, auth_token):
+        """GET /api/schedule/channels - Get 24-hour schedules for all channels"""
+        response = requests.get(
+            f"{BASE_URL}/api/schedule/channels",
+            headers={"Authorization": f"Bearer {auth_token}"}
+        )
+        assert response.status_code == 200, f"Failed to get schedules: {response.text}"
+        
+        data = response.json()
+        assert "date" in data
+        assert "schedules" in data
+        assert isinstance(data["schedules"], list)
+        
+        # Verify schedule structure for each channel
+        for schedule in data["schedules"]:
+            assert "channel_id" in schedule
+            assert "channel_name" in schedule
+            assert "videos" in schedule
+            assert isinstance(schedule["videos"], list)
+            
+            # Verify video schedule structure
+            if len(schedule["videos"]) > 0:
+                video = schedule["videos"][0]
+                assert "video_id" in video
+                assert "title" in video
+                assert "start_time" in video
+                assert "end_time" in video
+                assert "duration" in video
+        
+        print(f"SUCCESS: Retrieved 24h schedules for {len(data['schedules'])} channels")
+        return data
+    
+    def test_get_all_schedules_requires_admin(self):
+        """GET /api/schedule/channels requires admin authentication"""
+        response = requests.get(f"{BASE_URL}/api/schedule/channels")
+        assert response.status_code == 401
+        print("SUCCESS: Schedule endpoints require authentication")
+    
+    def test_get_single_channel_schedule(self, auth_token):
+        """GET /api/schedule/channel/{channel_id} - Get schedule for specific channel"""
+        # First get channels to find an ID
+        channels = requests.get(f"{BASE_URL}/api/channels").json()
+        if len(channels) == 0:
+            pytest.skip("No channels to test schedule")
+        
+        # Filter to channels with videos
+        channels_with_videos = [c for c in channels if len(c.get("videos", [])) > 0]
+        if len(channels_with_videos) == 0:
+            pytest.skip("No channels with videos to test schedule")
+        
+        channel_id = channels_with_videos[0]["id"]
+        
+        response = requests.get(
+            f"{BASE_URL}/api/schedule/channel/{channel_id}",
+            headers={"Authorization": f"Bearer {auth_token}"}
+        )
+        assert response.status_code == 200, f"Failed: {response.text}"
+        
+        data = response.json()
+        assert data["channel_id"] == channel_id
+        assert "videos" in data
+        assert "schedule_date" in data
+        assert "total_duration" in data
+        print(f"SUCCESS: Got schedule for channel {data['channel_name']} - {len(data['videos'])} scheduled videos")
+    
+    def test_get_nonexistent_channel_schedule(self, auth_token):
+        """GET /api/schedule/channel/{channel_id} - 404 for nonexistent channel"""
+        response = requests.get(
+            f"{BASE_URL}/api/schedule/channel/nonexistent-id-12345",
+            headers={"Authorization": f"Bearer {auth_token}"}
+        )
+        assert response.status_code == 404
+        print("SUCCESS: Nonexistent channel returns 404")
+    
+    def test_regenerate_channel_schedule(self, auth_token):
+        """POST /api/schedule/regenerate/{channel_id} - Regenerate schedule for a channel"""
+        # Get a channel with videos
+        channels = requests.get(f"{BASE_URL}/api/channels").json()
+        channels_with_videos = [c for c in channels if len(c.get("videos", [])) > 0]
+        if len(channels_with_videos) == 0:
+            pytest.skip("No channels with videos to test regenerate")
+        
+        channel_id = channels_with_videos[0]["id"]
+        
+        response = requests.post(
+            f"{BASE_URL}/api/schedule/regenerate/{channel_id}",
+            headers={"Authorization": f"Bearer {auth_token}"}
+        )
+        assert response.status_code == 200, f"Failed: {response.text}"
+        
+        data = response.json()
+        assert data["channel_id"] == channel_id
+        assert "videos" in data
+        assert len(data["videos"]) > 0
+        print(f"SUCCESS: Regenerated schedule for {data['channel_name']} - {len(data['videos'])} videos")
+    
+    def test_regenerate_nonexistent_channel(self, auth_token):
+        """POST /api/schedule/regenerate/{channel_id} - 404 for nonexistent channel"""
+        response = requests.post(
+            f"{BASE_URL}/api/schedule/regenerate/nonexistent-id-12345",
+            headers={"Authorization": f"Bearer {auth_token}"}
+        )
+        assert response.status_code == 404
+        print("SUCCESS: Regenerate nonexistent channel returns 404")
+    
+    def test_regenerate_requires_admin(self):
+        """POST /api/schedule/regenerate requires admin authentication"""
+        channels = requests.get(f"{BASE_URL}/api/channels").json()
+        if len(channels) > 0:
+            response = requests.post(f"{BASE_URL}/api/schedule/regenerate/{channels[0]['id']}")
+            assert response.status_code == 401
+            print("SUCCESS: Regenerate endpoint requires authentication")
+        else:
+            pytest.skip("No channels to test")
+    
+    def test_schedule_videos_cover_24_hours(self, auth_token):
+        """Verify schedule videos span full 24 hours"""
+        response = requests.get(
+            f"{BASE_URL}/api/schedule/channels",
+            headers={"Authorization": f"Bearer {auth_token}"}
+        )
+        
+        if response.status_code == 200:
+            data = response.json()
+            for schedule in data["schedules"]:
+                if len(schedule["videos"]) > 0:
+                    # Check first video starts at 00:00:00
+                    first_video = schedule["videos"][0]
+                    assert first_video["start_time"] == "00:00:00", f"First video doesn't start at midnight"
+                    
+                    # Check total duration is approximately 24 hours (86400 seconds)
+                    total_duration = schedule.get("total_duration", 0)
+                    assert total_duration >= 86400, f"Schedule doesn't cover 24 hours"
+                    
+                    print(f"SUCCESS: {schedule['channel_name']} schedule covers 24 hours ({len(schedule['videos'])} videos)")
+                    break  # Test one channel is enough
+            else:
+                pytest.skip("No channels with videos to verify")
+
+
 class TestFavorites:
     """Favorites functionality tests"""
     
