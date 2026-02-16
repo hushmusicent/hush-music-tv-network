@@ -902,8 +902,8 @@ const LiveTV = () => {
             </div>
           )}
 
-          {/* Player controls */}
-          <div className={`${isFullscreen ? 'fixed' : 'absolute'} bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4 z-40`}>
+          {/* Player controls - Fades in/out */}
+          <div className={`${isFullscreen ? 'fixed' : 'absolute'} bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4 z-40 transition-opacity duration-300 ${controlsVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Button
