@@ -597,9 +597,12 @@ const LiveTV = () => {
       )}
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col">
+      <div className={`flex-1 flex flex-col ${isFullscreen ? 'w-screen h-screen' : ''}`}>
         {/* Video Player */}
-        <div className="flex-1 relative bg-black" ref={playerRef}>
+        <div 
+          className={`flex-1 relative bg-black ${isFullscreen ? 'w-full h-full' : ''}`} 
+          ref={playerRef}
+        >
           {/* Toggle channel list button */}
           {!showChannelList && !isFullscreen && (
             <Button
