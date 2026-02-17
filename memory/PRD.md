@@ -184,12 +184,14 @@ The admin dashboard includes a "Delete Channel" button for each channel. Users c
   - Spiritual Channel (157 videos)
 
 ## Recent Changes (Feb 17, 2026)
-- **YouTube Age Restriction Handling** - Improved video playback reliability
+- **Video Cleanup System** - Comprehensive handling of unplayable videos
+  - **Auto-delete on failure**: When videos fail to play (age-restricted, deleted, private), they're automatically removed from the database
+  - **Admin cleanup button**: Dashboard has a "Run Cleanup" button to scan and delete all unplayable videos
+  - **Status check**: "Check Video Status" button scans all videos without deleting, showing counts
+  - **Deleted log**: View history of auto-deleted videos
   - Switched to `youtube-nocookie.com` for privacy-enhanced embedding
-  - Added auto-skip for unavailable/age-restricted videos (error codes 100, 101, 150)
-  - System tracks failed videos and finds the next playable one in the schedule
-  - Users see a toast notification when a video is skipped
-  - Failed video list clears when changing channels
+  - Failed video IDs tracked to prevent retry loops
+  - Toast notifications inform users when videos are skipped
 
 - **Auto-Hide Controls on Live TV** - Controls now fade out after 3 seconds of inactivity
   - Channel changer, info overlay, and player controls automatically hide when user is inactive
