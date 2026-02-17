@@ -1136,6 +1136,20 @@ const Dashboard = () => {
               </Button>
               
               <Button
+                onClick={updateVideoDurations}
+                disabled={cleanupLoading}
+                className="bg-blue-600 hover:bg-blue-700"
+                data-testid="update-durations-btn"
+              >
+                {cleanupLoading ? (
+                  <Loader2 size={16} className="mr-2 animate-spin" />
+                ) : (
+                  <Clock size={16} className="mr-2" />
+                )}
+                Fetch Durations
+              </Button>
+              
+              <Button
                 onClick={loadDeletedVideos}
                 variant="outline"
                 className="border-white/20"
