@@ -860,6 +860,42 @@ async def update_video_durations(user: dict = Depends(require_user), limit: int 
         "results": results
     }
 
+@api_router.post("/videos/update-duration")
+async def update_single_video_duration(
+    channel_id: str,
+    youtube_id: str,
+    duration: int
+):
+    """Update duration for a single video (called from frontend when video plays)"""
+    if duration <= 0:
+        return {"updated": False, "reason": "invalid_duration"}
+    
+    # Find the channel and update the video's duration
+    channel = await db.channels.find_one({"id": channel_id})
+    if not channel:
+        return {"updated": False, "reason": "channel_not_found"}
+    
+    videos = channel.get("videos", [])
+    updated = False
+    
+    for i, video in enumerate(videos):
+        if video.get("youtube_id") == youtube_id:
+            # Only update if current duration is a default value
+            current_duration = video.get("duration", 300)
+            if current_duration in [300, 180, 0] or abs(current_duration - duration) > 10:
+                videos[i]["duration"] = duration
+                updated = True
+                break
+    
+    if updated:
+        await db.channels.update_one(
+            {"id": channel_id},
+            {"$set": {"videos": videos}}
+        )
+        return {"updated": True, "new_duration": duration}
+    
+    return {"updated": False, "reason": "video_not_found_or_already_set"}
+
 # ===================== IMAGE UPLOAD ROUTES =====================
 
 class UploadedImageResponse(BaseModel):
