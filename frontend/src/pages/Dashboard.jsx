@@ -196,6 +196,22 @@ const Dashboard = () => {
     }
   };
 
+  const regenerateSchedules = async () => {
+    if (!window.confirm('This will regenerate schedules for all channels using current video durations. Continue?')) {
+      return;
+    }
+    
+    setCleanupLoading(true);
+    try {
+      const response = await videoCleanupAPI.regenerateSchedules();
+      toast.success(`Regenerated schedules for ${response.data.regenerated} channels`);
+    } catch (error) {
+      toast.error('Failed to regenerate schedules');
+    } finally {
+      setCleanupLoading(false);
+    }
+  };
+
   const toggleChannelExpanded = (channelId) => {
     setExpandedChannels(prev => ({
       ...prev,
