@@ -183,7 +183,14 @@ The admin dashboard includes a "Delete Channel" button for each channel. Users c
   - Biography Channel (64 videos)
   - Spiritual Channel (157 videos)
 
-## Recent Changes (Feb 16, 2026)
+## Recent Changes (Feb 17, 2026)
+- **Auto-Hide Controls on Live TV** - Controls now fade out after 3 seconds of inactivity
+  - Channel changer, info overlay, and player controls automatically hide when user is inactive
+  - Controls reappear on mouse movement, touch, or keyboard activity
+  - Controls remain visible when video is paused
+  - Smooth CSS fade animation (300ms transition)
+
+## Previous Changes (Feb 16, 2026)
 - **Schedule Synced with Live TV** - Schedule now persists and syncs across all viewers
   - Schedule is stored in database and resets only at midnight Eastern time
   - All viewers see the same video at the same time (synchronized playback)
