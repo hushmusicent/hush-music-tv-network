@@ -364,17 +364,35 @@ const LiveTV = () => {
     const schedule = schedules[currentChannel.id];
     const { videoIndex } = getCurrentVideoFromSchedule(schedule);
     
-    // Get next video
-    const nextIndex = (videoIndex + 1) % schedule.videos.length;
-    const nextVideo = schedule.videos[nextIndex];
-    
-    if (nextVideo) {
-      console.log('Skipping to next video:', nextVideo.title);
-      setCurrentVideo(nextVideo);
-      setSeekTime(0); // Start from beginning of next video
-      toast.info(`Skipped unavailable video, now playing: ${nextVideo.title}`);
+    // Mark current video as failed
+    if (currentVideo?.youtube_id) {
+      setFailedVideoIds(prev => new Set(prev).add(currentVideo.youtube_id));
     }
-  }, [currentChannel, schedules]);
+    
+    // Find next video that hasn't failed (try up to the total number of videos)
+    let nextIndex = videoIndex;
+    let attempts = 0;
+    const maxAttempts = schedule.videos.length;
+    
+    while (attempts < maxAttempts) {
+      nextIndex = (nextIndex + 1) % schedule.videos.length;
+      const nextVideo = schedule.videos[nextIndex];
+      
+      // Check if this video hasn't failed before
+      if (!failedVideoIds.has(nextVideo.youtube_id) && nextVideo.youtube_id !== currentVideo?.youtube_id) {
+        console.log('Skipping to next video:', nextVideo.title);
+        setCurrentVideo(nextVideo);
+        setSeekTime(0); // Start from beginning of next video
+        toast.info(`Skipped unavailable video, now playing: ${nextVideo.title}`);
+        return;
+      }
+      attempts++;
+    }
+    
+    // All videos have failed - show error message
+    toast.error('No playable videos available on this channel');
+    console.log('All videos on this channel appear to be unavailable');
+  }, [currentChannel, schedules, currentVideo, failedVideoIds]);
 
   // Initialize YouTube player when video changes
   useEffect(() => {
