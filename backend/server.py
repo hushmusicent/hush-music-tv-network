@@ -732,6 +732,88 @@ async def check_videos_status(user: dict = Depends(require_user)):
     
     return results
 
+async def fetch_youtube_duration(youtube_id: str) -> int:
+    """Fetch video duration from YouTube using yt-dlp simulation or page scraping"""
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            # Try to get video info from YouTube's video page
+            response = await client.get(
+                f"https://www.youtube.com/watch?v={youtube_id}",
+                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+            )
+            if response.status_code == 200:
+                content = response.text
+                # Look for duration in the page content
+                import re
+                # Try to find "lengthSeconds" in the page
+                match = re.search(r'"lengthSeconds":"(\d+)"', content)
+                if match:
+                    return int(match.group(1))
+                # Alternative pattern
+                match = re.search(r'approxDurationMs.*?(\d+)', content)
+                if match:
+                    return int(match.group(1)) // 1000
+    except Exception as e:
+        print(f"Error fetching duration for {youtube_id}: {e}")
+    
+    return 0
+
+@api_router.post("/videos/update-durations")
+async def update_video_durations(user: dict = Depends(require_user)):
+    """Fetch and update durations for all videos from YouTube (admin only)"""
+    if not user.get("is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    updated_count = 0
+    failed_count = 0
+    results = []
+    
+    channels = await db.channels.find({}, {"_id": 0}).to_list(None)
+    
+    for channel in channels:
+        videos = channel.get("videos", [])
+        channel_updated = False
+        
+        for i, video in enumerate(videos):
+            youtube_id = video.get("youtube_id")
+            current_duration = video.get("duration", 300)
+            
+            # Skip if already has a non-default duration (not 300)
+            if current_duration != 300 and current_duration > 0:
+                continue
+            
+            if not youtube_id:
+                continue
+            
+            # Fetch duration from YouTube
+            duration = await fetch_youtube_duration(youtube_id)
+            
+            if duration > 0:
+                videos[i]["duration"] = duration
+                channel_updated = True
+                updated_count += 1
+                results.append({
+                    "title": video.get("title", "Unknown"),
+                    "youtube_id": youtube_id,
+                    "old_duration": current_duration,
+                    "new_duration": duration
+                })
+            else:
+                failed_count += 1
+        
+        # Update channel in database if any videos were updated
+        if channel_updated:
+            await db.channels.update_one(
+                {"id": channel["id"]},
+                {"$set": {"videos": videos}}
+            )
+    
+    return {
+        "updated": updated_count,
+        "failed": failed_count,
+        "results": results[:50]  # Return first 50 results
+    }
+
 # ===================== IMAGE UPLOAD ROUTES =====================
 
 class UploadedImageResponse(BaseModel):
