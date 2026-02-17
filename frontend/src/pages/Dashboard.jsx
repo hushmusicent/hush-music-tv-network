@@ -172,6 +172,26 @@ const Dashboard = () => {
     }
   };
 
+  const updateVideoDurations = async () => {
+    if (!window.confirm('This will fetch actual video durations from YouTube for all videos with default 5-minute duration. This may take several minutes. Continue?')) {
+      return;
+    }
+    
+    setCleanupLoading(true);
+    toast.info('Fetching video durations from YouTube... This may take a while.');
+    try {
+      const response = await videoCleanupAPI.updateDurations();
+      const { updated, failed } = response.data;
+      toast.success(`Updated ${updated} video durations. ${failed} failed.`);
+      // Reload data to reflect changes
+      loadData();
+    } catch (error) {
+      toast.error('Failed to update durations');
+    } finally {
+      setCleanupLoading(false);
+    }
+  };
+
   const toggleChannelExpanded = (channelId) => {
     setExpandedChannels(prev => ({
       ...prev,
