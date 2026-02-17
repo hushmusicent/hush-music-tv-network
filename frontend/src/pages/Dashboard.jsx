@@ -1073,6 +1073,143 @@ const Dashboard = () => {
               </div>
             </Link>
           </div>
+
+          {/* Video Cleanup Section */}
+          <div className="mt-6 glass rounded-lg p-6">
+            <h3 className="font-semibold text-lg mb-4 flex items-center gap-2">
+              <AlertTriangle size={20} className="text-yellow-500" />
+              Video Cleanup
+            </h3>
+            <p className="text-sm text-gray-400 mb-4">
+              Check and remove videos that are no longer playable (age-restricted, deleted, or unavailable).
+              Videos are also automatically deleted when they fail to play.
+            </p>
+            
+            <div className="flex flex-wrap gap-3 mb-4">
+              <Button
+                onClick={checkVideoStatus}
+                disabled={cleanupLoading}
+                variant="outline"
+                className="border-white/20"
+                data-testid="check-video-status-btn"
+              >
+                {cleanupLoading ? (
+                  <Loader2 size={16} className="mr-2 animate-spin" />
+                ) : (
+                  <Eye size={16} className="mr-2" />
+                )}
+                Check Video Status
+              </Button>
+              
+              <Button
+                onClick={runCleanup}
+                disabled={cleanupLoading}
+                className="bg-yellow-600 hover:bg-yellow-700"
+                data-testid="run-cleanup-btn"
+              >
+                {cleanupLoading ? (
+                  <Loader2 size={16} className="mr-2 animate-spin" />
+                ) : (
+                  <RefreshCw size={16} className="mr-2" />
+                )}
+                Run Cleanup
+              </Button>
+              
+              <Button
+                onClick={loadDeletedVideos}
+                variant="outline"
+                className="border-white/20"
+                data-testid="view-deleted-btn"
+              >
+                <Trash2 size={16} className="mr-2" />
+                View Deleted Log
+              </Button>
+            </div>
+            
+            {/* Cleanup Status Results */}
+            {cleanupStatus && (
+              <div className="bg-black/30 rounded-lg p-4 mb-4">
+                <h4 className="font-medium mb-2">Check Results</h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                  <div>
+                    <span className="text-gray-400">Total:</span>
+                    <span className="ml-2 font-medium">{cleanupStatus.total}</span>
+                  </div>
+                  <div>
+                    <span className="text-green-400">Playable:</span>
+                    <span className="ml-2 font-medium">{cleanupStatus.playable}</span>
+                  </div>
+                  <div>
+                    <span className="text-red-400">Unplayable:</span>
+                    <span className="ml-2 font-medium">{cleanupStatus.unplayable}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-400">Unknown:</span>
+                    <span className="ml-2 font-medium">{cleanupStatus.unknown}</span>
+                  </div>
+                </div>
+                
+                {cleanupStatus.unplayable_videos?.length > 0 && (
+                  <div className="mt-4">
+                    <h5 className="text-sm font-medium mb-2 text-red-400">Unplayable Videos:</h5>
+                    <div className="max-h-40 overflow-y-auto space-y-1">
+                      {cleanupStatus.unplayable_videos.map((video, idx) => (
+                        <div key={idx} className="text-xs text-gray-400 flex items-center gap-2">
+                          <span className="text-white">{video.title}</span>
+                          <span className="text-gray-500">({video.channel})</span>
+                          <span className="text-red-400">{video.reason}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+            
+            {/* Deleted Videos Log */}
+            {showDeletedVideos && (
+              <div className="bg-black/30 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="font-medium">Auto-Deleted Videos Log</h4>
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={clearDeletedLog}
+                      variant="outline"
+                      size="sm"
+                      className="border-white/20 text-xs"
+                    >
+                      Clear Log
+                    </Button>
+                    <Button
+                      onClick={() => setShowDeletedVideos(false)}
+                      variant="ghost"
+                      size="sm"
+                    >
+                      <X size={14} />
+                    </Button>
+                  </div>
+                </div>
+                
+                {deletedVideos.length > 0 ? (
+                  <div className="max-h-60 overflow-y-auto space-y-2">
+                    {deletedVideos.map((video, idx) => (
+                      <div key={idx} className="text-xs bg-black/20 p-2 rounded flex items-center justify-between">
+                        <div>
+                          <span className="text-white">{video.title}</span>
+                          <span className="text-gray-500 ml-2">({video.reason})</span>
+                        </div>
+                        <span className="text-gray-500">
+                          {new Date(video.deleted_at).toLocaleDateString()}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-400">No videos have been auto-deleted yet.</p>
+                )}
+              </div>
+            )}
+          </div>
         </TabsContent>
       </Tabs>
 
