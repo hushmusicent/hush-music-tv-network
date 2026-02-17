@@ -203,27 +203,31 @@ const LiveTV = () => {
     try {
       setLoading(true);
       
-      // Load schedules from the public endpoint (contains daily random playlists)
+      // Load channels from the public endpoint
       const scheduleResponse = await axios.get(`${BACKEND_URL}/api/schedule/live`);
       const { schedules: scheduleList, date } = scheduleResponse.data;
       
       setScheduleDate(date);
       
-      // Convert to playlist map
+      // Convert to playlist map - SHUFFLE videos for each channel on load
       const playlistMap = {};
       const channelList = [];
       
       for (const schedule of scheduleList) {
-        // Store the videos array as the playlist
-        playlistMap[schedule.channel_id] = schedule.videos || [];
+        // Shuffle the videos array to create a new random order each session
+        const videos = schedule.videos || [];
+        const shuffledVideos = shuffleArray(videos);
+        
+        playlistMap[schedule.channel_id] = shuffledVideos;
         channelList.push({
           id: schedule.channel_id,
           name: schedule.channel_name,
           thumbnail: schedule.channel_thumbnail,
-          videoCount: (schedule.videos || []).length
+          videoCount: videos.length
         });
       }
       
+      console.log('Playlists shuffled for this session');
       setPlaylists(playlistMap);
       setChannels(channelList);
       
