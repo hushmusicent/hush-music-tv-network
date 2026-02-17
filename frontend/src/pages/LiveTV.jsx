@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { channelsAPI, analyticsAPI } from '../lib/api';
+import { channelsAPI, analyticsAPI, videoCleanupAPI } from '../lib/api';
 import { Button } from '../components/ui/button';
 import { 
   ChevronUp, 
