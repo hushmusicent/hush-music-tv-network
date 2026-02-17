@@ -1,89 +1,70 @@
 <analysis>**original_problem_statement:**
-The user wants to create a TV network application similar to Strimm, named Hush Music TV Network.
+The user wants to create a TV network application named Hush Music TV Network.
 
 **PRODUCT REQUIREMENTS:**
 - Build a TV network app named Hush Music TV Network.
-- Implement an admin-only system where only a specific user can log in and manage all channels. The credentials are now managed via environment variables.
-- Enable embedding for both individual channels and the entire network.
-- Create a Live TV experience with a channel changer, a live screen, and a schedule underneath.
-- Ensure videos play in a synchronized live manner, so they don't restart when a user joins or switches channels.
-- Add a top menu/navigation bar and ensure scrollbars on pages with long content.
-- Add a feature for the admin to upload videos (MP4, max 2GB) from their local hard drive.
-- Provide a comprehensive administrative dashboard to edit everything, including all existing channels and their videos.
-- Implement an option for a channel to play its videos in a random order.
-- Erase the first 7 channels from the database.
-- Make the channel preview picture editable and allow image uploads from the user's hard drive.
-- Remove the Create Channel option from the home page.
-- Remove the admin-only restriction for uploading channel thumbnails and videos.
-- Implement an analytics page for the admin to view viewer statistics.
-- Remove the TV Guide page.
-- Remove the ability for users to skip to the next video.
+- Implement an admin-only system to manage all channels and videos.
+- Migrate channels and videos from an existing application.
+- Implement an analytics page for viewer statistics.
+- Create a feature to generate a random 24-hour video schedule for each channel, which is persistent and resets daily at midnight ET.
+- The Live TV and TV Guide pages must be synchronized to this persistent schedule.
+- The Live TV experience should include a channel changer, OSD, video player lock, play/pause on click, and auto-hiding controls.
+- Playback should be synchronized for all viewers, with videos playing for their full, actual duration.
+- The system must handle age-restricted or unavailable YouTube videos by skipping them.
+- Unplayable videos should be automatically deleted from the database.
+- An administrative dashboard should allow for editing, including a tool to manually clean up unplayable videos.
+- Implement embedding for channels/network.
 
 **User's preferred language**: English
 
 **what currently exists?**
-A full-stack application for the Hush Music TV Network. Key features include:
-- A Live TV page with synchronized playback, where videos start at the correct live position when a user joins or switches channels. It automatically skips unavailable videos and plays subsequent videos to completion.
-- A comprehensive admin dashboard for channel and video management.
-- An analytics page to track current viewers, daily viewers, and channel performance. However, this page is currently inaccessible due to a bug.
-- Local video and channel thumbnail upload capabilities, with admin restrictions removed.
-- The TV Guide feature has been completely removed as per the user's request.
-- The ability for users to manually skip videos has been removed.
+A full-stack React/FastAPI application with a MongoDB database. It features a Live TV page with synchronized, randomized daily schedules and a TV Guide. An admin dashboard exists for managing channels and videos. A system is in place to auto-skip and auto-delete unplayable YouTube videos, with toast notifications for the user. A self-healing mechanism has been implemented where the frontend reports the actual duration of played videos to the backend to correct data inaccuracies over time. The backend can then regenerate schedules with these correct durations.
 
 **Last working item**:
-*   **Last item agent was working**: The user reported that the new Analytics page keeps redirecting to the home page, preventing access. The agent attempted a fix by adding a loading state check from the  to  to prevent a premature redirect. Although the agent's screenshot showed the page loading, the user confirmed the issue persists.
-*   **Status**: BLOCKED
-*   **Agent Testing Done**: Y (Via screenshot, but the fix was ineffective)
-*   **Which testing method agent to use?**: frontend testing agent
-*   **User Testing Done**: Y (User confirmed the page is still not working)
+*   **Last item agent was working**: The user reported that videos were still playing for only 5 minutes. The agent identified that this was due to default durations in the database. A fix was implemented on the backend () to automatically regenerate a channel's schedule whenever a video's duration is updated with a significantly different value. However, the corresponding frontend logic to refetch the updated schedule was not implemented.
+*   **Status**: IN PROGRESS
+*   **Agent Testing Done**: N
+*   **Which testing method agent to use?**: both
+*   **User Testing Done**: N
 
 **All Pending/In progress Issue list**:
-*   **Issue 1**: The  page incorrectly redirects to the home page for logged-in admin users. (Priority: P0)
-*   **Issue 2**: The user's request to Erase the first 7 channels is pending. (Priority: P2)
+*   **Issue 1**: Incorrect Video Durations Cause 5-Minute Playback (Priority: P0)
 
 **Issues Detail**:
-*   **Issue 1**: Analytics page is inaccessible due to a redirect loop.
-    *   **Attempted fixes**: The agent modified  to wait for the authentication  state to resolve before checking user permissions. This did not solve the underlying problem.
+*   **Issue 1**:
+    *   **Attempted fixes**: 1) Server-side scraping for durations was unreliable. 2) A self-healing mechanism was built where the frontend reports a video's actual duration to the backend upon playback. 3) The backend was updated to auto-regenerate the schedule when a duration changes. The critical flaw is that the frontend () is not notified to refetch this new schedule, so it continues to use the old, stale data until a page refresh.
     *   **Next debug checklist**:
-        *   View  to see how it correctly handles admin-only access without redirecting.
-        *   View  and compare its  and dependency array with the  implementation.
-        *   The issue is likely a race condition or an incorrect dependency in the  hook that triggers the  call before the  object is properly populated.
-    *   **Why fix this issue and what will be achieved with the fix?**: The admin user cannot access the analytics feature, making it unusable. Fixing this will complete the analytics task.
+        1.  Implement a mechanism to make the frontend aware that a schedule has been updated on the backend.
+        2.  When the  API call is made from the frontend, the backend response should indicate if a schedule was regenerated.
+        3.  If it was, the frontend () must immediately re-fetch the new schedule for the current channel and re-sync the player.
+        4.  Verify that this entire loop works: video plays -> duration is reported -> backend updates DB -> backend regenerates schedule -> frontend is notified -> frontend fetches new schedule -> player syncs to new schedule with correct timings.
+    *   **Why fix this issue and what will be achieved with the fix?**: This is the highest priority bug as it breaks the core user experience. Fixing it will ensure videos play to completion as intended.
     *   **Status**: IN PROGRESS
     *   **Is recurring issue?**: Y
-    *   **Should Test frontend/backend/both after fix?**: frontend
-    *   **Blocked on other issue**: None
-
-*   **Issue 2**: Erase the first 7 channels.
-    *   **Attempted fixes**: None in this session. The task was previously blocked because not enough channels existed.
-    *   **Next debug checklist**: This is a content management task. The best approach is to provide a Delete Channel button in the admin dashboard so the user can manage channels themselves.
-    *   **Why fix this issue and what will be achieved with the fix?**: Fulfills a direct user request and improves admin functionality.
-    *   **Status**: NOT STARTED
-    *   **Is recurring issue?**: N
     *   **Should Test frontend/backend/both after fix?**: both
     *   **Blocked on other issue**: None
 
 **In progress Task List**:
-*   None.
+*   **Task 1**: Implement Frontend Schedule Refetching (Priority: P0)
+    *   **Where to resume**:  and .
+    *   **What will be achieved with this?**: The frontend will dynamically load the updated schedule after a video's duration is corrected, solving the 5-minute playback issue without requiring a manual refresh.
+    *   **Status**: IN PROGRESS
+    *   **Should Test frontend/backend/both after fix?**: both
+    *   **Blocked on something**: None
 
 **Upcoming and Future Tasks**
 *   **Upcoming Tasks**:
-    *   **Implement Channel Deletion (P1)**: Add a Delete button for each channel in the admin dashboard. (Files: , ).
+    *   **Embedding (P1)**: Implement a feature to allow embedding of individual channels or the entire network on other websites.
 *   **Future Tasks**:
-    *   **Video Reordering (P2)**: Allow the admin to drag-and-drop to reorder videos in a channel's schedule.
-    *   **Automatic YouTube Duration Fetching (P2)**: Use the YouTube Data API to get a video's duration automatically when adding it.
+    *   **YouTube Data API Integration (P2)**: To fix all video durations at once, implement a one-time script using the YouTube Data API. This would provide a better user experience than the gradual self-healing but will require the user to provide an API key.
+    *   **Video Reordering (P2)**: Allow the admin to drag-and-drop to reorder videos within a channel's playlist from the dashboard.
 
 **Completed work in this session**
-- **Live TV Sync Logic Overhaul**: Re-implemented live synchronized video playback in . It now correctly calculates a video's start time without causing a blinking effect and plays videos to their full duration.
-- **Auto-Skip Unavailable Videos**: Added robust error handling to the YouTube player to automatically skip videos that are disabled for embedding.
-- **Removed Skip Video Feature**: Removed the skip to next video button and disabled click functionality on the playlist in .
-- **Removed TV Guide**: The TV Guide page, its route (), and navigation link () were removed entirely at the user's request.
-- **Deployment Health Check Fix**: Resolved a deployment error by adding a root-level  endpoint in .
-- **Removed Admin-Only Video Uploads**: Updated the  endpoint in  to allow uploads without admin authentication.
-- **Analytics Feature Implementation**:
-    - Created backend endpoints (, ) and a new  collection in .
-    - Implemented a frontend  page with charts for viewer data.
-    - Added tracking logic to  to record viewer sessions.
+- **Auto-Hiding Controls**: Fixed the bug with player controls; they now appear on load/activity and fade out correctly.
+- **Unplayable Video Handling**: Implemented a robust system to auto-skip and auto-delete age-restricted or unavailable videos, using .
+- **Admin Cleanup Tools**: Added a Video Cleanup section to the dashboard for manually checking and deleting all unplayable videos across the platform.
+- **Playback Synchronization**: Re-enabled and confirmed that playback is schedule-driven and synchronized for all viewers, with a randomized playlist.
+- **Video Duration Self-Healing**: The frontend now reports correct video durations to the backend, which updates the database and regenerates the schedule.
 
 **Earlier issues found/mentioned but not fixed**
 *   None.
@@ -95,76 +76,76 @@ A full-stack application for the Hush Music TV Network. Key features include:
 
 
 **Key Technical Concepts**
-*   **Frontend**: React, Tailwind CSS, Shadcn UI, React Router, Axios, .
-*   **Backend**: FastAPI, MongoDB (using ), JWT for authentication.
-*   **Live Sync Logic**: A custom algorithm in  calculates the currently playing video and its  based on the total duration of the preceding videos in the playlist and the current server time. This state is set on channel load.
-*   **Analytics Tracking**: A backend service logs viewer activity into an  MongoDB collection. Views are tracked via a  and timestamped to calculate current and historical viewership.
-*   **React Auth Flow**: Using a React Context () to manage user state (, ). Protected routes check this context, but a race condition is causing a bug on the analytics page.
+*   **Frontend**: React, Tailwind CSS, Shadcn UI, .
+*   **Backend**: FastAPI, MongoDB (using ), .
+*   **Live Sync Logic**: A persistent, daily-randomized schedule is stored in MongoDB. The frontend syncs playback to this schedule based on the current time in 'America/New_York' (ET).
+*   **Self-Healing Data**: The frontend player reports incorrect data (video durations) back to the backend to automatically improve data quality over time.
+*   **Defensive Playback**: The player is resilient to bad data, automatically skipping and deleting videos that fail to load.
 
 **key DB schema**
 *   **users**: 
 *   **channels**: 
 *   **videos** (embedded): 
-*   **analytics**: 
+*   **schedules**: 
+*   **deleted_videos_log**: 
 
 **changes in tech stack**
-*   None.
+*   No new technologies were added, but  was leveraged for backend HTTP requests.
 
 **All files of reference**
-*   : The file with the current redirect bug.
-*   : A working example of a protected admin route.
-*   : The source of authentication state.
-*   : Contains the core video playback and analytics tracking logic.
-*   : Contains all backend endpoints, including the new analytics and health check routes.
+*   : The monolithic backend file containing all API endpoints, including schedule generation, duration updates, and video cleanup.
+*   : The highly complex component for the live player. It manages state for the schedule, player, auto-skip logic, and duration reporting.
+*   : The admin panel, containing the new UI for video cleanup and schedule regeneration.
+*   : Contains the frontend definitions for all backend API calls.
 
 **Areas that need refactoring**:
-*   The  component has grown to over 250 lines and manages complex state for data fetching, live sync calculations, YouTube API events, and error handling. It should be broken down into custom hooks (e.g., , ) for better readability and maintenance.
+*    has grown excessively complex due to repeated patching. It urgently needs to be broken down into smaller components and custom hooks (e.g., , , ) to improve maintainability.
+*    is a monolith. API routes should be separated into different files for better organization (e.g., , ).
 
 **key api endpoints**
-*   : **New** root-level health check for deployments.
-*   : **New** endpoint to log a viewer's activity on a channel.
-*   : **New** endpoint that provides aggregated viewer data.
-*   : **Updated** endpoint, no longer requires admin authentication.
-*   : Fetches all channel data.
+*   : Frontend reports a video's actual duration. Backend updates the DB and may trigger a schedule regeneration.
+*   : Frontend auto-deletes a single failed video.
+*   : Admin endpoint to check the status of all videos.
+*   : Admin endpoint to delete all unplayable videos.
+*   : Admin endpoint to regenerate all schedules.
 
 **Critical Info for New Agent**
-*   **Highest Priority**: Fix the redirect bug on the  page. The user is blocked from using this feature. The key is to compare the non-working  with the working  to spot the difference in how they handle the auth-loading state.
-*   The core user experience is on the  page. Be cautious with changes here, as it contains complex, interconnected logic for live sync, video playback, and analytics.
-*   The TV Guide has been intentionally and completely removed. Do not attempt to restore it.
+*   **Your immediate task is to fix the video duration issue.** The current implementation has a critical gap: the backend regenerates the schedule, but the frontend never fetches it. You must bridge this gap so that when a video's duration is updated, the frontend immediately re-fetches the new schedule and applies it.
+*   The  component is fragile. Be cautious when modifying its state and effects, as race conditions are likely.
+*   The user's confirmed desired behavior is: schedule-driven playback, synchronized for all users, using a randomized playlist where each video plays for its full, actual duration.
 
 **documents and test reports created in this job**
-*    (updated multiple times)
-*    (from testing agent for TV Guide fix)
+*   
+*   
 
 **Last 10 User Messages and any pending HUMAN messages**
-1.  **User**:  (UNRESOLVED - Current blocking issue)
-2.  **Agent**:  (Agent incorrectly finished, believing the analytics page was fixed)
-3.  **User**:  (UNRESOLVED - Initial report of the analytics bug)
-4.  **Agent**:  (Agent finished the analytics implementation)
-5.  **User**:  (COMPLETED - User requested the analytics feature)
-6.  **User**:  (COMPLETED)
-7.  **User**:  (COMPLETED - User provided logs for a deployment failure, which agent fixed)
-8.  **User**:  (COMPLETED)
-9.  **User**:  (COMPLETED - User requested the return of live sync functionality)
-10. **User**:  (COMPLETED)
+1.  (IN PROGRESS - User wants the schedule to be correct from the start).
+2.  (IN PROGRESS - User restating the core issue).
+3.  (DONE - User confirmed desired logic).
+4.  (DONE - This led to a temporary change, later reverted to sync logic).
+5.  (DONE - Feature implemented).
+6.  (DONE - User approved the delete feature plan).
+7.  (DONE - Feature implemented).
+8.  (DONE - User approved the bypass plan).
+9.  (DONE - User focused work on a single task).
+10.  (DONE - User gave go-ahead).
 
 **Project Health Check:**
-*   **Broken**: The  page is inaccessible to the admin due to a redirect bug.
+*   **Broken**: The core feature of playing videos for their full duration is broken due to incorrect data and an incomplete fix. Videos are cut short at 5 minutes, making the application unusable for its main purpose.
 *   **Mocked**: None.
 
 **3rd Party Integrations**
-*   **YouTube iFrame API**: Used via the  library for video playback. No API key required.
+*   **YouTube iFrame API**: Used for video playback via the  library.
 
 **Testing status**
-*   **Testing agent used after significant changes**: YES (for the initial TV Guide fix).
+*   **Testing agent used after significant changes**: NO
 *   **Troubleshoot agent used after agent stuck in loop**: NO
 *   **Test files created**: None.
-*   **Known regressions**: The analytics page worked momentarily for the agent but is now considered broken due to the redirect issue.
+*   **Known regressions**: None.
 
 **Credentials to test flow:**
 *   **Admin Email**: 
 *   **Admin Password**: 
-*   **Note**: These are stored in and read from .
 
 **What agent forgot to execute**
-*   The agent failed to properly test the authentication flow for the new  page. The implemented fix was insufficient and did not solve the user's problem, indicating the agent should have more rigorously compared the new, broken component with an existing, working component ().</analysis>
+*   The agent implemented the backend logic for regenerating the schedule but forgot to create the corresponding frontend mechanism to **fetch the newly updated schedule**. This leaves the primary user-facing bug unresolved.</analysis>
