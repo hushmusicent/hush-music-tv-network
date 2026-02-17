@@ -383,15 +383,25 @@ const LiveTV = () => {
   const isUploadedVideo = currentVideo && (currentVideo.video_url || !currentVideo.youtube_id);
 
   // Skip to next video in schedule (for unavailable/age-restricted videos)
-  const skipToNextVideo = useCallback(() => {
+  const skipToNextVideo = useCallback(async () => {
     if (!currentChannel || !schedules[currentChannel.id]) return;
     
     const schedule = schedules[currentChannel.id];
     const { videoIndex } = getCurrentVideoFromSchedule(schedule);
     
-    // Mark current video as failed
+    // Mark current video as failed and delete from database
     if (currentVideo?.youtube_id) {
       setFailedVideoIds(prev => new Set(prev).add(currentVideo.youtube_id));
+      
+      // Auto-delete the unplayable video from the database
+      try {
+        const result = await videoCleanupAPI.deleteByYoutubeId(currentVideo.youtube_id, currentChannel.id);
+        if (result.data.deleted) {
+          console.log('Deleted unplayable video from database:', currentVideo.title);
+        }
+      } catch (e) {
+        console.error('Failed to delete video from database:', e);
+      }
     }
     
     // Find next video that hasn't failed (try up to the total number of videos)
