@@ -292,6 +292,9 @@ const LiveTV = () => {
   const selectChannel = (channel, scheduleMap = schedules) => {
     setCurrentChannel(channel);
     
+    // Clear failed videos list when changing channels
+    setFailedVideoIds(new Set());
+    
     const schedule = scheduleMap[channel.id];
     if (schedule) {
       const { video, seekTime: newSeekTime } = getCurrentVideoFromSchedule(schedule);
