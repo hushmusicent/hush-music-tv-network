@@ -303,11 +303,13 @@ const LiveTV = () => {
     
     const schedule = scheduleMap[channel.id];
     if (schedule && schedule.videos && schedule.videos.length > 0) {
-      // Start with the first video in the playlist (play from beginning)
-      const firstVideo = schedule.videos[0];
-      setCurrentVideoIndex(0);
-      setCurrentVideo(firstVideo);
-      setSeekTime(0); // Always start videos from the beginning
+      // Get the current video based on schedule time (synchronized playback)
+      const { video, seekTime: newSeekTime, videoIndex } = getCurrentVideoFromSchedule(schedule);
+      if (video) {
+        setCurrentVideoIndex(videoIndex);
+        setCurrentVideo(video);
+        setSeekTime(newSeekTime); // Start at the synchronized position
+      }
     }
     
     // Track view
