@@ -102,6 +102,9 @@ const LiveTV = () => {
   // Auto-hide controls after inactivity
   const CONTROLS_HIDE_DELAY = 3000; // 3 seconds
   
+  // Track if this is the first mount (to skip isPaused effect on initial render)
+  const isFirstMount = useRef(true);
+  
   // Use refs to track latest state in callbacks (avoids stale closures)
   const isPausedRef = useRef(isPaused);
   isPausedRef.current = isPaused;
@@ -114,7 +117,7 @@ const LiveTV = () => {
       controlsTimeoutRef.current = null;
     }
     
-    // Only start timer if NOT paused (using ref to get current value)
+    // Only start timer if NOT paused
     controlsTimeoutRef.current = setTimeout(() => {
       if (!isPausedRef.current) {
         setControlsVisible(false);
@@ -152,8 +155,14 @@ const LiveTV = () => {
     };
   }, [showControlsWithTimer]);
 
-  // When paused state changes
+  // When paused state CHANGES (not on initial mount)
   useEffect(() => {
+    // Skip on first mount
+    if (isFirstMount.current) {
+      isFirstMount.current = false;
+      return;
+    }
+    
     if (isPaused) {
       // When paused, show controls and cancel any hide timer
       setControlsVisible(true);
@@ -162,7 +171,7 @@ const LiveTV = () => {
         controlsTimeoutRef.current = null;
       }
     } else {
-      // When unpaused, restart the hide timer
+      // When unpaused (resumed), restart the hide timer
       startHideTimer();
     }
   }, [isPaused, startHideTimer]);
