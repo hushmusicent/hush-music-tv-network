@@ -1539,6 +1539,29 @@ async def regenerate_channel_schedule(channel_id: str, user: dict = Depends(requ
     
     return schedule
 
+@api_router.post("/schedules/regenerate-all")
+async def regenerate_all_schedules(user: dict = Depends(require_user)):
+    """Regenerate schedules for all channels (admin only) - use after updating video durations"""
+    if not user.get("is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    today = get_eastern_date()
+    channels = await db.channels.find({}, {"_id": 0}).to_list(None)
+    
+    regenerated = 0
+    for channel in channels:
+        # Delete existing schedule
+        await db.schedules.delete_one({"channel_id": channel["id"], "schedule_date": today})
+        
+        # Generate new schedule with current durations
+        schedule = generate_24h_schedule(channel, today, force_random=False)
+        
+        # Store in database
+        await db.schedules.insert_one(schedule)
+        regenerated += 1
+    
+    return {"regenerated": regenerated, "date": today}
+
 def generate_24h_schedule(channel: dict, date: str, force_random: bool = False) -> dict:
     """Generate a 24-hour schedule for a channel by randomly distributing videos"""
     videos = channel.get("videos", [])
