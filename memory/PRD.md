@@ -167,9 +167,9 @@ The admin dashboard includes a "Delete Channel" button for each channel. Users c
 4. Confirm deletion in the dialog
 
 ## Testing
-- Backend: 47/47 tests passed (pytest in /app/backend/tests/)
+- Backend: 55/55 tests passed (pytest in /app/backend/tests/)
 - Frontend: All features tested and working
-- Test report: /app/test_reports/iteration_12.json (latest)
+- Test report: /app/test_reports/iteration_13.json (latest)
 
 ## Data Migration (Feb 16, 2026)
 - Migrated all channels and videos from broadcaster.emergent.host
