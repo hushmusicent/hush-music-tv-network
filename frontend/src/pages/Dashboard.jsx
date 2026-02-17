@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { channelsAPI, uploadAPI, categoriesAPI } from '../lib/api';
+import { channelsAPI, uploadAPI, categoriesAPI, videoCleanupAPI } from '../lib/api';
 import { Button } from '../components/ui/button';
 import { Skeleton } from '../components/ui/skeleton';
 import { Input } from '../components/ui/input';
@@ -48,7 +48,9 @@ import {
   Image as ImageIcon,
   Loader2,
   BarChart3,
-  Calendar
+  Calendar,
+  AlertTriangle,
+  RefreshCw
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
