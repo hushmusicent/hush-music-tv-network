@@ -203,9 +203,7 @@ const LiveTV = () => {
   }, [currentChannel]);
 
   // Check for video changes based on schedule (every second)
-  // DISABLED: Videos now play to completion before switching
-  // The schedule is only used for initial video selection when channel changes
-  /*
+  // This keeps all viewers synchronized - everyone sees the same video at the same time
   useEffect(() => {
     if (!currentChannel || !schedules[currentChannel.id]) return;
     
@@ -213,11 +211,13 @@ const LiveTV = () => {
       const schedule = schedules[currentChannel.id];
       const { video, seekTime: newSeekTime, videoIndex } = getCurrentVideoFromSchedule(schedule);
       
-      // Don't switch to a video that's known to be failed
-      if (video && (!currentVideo || video.video_id !== currentVideo.video_id)) {
+      if (!video) return;
+      
+      // Check if we need to switch videos (video_id changed)
+      if (!currentVideo || video.video_id !== currentVideo.video_id) {
         // Check if this scheduled video has failed before
         if (failedVideoIds.has(video.youtube_id)) {
-          // Skip to the next available video instead
+          // Skip to the next available video in the schedule
           let nextIndex = videoIndex;
           const maxAttempts = schedule.videos.length;
           
@@ -227,6 +227,7 @@ const LiveTV = () => {
             
             if (!failedVideoIds.has(nextVideo.youtube_id)) {
               console.log('Schedule: Skipping failed video, playing:', nextVideo.title);
+              setCurrentVideoIndex(nextIndex);
               setCurrentVideo(nextVideo);
               setSeekTime(0);
               return;
@@ -236,7 +237,8 @@ const LiveTV = () => {
           return;
         }
         
-        console.log('Schedule video change:', video.title);
+        console.log('Schedule: Playing video:', video.title);
+        setCurrentVideoIndex(videoIndex);
         setCurrentVideo(video);
         setSeekTime(newSeekTime);
       }
@@ -252,7 +254,6 @@ const LiveTV = () => {
       }
     };
   }, [currentChannel, schedules, currentVideo, failedVideoIds]);
-  */
 
   const loadChannelsAndSchedules = async () => {
     try {
