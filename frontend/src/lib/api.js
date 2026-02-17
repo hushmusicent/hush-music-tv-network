@@ -150,8 +150,12 @@ export const videoCleanupAPI = {
   // Run cleanup - delete all unplayable videos
   runCleanup: () => api.post('/videos/cleanup'),
   
-  // Update video durations from YouTube
+  // Update video durations from YouTube (batch)
   updateDurations: () => api.post('/videos/update-durations'),
+  
+  // Update a single video's duration (from frontend when video plays)
+  updateSingleDuration: (channelId, youtubeId, duration) => 
+    api.post(`/videos/update-duration?channel_id=${channelId}&youtube_id=${youtubeId}&duration=${duration}`),
 };
 
 export default api;
