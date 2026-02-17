@@ -36,35 +36,44 @@ const getViewerId = () => {
   return viewerId;
 };
 
-// Get current time in Eastern timezone
-const getEasternTime = () => {
-  return new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
-};
-
-// Calculate current video from schedule based on Eastern time
-const getCurrentVideoFromSchedule = (schedule) => {
-  if (!schedule?.videos || schedule.videos.length === 0) {
+// Calculate current video from playlist based on elapsed time since session start
+const getVideoFromPlaylist = (playlist, elapsedSeconds, failedVideoIds = new Set()) => {
+  if (!playlist || playlist.length === 0) {
     return { video: null, seekTime: 0, videoIndex: -1 };
   }
   
-  const now = getEasternTime();
-  const currentSeconds = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
-  
-  for (let i = 0; i < schedule.videos.length; i++) {
-    const video = schedule.videos[i];
-    const [startH, startM, startS] = video.start_time.split(':').map(Number);
-    const [endH, endM, endS] = video.end_time.split(':').map(Number);
-    const videoStart = startH * 3600 + startM * 60 + (startS || 0);
-    const videoEnd = endH * 3600 + endM * 60 + (endS || 0);
-    
-    if (currentSeconds >= videoStart && currentSeconds < videoEnd) {
-      const seekTime = currentSeconds - videoStart;
-      return { video, seekTime, videoIndex: i };
-    }
+  // Filter out failed videos
+  const playableVideos = playlist.filter(v => !failedVideoIds.has(v.youtube_id));
+  if (playableVideos.length === 0) {
+    return { video: null, seekTime: 0, videoIndex: -1 };
   }
   
-  // If no video found (shouldn't happen with 24h schedule), return first
-  return { video: schedule.videos[0], seekTime: 0, videoIndex: 0 };
+  // Calculate total playlist duration
+  let totalDuration = 0;
+  for (const video of playableVideos) {
+    totalDuration += video.duration || 300;
+  }
+  
+  // Wrap elapsed time within playlist duration (loop the playlist)
+  const wrappedTime = elapsedSeconds % totalDuration;
+  
+  // Find current video
+  let accumulatedTime = 0;
+  for (let i = 0; i < playableVideos.length; i++) {
+    const video = playableVideos[i];
+    const duration = video.duration || 300;
+    
+    if (wrappedTime < accumulatedTime + duration) {
+      const seekTime = wrappedTime - accumulatedTime;
+      // Find actual index in original playlist
+      const actualIndex = playlist.findIndex(v => v.video_id === video.video_id);
+      return { video, seekTime, videoIndex: actualIndex };
+    }
+    accumulatedTime += duration;
+  }
+  
+  // Fallback to first video
+  return { video: playableVideos[0], seekTime: 0, videoIndex: 0 };
 };
 
 const LiveTV = () => {
@@ -73,10 +82,10 @@ const LiveTV = () => {
   const isAdmin = user?.is_admin;
   
   const [channels, setChannels] = useState([]);
-  const [schedules, setSchedules] = useState({}); // channel_id -> schedule
+  const [playlists, setPlaylists] = useState({}); // channel_id -> playlist (array of videos)
   const [currentChannel, setCurrentChannel] = useState(null);
   const [currentVideo, setCurrentVideo] = useState(null);
-  const [currentVideoIndex, setCurrentVideoIndex] = useState(0); // Track current position in playlist
+  const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
   const [seekTime, setSeekTime] = useState(0);
   const [loading, setLoading] = useState(true);
   const [isMuted, setIsMuted] = useState(false);
@@ -91,78 +100,57 @@ const LiveTV = () => {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
-  const [failedVideoIds, setFailedVideoIds] = useState(new Set()); // Track videos that failed to play
+  const [failedVideoIds, setFailedVideoIds] = useState(new Set());
+  const [sessionStartTime, setSessionStartTime] = useState(null); // When user started watching
+  
   const playerRef = useRef(null);
   const videoRef = useRef(null);
   const youtubePlayerRef = useRef(null);
-  const scheduleCheckRef = useRef(null);
   const channelInputTimeoutRef = useRef(null);
   const osdTimeoutRef = useRef(null);
   const playPauseOsdTimeoutRef = useRef(null);
-  const controlsTimeoutRef = useRef(null);
 
   // Auto-hide controls after inactivity
-  const CONTROLS_HIDE_DELAY = 3000; // 3 seconds
+  const CONTROLS_HIDE_DELAY = 3000;
   const isPausedRef = useRef(isPaused);
   
-  // Keep ref in sync with state
   useEffect(() => {
     isPausedRef.current = isPaused;
-    // When paused, always show controls
     if (isPaused) {
       setControlsVisible(true);
     }
   }, [isPaused]);
 
-  // Single effect to handle all control visibility logic
   useEffect(() => {
     let hideTimeout = null;
     
     const showAndStartTimer = () => {
       setControlsVisible(true);
-      
-      // Clear existing timeout
-      if (hideTimeout) {
-        clearTimeout(hideTimeout);
-      }
-      
-      // Start new hide timer
+      if (hideTimeout) clearTimeout(hideTimeout);
       hideTimeout = setTimeout(() => {
-        // Only hide if not currently paused (use ref for current value)
-        if (!isPausedRef.current) {
-          setControlsVisible(false);
-        }
+        if (!isPausedRef.current) setControlsVisible(false);
       }, CONTROLS_HIDE_DELAY);
     };
     
-    const handleActivity = () => {
-      showAndStartTimer();
-    };
+    const handleActivity = () => showAndStartTimer();
 
-    // Listen for user activity
     document.addEventListener('mousemove', handleActivity);
     document.addEventListener('touchstart', handleActivity);
     document.addEventListener('keydown', handleActivity);
-
-    // Show controls immediately on mount
     showAndStartTimer();
 
     return () => {
       document.removeEventListener('mousemove', handleActivity);
       document.removeEventListener('touchstart', handleActivity);
       document.removeEventListener('keydown', handleActivity);
-      if (hideTimeout) {
-        clearTimeout(hideTimeout);
-      }
+      if (hideTimeout) clearTimeout(hideTimeout);
     };
-  }, []); // Only run on mount
+  }, []);
 
-  // Track fullscreen state
   useEffect(() => {
     const handleFullscreenChange = () => {
       setIsFullscreen(!!document.fullscreenElement);
     };
-    
     document.addEventListener('fullscreenchange', handleFullscreenChange);
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
@@ -177,11 +165,12 @@ const LiveTV = () => {
     }
   }, []);
 
-  // Load channels and schedules
+  // Load channels and playlists on mount, set session start time
   useEffect(() => {
-    loadChannelsAndSchedules();
+    const startTime = Date.now();
+    setSessionStartTime(startTime);
+    loadChannelsAndPlaylists();
     
-    // Update time every second for live feel
     const timeInterval = setInterval(() => {
       setCurrentTime(new Date());
     }, 1000);
@@ -192,298 +181,208 @@ const LiveTV = () => {
   // Periodic view tracking
   useEffect(() => {
     if (!currentChannel) return;
-    
     const trackInterval = setInterval(() => {
       try {
         analyticsAPI.recordView(currentChannel.id, getViewerId());
       } catch (e) {}
     }, 120000);
-    
     return () => clearInterval(trackInterval);
   }, [currentChannel]);
 
-  // Check for video changes based on schedule (every second)
-  // This keeps all viewers synchronized - everyone sees the same video at the same time
-  useEffect(() => {
-    if (!currentChannel || !schedules[currentChannel.id]) return;
-    
-    const checkSchedule = () => {
-      const schedule = schedules[currentChannel.id];
-      const { video, seekTime: newSeekTime, videoIndex } = getCurrentVideoFromSchedule(schedule);
-      
-      if (!video) return;
-      
-      // Check if we need to switch videos (video_id changed)
-      if (!currentVideo || video.video_id !== currentVideo.video_id) {
-        // Check if this scheduled video has failed before
-        if (failedVideoIds.has(video.youtube_id)) {
-          // Skip to the next available video in the schedule
-          let nextIndex = videoIndex;
-          const maxAttempts = schedule.videos.length;
-          
-          for (let i = 0; i < maxAttempts; i++) {
-            nextIndex = (nextIndex + 1) % schedule.videos.length;
-            const nextVideo = schedule.videos[nextIndex];
-            
-            if (!failedVideoIds.has(nextVideo.youtube_id)) {
-              console.log('Schedule: Skipping failed video, playing:', nextVideo.title);
-              setCurrentVideoIndex(nextIndex);
-              setCurrentVideo(nextVideo);
-              setSeekTime(0);
-              return;
-            }
-          }
-          // All videos have failed
-          return;
-        }
-        
-        console.log('Schedule: Playing video:', video.title);
-        setCurrentVideoIndex(videoIndex);
-        setCurrentVideo(video);
-        setSeekTime(newSeekTime);
-      }
-    };
-    
-    // Check immediately and then every second
-    checkSchedule();
-    scheduleCheckRef.current = setInterval(checkSchedule, 1000);
-    
-    return () => {
-      if (scheduleCheckRef.current) {
-        clearInterval(scheduleCheckRef.current);
-      }
-    };
-  }, [currentChannel, schedules, currentVideo, failedVideoIds]);
-
-  const loadChannelsAndSchedules = async () => {
+  const loadChannelsAndPlaylists = async () => {
     try {
       setLoading(true);
       
-      // Load schedules from the public endpoint
+      // Load schedules from the public endpoint (contains daily random playlists)
       const scheduleResponse = await axios.get(`${BACKEND_URL}/api/schedule/live`);
       const { schedules: scheduleList, date } = scheduleResponse.data;
       
       setScheduleDate(date);
       
-      // Convert to map
-      const scheduleMap = {};
+      // Convert to playlist map
+      const playlistMap = {};
       const channelList = [];
       
       for (const schedule of scheduleList) {
-        scheduleMap[schedule.channel_id] = schedule;
+        // Store the videos array as the playlist
+        playlistMap[schedule.channel_id] = schedule.videos || [];
         channelList.push({
           id: schedule.channel_id,
           name: schedule.channel_name,
           thumbnail: schedule.channel_thumbnail,
-          videos: schedule.videos,
-          schedule: schedule
+          videoCount: (schedule.videos || []).length
         });
       }
       
-      setSchedules(scheduleMap);
+      setPlaylists(playlistMap);
       setChannels(channelList);
       
       // Select first channel
-      if (channelList.length > 0 && !currentChannel) {
-        selectChannel(channelList[0], scheduleMap);
+      if (channelList.length > 0) {
+        selectChannel(channelList[0], playlistMap, Date.now());
       }
     } catch (error) {
-      console.error('Failed to load schedules:', error);
+      console.error('Failed to load playlists:', error);
       toast.error('Failed to load channels');
     } finally {
       setLoading(false);
     }
   };
 
-  const selectChannel = (channel, scheduleMap = schedules) => {
+  // Calculate elapsed seconds since session start
+  const getElapsedSeconds = useCallback(() => {
+    if (!sessionStartTime) return 0;
+    return Math.floor((Date.now() - sessionStartTime) / 1000);
+  }, [sessionStartTime]);
+
+  const selectChannel = useCallback((channel, playlistMap = playlists, startTime = sessionStartTime) => {
     setCurrentChannel(channel);
-    
-    // Clear failed videos list when changing channels
     setFailedVideoIds(new Set());
     
-    const schedule = scheduleMap[channel.id];
-    if (schedule && schedule.videos && schedule.videos.length > 0) {
-      // Get the current video based on schedule time (synchronized playback)
-      const { video, seekTime: newSeekTime, videoIndex } = getCurrentVideoFromSchedule(schedule);
+    const playlist = playlistMap[channel.id];
+    if (playlist && playlist.length > 0) {
+      const elapsed = startTime ? Math.floor((Date.now() - startTime) / 1000) : 0;
+      const { video, seekTime: newSeekTime, videoIndex } = getVideoFromPlaylist(playlist, elapsed, new Set());
+      
       if (video) {
+        console.log(`Channel: ${channel.name} - Playing: ${video.title} at ${newSeekTime}s`);
         setCurrentVideoIndex(videoIndex);
         setCurrentVideo(video);
-        setSeekTime(newSeekTime); // Start at the synchronized position
+        setSeekTime(newSeekTime);
       }
     }
     
-    // Track view
     try {
       analyticsAPI.recordView(channel.id, getViewerId());
     } catch (e) {}
     
-    // Show OSD
     showOSD();
-  };
+  }, [playlists, sessionStartTime]);
 
-  // Show channel OSD temporarily
   const showOSD = () => {
     setShowChannelOSD(true);
-    if (osdTimeoutRef.current) {
-      clearTimeout(osdTimeoutRef.current);
-    }
-    osdTimeoutRef.current = setTimeout(() => {
-      setShowChannelOSD(false);
-    }, 3000);
+    if (osdTimeoutRef.current) clearTimeout(osdTimeoutRef.current);
+    osdTimeoutRef.current = setTimeout(() => setShowChannelOSD(false), 3000);
   };
 
-  // Get current channel index
   const getCurrentChannelIndex = () => {
     if (!currentChannel) return -1;
     return channels.findIndex(c => c.id === currentChannel.id);
   };
 
-  // Channel up
   const channelUp = () => {
     const currentIndex = getCurrentChannelIndex();
     if (currentIndex > 0) {
       selectChannel(channels[currentIndex - 1]);
     } else if (channels.length > 0) {
-      // Wrap to last channel
       selectChannel(channels[channels.length - 1]);
     }
   };
 
-  // Channel down
   const channelDown = () => {
     const currentIndex = getCurrentChannelIndex();
     if (currentIndex < channels.length - 1) {
       selectChannel(channels[currentIndex + 1]);
     } else if (channels.length > 0) {
-      // Wrap to first channel
       selectChannel(channels[0]);
     }
   };
 
-  // Go to channel by number
   const goToChannel = (num) => {
-    const index = num - 1; // Convert to 0-based index
+    const index = num - 1;
     if (index >= 0 && index < channels.length) {
       selectChannel(channels[index]);
     }
   };
 
-  // Handle number key input for channel selection
   const handleChannelNumberInput = (digit) => {
-    // Clear previous timeout
-    if (channelInputTimeoutRef.current) {
-      clearTimeout(channelInputTimeoutRef.current);
-    }
-    
-    // Append digit to input
+    if (channelInputTimeoutRef.current) clearTimeout(channelInputTimeoutRef.current);
     const newInput = channelInput + digit;
     setChannelInput(newInput);
     setShowChannelOSD(true);
-    
-    // Set timeout to process the input
     channelInputTimeoutRef.current = setTimeout(() => {
       const channelNum = parseInt(newInput, 10);
       if (channelNum > 0 && channelNum <= channels.length) {
         goToChannel(channelNum);
       }
       setChannelInput('');
-    }, 1500); // Wait 1.5 seconds after last digit
+    }, 1500);
   };
 
   const isUploadedVideo = currentVideo && (currentVideo.video_url || !currentVideo.youtube_id);
 
-  // Play next video based on schedule (called when current video ends)
+  // Play next video in playlist (called when current video ends)
   const playNextVideo = useCallback(() => {
-    if (!currentChannel || !schedules[currentChannel.id]) return;
+    if (!currentChannel || !playlists[currentChannel.id]) return;
     
-    const schedule = schedules[currentChannel.id];
+    const playlist = playlists[currentChannel.id];
+    const playableVideos = playlist.filter(v => !failedVideoIds.has(v.youtube_id));
     
-    // Re-sync with schedule to get the current video
-    const { video, seekTime: newSeekTime, videoIndex } = getCurrentVideoFromSchedule(schedule);
-    
-    if (!video) return;
-    
-    // If the scheduled video has failed, find next available
-    if (failedVideoIds.has(video.youtube_id)) {
-      let nextIndex = videoIndex;
-      const maxAttempts = schedule.videos.length;
-      
-      for (let i = 0; i < maxAttempts; i++) {
-        nextIndex = (nextIndex + 1) % schedule.videos.length;
-        const nextVideo = schedule.videos[nextIndex];
-        
-        if (!failedVideoIds.has(nextVideo.youtube_id)) {
-          console.log('Playing next available video:', nextVideo.title);
-          setCurrentVideoIndex(nextIndex);
-          setCurrentVideo(nextVideo);
-          setSeekTime(0);
-          return;
-        }
-      }
-      toast.error('No more playable videos on this channel');
+    if (playableVideos.length === 0) {
+      toast.error('No playable videos on this channel');
       return;
     }
     
-    // Play the scheduled video
-    console.log('Re-syncing with schedule, playing:', video.title);
-    setCurrentVideoIndex(videoIndex);
-    setCurrentVideo(video);
-    setSeekTime(newSeekTime);
-  }, [currentChannel, schedules, failedVideoIds]);
-
-  // Skip to next video (for unavailable/age-restricted videos - also deletes from DB)
-  const skipToNextVideo = useCallback(async () => {
-    if (!currentChannel || !schedules[currentChannel.id]) return;
+    // Find next video after current
+    const currentPlayableIndex = playableVideos.findIndex(v => v.video_id === currentVideo?.video_id);
+    const nextPlayableIndex = (currentPlayableIndex + 1) % playableVideos.length;
+    const nextVideo = playableVideos[nextPlayableIndex];
     
-    const schedule = schedules[currentChannel.id];
-    const videos = schedule.videos || [];
+    // Find actual index in original playlist
+    const actualIndex = playlist.findIndex(v => v.video_id === nextVideo.video_id);
+    
+    console.log('Video ended, playing next:', nextVideo.title);
+    setCurrentVideoIndex(actualIndex);
+    setCurrentVideo(nextVideo);
+    setSeekTime(0); // Start from beginning
+  }, [currentChannel, playlists, currentVideo, failedVideoIds]);
+
+  // Skip to next video (for unavailable videos - also deletes from DB)
+  const skipToNextVideo = useCallback(async () => {
+    if (!currentChannel || !playlists[currentChannel.id]) return;
+    
+    const playlist = playlists[currentChannel.id];
     
     // Mark current video as failed and delete from database
     if (currentVideo?.youtube_id) {
       setFailedVideoIds(prev => new Set(prev).add(currentVideo.youtube_id));
       
-      // Auto-delete the unplayable video from the database
       try {
         const result = await videoCleanupAPI.deleteByYoutubeId(currentVideo.youtube_id, currentChannel.id);
         if (result.data.deleted) {
-          console.log('Deleted unplayable video from database:', currentVideo.title);
+          console.log('Deleted unplayable video:', currentVideo.title);
+          toast.info(`Removed unavailable video: ${currentVideo.title}`);
         }
       } catch (e) {
-        console.error('Failed to delete video from database:', e);
+        console.error('Failed to delete video:', e);
       }
     }
     
-    // Find next video that hasn't failed
-    let nextIndex = currentVideoIndex;
-    let attempts = 0;
-    const maxAttempts = videos.length;
+    // Find next playable video
+    const newFailedIds = new Set(failedVideoIds);
+    if (currentVideo?.youtube_id) newFailedIds.add(currentVideo.youtube_id);
     
-    while (attempts < maxAttempts) {
-      nextIndex = (nextIndex + 1) % videos.length;
-      const nextVideo = videos[nextIndex];
-      
-      // Check if this video hasn't failed before
-      if (!failedVideoIds.has(nextVideo.youtube_id) && nextVideo.youtube_id !== currentVideo?.youtube_id) {
-        console.log('Skipping to next video:', nextVideo.title);
-        setCurrentVideoIndex(nextIndex);
-        setCurrentVideo(nextVideo);
-        setSeekTime(0);
-        toast.info(`Skipped unavailable video, now playing: ${nextVideo.title}`);
-        return;
-      }
-      attempts++;
+    const playableVideos = playlist.filter(v => !newFailedIds.has(v.youtube_id));
+    
+    if (playableVideos.length === 0) {
+      toast.error('No playable videos on this channel');
+      return;
     }
     
-    // All videos have failed - show error message
-    toast.error('No playable videos available on this channel');
-    console.log('All videos on this channel appear to be unavailable');
-  }, [currentChannel, schedules, currentVideo, currentVideoIndex, failedVideoIds]);
+    // Play first available
+    const nextVideo = playableVideos[0];
+    const actualIndex = playlist.findIndex(v => v.video_id === nextVideo.video_id);
+    
+    console.log('Skipping to:', nextVideo.title);
+    setCurrentVideoIndex(actualIndex);
+    setCurrentVideo(nextVideo);
+    setSeekTime(0);
+  }, [currentChannel, playlists, currentVideo, failedVideoIds]);
 
   // Initialize YouTube player when video changes
   useEffect(() => {
     if (!currentVideo?.youtube_id || isUploadedVideo) return;
     
-    // Clean up previous player
     if (youtubePlayerRef.current) {
       try {
         youtubePlayerRef.current.destroy();
@@ -504,108 +403,69 @@ const LiveTV = () => {
       if (!container) return;
       
       container.innerHTML = '';
-      
       const playerDiv = document.createElement('div');
       playerDiv.id = 'yt-player-instance';
       container.appendChild(playerDiv);
 
       youtubePlayerRef.current = new window.YT.Player('yt-player-instance', {
         videoId: currentVideo.youtube_id,
-        host: 'https://www.youtube-nocookie.com', // Privacy-enhanced mode, helps with some restrictions
+        host: 'https://www.youtube-nocookie.com',
         playerVars: {
           autoplay: 1,
-          controls: 0,  // Hide YouTube controls - we have our own
+          controls: 0,
           start: Math.floor(seekTime),
           modestbranding: 1,
-          rel: 0,  // Don't show related videos
-          fs: 0,  // Disable YouTube's fullscreen button
+          rel: 0,
+          fs: 0,
           playsinline: 1,
-          disablekb: 1,  // Disable keyboard controls
-          iv_load_policy: 3,  // Hide video annotations
-          showinfo: 0,  // Hide video info
-          cc_load_policy: 0,  // Hide closed captions by default
-          enablejsapi: 1,  // Enable JS API
+          disablekb: 1,
+          iv_load_policy: 3,
+          showinfo: 0,
+          cc_load_policy: 0,
+          enablejsapi: 1,
           origin: window.location.origin,
         },
         events: {
           onReady: (event) => {
-            if (isMuted) {
-              event.target.mute();
-            }
-            // Seek to live position
+            if (isMuted) event.target.mute();
             event.target.seekTo(seekTime, true);
             event.target.playVideo();
             setIsPaused(false);
             
-            // Clear error timeout
             if (errorTimeout) {
               clearTimeout(errorTimeout);
               errorTimeout = null;
             }
             
-            // Get actual video duration and report it to update the database
+            // Report actual duration to backend for self-healing
             try {
               const actualDuration = Math.floor(event.target.getDuration());
               if (actualDuration > 0 && currentChannel && currentVideo?.youtube_id) {
-                // Report duration to backend (will update if different from stored value)
                 videoCleanupAPI.updateSingleDuration(
                   currentChannel.id, 
                   currentVideo.youtube_id, 
                   actualDuration
-                ).then(async (res) => {
+                ).then(res => {
                   if (res.data.updated) {
                     console.log(`Updated video duration: ${actualDuration}s`);
-                    
-                    // If schedule was regenerated, refetch it immediately
-                    if (res.data.schedule_regenerated) {
-                      console.log('Schedule regenerated! Fetching updated schedule...');
-                      try {
-                        const scheduleRes = await axios.get(`${BACKEND_URL}/api/schedule/live/${currentChannel.id}`);
-                        const newSchedule = scheduleRes.data.schedule;
-                        
-                        // Update schedules state
-                        setSchedules(prev => ({
-                          ...prev,
-                          [currentChannel.id]: newSchedule
-                        }));
-                        
-                        // Re-sync with the updated schedule
-                        const { video, seekTime: newSeekTime, videoIndex } = getCurrentVideoFromSchedule(newSchedule);
-                        if (video) {
-                          console.log('Re-syncing to updated schedule, video:', video.title, 'at', newSeekTime, 'seconds');
-                          setCurrentVideoIndex(videoIndex);
-                          setCurrentVideo(video);
-                          setSeekTime(newSeekTime);
-                          toast.success('Schedule updated with correct video duration');
-                        }
-                      } catch (err) {
-                        console.error('Failed to fetch updated schedule:', err);
-                      }
-                    }
                   }
                 }).catch(() => {});
               }
             } catch (e) {}
             
-            // Check if video actually starts playing after 5 seconds
             playbackCheckTimeout = setTimeout(() => {
               try {
                 const state = youtubePlayerRef.current?.getPlayerState();
-                // States: -1 (unstarted), 0 (ended), 1 (playing), 2 (paused), 3 (buffering), 5 (video cued)
                 if (state === -1 || state === 5) {
-                  console.log('Video not playing after ready, skipping...');
+                  console.log('Video not playing, skipping...');
                   skipToNextVideo();
                 }
-              } catch (e) {
-                console.error('Error checking playback state:', e);
-              }
+              } catch (e) {}
             }, 5000);
           },
           onStateChange: (event) => {
-            // Update paused state based on player state
             if (event.data === window.YT.PlayerState.PLAYING) {
               setIsPaused(false);
-              // Video is playing, clear any pending skip
               if (playbackCheckTimeout) {
                 clearTimeout(playbackCheckTimeout);
                 playbackCheckTimeout = null;
@@ -613,29 +473,20 @@ const LiveTV = () => {
             } else if (event.data === window.YT.PlayerState.PAUSED) {
               setIsPaused(true);
             } else if (event.data === window.YT.PlayerState.ENDED) {
-              // Video finished - play the next one
-              console.log('Video ended, playing next...');
+              console.log('Video ended naturally');
               setIsPaused(false);
               playNextVideo();
             }
           },
           onError: (event) => {
-            // YouTube error codes:
-            // 2 - Invalid video ID
-            // 5 - HTML5 player error
-            // 100 - Video not found (removed or private)
-            // 101/150 - Video not allowed for embedded playback (age-restricted, etc.)
             console.error('YouTube error:', event.data);
-            
-            // Auto-skip to next video on any error
             skipToNextVideo();
           }
         }
       });
 
-      // Timeout for videos that never fire onReady (completely blocked)
       errorTimeout = setTimeout(() => {
-        console.log('Video timeout - may be unavailable or age-restricted');
+        console.log('Video timeout - may be unavailable');
         skipToNextVideo();
       }, 10000);
     };
@@ -646,12 +497,11 @@ const LiveTV = () => {
       if (errorTimeout) clearTimeout(errorTimeout);
       if (playbackCheckTimeout) clearTimeout(playbackCheckTimeout);
     };
-  }, [currentVideo, seekTime, isMuted, isUploadedVideo, skipToNextVideo, playNextVideo]);
+  }, [currentVideo, seekTime, isMuted, isUploadedVideo, skipToNextVideo, playNextVideo, currentChannel]);
 
   // Handle uploaded video
   useEffect(() => {
     if (!isUploadedVideo || !currentVideo || !videoRef.current) return;
-    
     const video = videoRef.current;
     video.currentTime = seekTime;
     video.play().catch(e => console.log('Autoplay blocked:', e));
@@ -660,11 +510,8 @@ const LiveTV = () => {
   const toggleMute = () => {
     setIsMuted(!isMuted);
     if (youtubePlayerRef.current) {
-      if (isMuted) {
-        youtubePlayerRef.current.unMute();
-      } else {
-        youtubePlayerRef.current.mute();
-      }
+      if (isMuted) youtubePlayerRef.current.unMute();
+      else youtubePlayerRef.current.mute();
     }
     if (videoRef.current) {
       videoRef.current.muted = !isMuted;
@@ -672,14 +519,9 @@ const LiveTV = () => {
   };
 
   const togglePlayPause = () => {
-    // Show play/pause OSD
     setShowPlayPauseOSD(true);
-    if (playPauseOsdTimeoutRef.current) {
-      clearTimeout(playPauseOsdTimeoutRef.current);
-    }
-    playPauseOsdTimeoutRef.current = setTimeout(() => {
-      setShowPlayPauseOSD(false);
-    }, 1000);
+    if (playPauseOsdTimeoutRef.current) clearTimeout(playPauseOsdTimeoutRef.current);
+    playPauseOsdTimeoutRef.current = setTimeout(() => setShowPlayPauseOSD(false), 1000);
 
     if (youtubePlayerRef.current) {
       const playerState = youtubePlayerRef.current.getPlayerState();
@@ -705,7 +547,6 @@ const LiveTV = () => {
   const toggleFullscreen = () => {
     const player = playerRef.current;
     if (!player) return;
-    
     if (document.fullscreenElement) {
       document.exitFullscreen();
     } else {
@@ -718,7 +559,6 @@ const LiveTV = () => {
     const handleKeyDown = (e) => {
       if (e.target.tagName === 'INPUT') return;
       
-      // Handle number keys for channel selection
       if (e.key >= '0' && e.key <= '9') {
         e.preventDefault();
         handleChannelNumberInput(e.key);
@@ -726,7 +566,7 @@ const LiveTV = () => {
       }
       
       switch (e.key) {
-        case ' ':  // Spacebar for play/pause
+        case ' ':
           e.preventDefault();
           togglePlayPause();
           break;
@@ -775,32 +615,27 @@ const LiveTV = () => {
     return date.toLocaleTimeString('en-US', { 
       hour: 'numeric', 
       minute: '2-digit',
-      hour12: true,
-      timeZone: 'America/New_York'
+      hour12: true
     });
   };
 
-  const formatScheduleTime = (timeStr) => {
-    if (!timeStr) return '';
-    const [h, m] = timeStr.split(':').map(Number);
-    const hour = h % 12 || 12;
-    const ampm = h >= 12 ? 'PM' : 'AM';
-    return `${hour}:${m.toString().padStart(2, '0')} ${ampm}`;
-  };
-
-  // Get upcoming videos from schedule
+  // Get upcoming videos from playlist
   const getUpcomingVideos = () => {
-    if (!currentChannel || !schedules[currentChannel.id]) return [];
+    if (!currentChannel || !playlists[currentChannel.id]) return [];
     
-    const schedule = schedules[currentChannel.id];
-    const { videoIndex } = getCurrentVideoFromSchedule(schedule);
+    const playlist = playlists[currentChannel.id];
+    const playable = playlist.filter(v => !failedVideoIds.has(v.youtube_id));
     
-    // Return next 3 videos
+    if (playable.length === 0) return [];
+    
+    const currentIdx = playable.findIndex(v => v.video_id === currentVideo?.video_id);
     const upcoming = [];
+    
     for (let i = 1; i <= 3; i++) {
-      const idx = (videoIndex + i) % schedule.videos.length;
-      upcoming.push(schedule.videos[idx]);
+      const idx = (currentIdx + i) % playable.length;
+      upcoming.push(playable[idx]);
     }
+    
     return upcoming;
   };
 
@@ -822,7 +657,6 @@ const LiveTV = () => {
       {/* Channel Sidebar */}
       {showChannelList && (
         <div className="w-72 bg-[#0a0a0f] border-r border-white/10 flex flex-col h-screen overflow-hidden">
-          {/* Header */}
           <div className="p-4 border-b border-white/10">
             <div className="flex items-center justify-between">
               <h2 className="font-bold text-lg flex items-center gap-2">
@@ -840,16 +674,13 @@ const LiveTV = () => {
             </div>
             <div className="flex items-center gap-2 mt-2 text-xs text-gray-400">
               <Calendar size={12} />
-              <span>Schedule: {scheduleDate} (ET)</span>
+              <span>Playlist: {scheduleDate}</span>
             </div>
           </div>
           
-          {/* Channel List */}
           <div className="flex-1 overflow-y-auto">
             {channels.map((channel, index) => {
               const isActive = currentChannel?.id === channel.id;
-              const schedule = schedules[channel.id];
-              const { video: nowPlaying } = schedule ? getCurrentVideoFromSchedule(schedule) : {};
               
               return (
                 <button
@@ -880,15 +711,9 @@ const LiveTV = () => {
                   </div>
                   <div className="flex-1 text-left min-w-0">
                     <p className="font-medium text-sm truncate">{channel.name}</p>
-                    {nowPlaying && (
-                      <p className="text-xs text-gray-500 truncate">
-                        {isActive ? (
-                          <span className="text-red-400">Now: {nowPlaying.title}</span>
-                        ) : (
-                          nowPlaying.title
-                        )}
-                      </p>
-                    )}
+                    <p className="text-xs text-gray-500">
+                      {channel.videoCount} videos
+                    </p>
                   </div>
                   <span className="text-xs text-gray-600">{index + 1}</span>
                 </button>
@@ -896,7 +721,6 @@ const LiveTV = () => {
             })}
           </div>
           
-          {/* Keyboard shortcuts */}
           <div className="p-3 border-t border-white/10 text-xs text-gray-500">
             <p>↑↓ Switch • 0-9 Go to • C Remote</p>
           </div>
@@ -905,12 +729,10 @@ const LiveTV = () => {
 
       {/* Main Content */}
       <div className={`flex-1 flex flex-col ${isFullscreen ? 'w-screen h-screen' : ''}`}>
-        {/* Video Player */}
         <div 
           className={`flex-1 relative bg-black ${isFullscreen ? 'w-full h-full' : ''}`} 
           ref={playerRef}
         >
-          {/* Toggle channel list button */}
           {!showChannelList && !isFullscreen && (
             <Button
               variant="ghost"
@@ -922,16 +744,12 @@ const LiveTV = () => {
             </Button>
           )}
 
-          {/* YouTube Player Container */}
           {currentVideo?.youtube_id && !isUploadedVideo && (
             <div className={`relative ${isFullscreen ? 'w-full h-full' : 'w-full h-full'}`}>
-              {/* YouTube Player */}
               <div 
                 id="youtube-player" 
                 className={`${isFullscreen ? 'w-full h-full' : 'w-full h-full'}`}
               />
-              
-              {/* Lock Overlay - Click to play/pause, Double-click for fullscreen */}
               <div 
                 className="absolute inset-0 z-10 cursor-pointer"
                 onClick={(e) => {
@@ -949,7 +767,6 @@ const LiveTV = () => {
             </div>
           )}
 
-          {/* Uploaded Video Player */}
           {isUploadedVideo && currentVideo && (
             <div className="relative w-full h-full">
               <video
@@ -959,8 +776,8 @@ const LiveTV = () => {
                 autoPlay
                 muted={isMuted}
                 playsInline
+                onEnded={playNextVideo}
               />
-              {/* Lock Overlay for uploaded videos - Click to play/pause */}
               <div 
                 className="absolute inset-0 z-10 cursor-pointer"
                 onClick={(e) => {
@@ -977,7 +794,6 @@ const LiveTV = () => {
             </div>
           )}
 
-          {/* No video state */}
           {!currentVideo && (
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="text-center">
@@ -987,7 +803,6 @@ const LiveTV = () => {
             </div>
           )}
 
-          {/* Play/Pause Indicator - Shows briefly when toggling */}
           {showPlayPauseOSD && currentVideo && (
             <div className={`${isFullscreen ? 'fixed' : 'absolute'} top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 pointer-events-none`}>
               <div className="bg-black/80 backdrop-blur-sm rounded-full p-6">
@@ -1000,7 +815,6 @@ const LiveTV = () => {
             </div>
           )}
 
-          {/* Channel info overlay - Fades in/out */}
           {currentChannel && currentVideo && (
             <div className={`${isFullscreen ? 'fixed' : 'absolute'} top-4 right-4 bg-black/70 backdrop-blur-sm rounded-lg p-3 max-w-sm z-40 transition-opacity duration-300 ${controlsVisible ? 'opacity-100' : 'opacity-0'}`}>
               <div className="flex items-center gap-2 mb-2">
@@ -1011,23 +825,24 @@ const LiveTV = () => {
                   </>
                 ) : (
                   <>
-                    <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-                    <span className="text-xs text-red-400 font-medium">LIVE</span>
+                    <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                    <span className="text-xs text-green-400 font-medium">PLAYING</span>
                   </>
                 )}
                 <span className="text-xs text-gray-400">
-                  {formatTime(getEasternTime())} ET
+                  {formatTime(currentTime)}
                 </span>
               </div>
               <p className="font-medium text-sm">{currentChannel.name}</p>
               <p className="text-xs text-gray-400 truncate mt-1">{currentVideo.title}</p>
-              <p className="text-xs text-gray-500 mt-1">
-                {formatScheduleTime(currentVideo.start_time)} - {formatScheduleTime(currentVideo.end_time)}
-              </p>
+              {currentVideo.duration && (
+                <p className="text-xs text-gray-500 mt-1">
+                  Duration: {Math.floor(currentVideo.duration / 60)}:{(currentVideo.duration % 60).toString().padStart(2, '0')}
+                </p>
+              )}
             </div>
           )}
 
-          {/* Channel Changer OSD */}
           {showChannelOSD && currentChannel && (
             <div className={`${isFullscreen ? 'fixed' : 'absolute'} top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 pointer-events-none`}>
               <div className="bg-black/90 backdrop-blur-sm rounded-xl p-6 text-center min-w-[200px]">
@@ -1046,14 +861,12 @@ const LiveTV = () => {
             </div>
           )}
 
-          {/* Channel Changer Remote - Fades in/out */}
           {showChannelChanger && (
             <div 
               className={`${isFullscreen ? 'fixed bottom-24 right-6' : 'absolute bottom-20 right-4'} z-50 transition-opacity duration-300 ${controlsVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`} 
               data-testid="channel-changer"
             >
               <div className="bg-[#12121a]/95 backdrop-blur-sm border border-white/10 rounded-xl p-3 flex flex-col items-center gap-2">
-                {/* Channel Up */}
                 <Button
                   variant="ghost"
                   size="icon"
@@ -1064,7 +877,6 @@ const LiveTV = () => {
                   <ChevronUp size={24} />
                 </Button>
                 
-                {/* Channel Number Display */}
                 <div 
                   className="w-14 h-14 rounded-lg bg-black flex items-center justify-center cursor-pointer hover:bg-white/5"
                   onClick={showOSD}
@@ -1075,7 +887,6 @@ const LiveTV = () => {
                   </span>
                 </div>
                 
-                {/* Channel Down */}
                 <Button
                   variant="ghost"
                   size="icon"
@@ -1086,7 +897,6 @@ const LiveTV = () => {
                   <ChevronDown size={24} />
                 </Button>
                 
-                {/* Channel count */}
                 <span className="text-[10px] text-gray-500">
                   of {channels.length}
                 </span>
@@ -1094,7 +904,6 @@ const LiveTV = () => {
             </div>
           )}
 
-          {/* Player controls - Fades in/out */}
           <div className={`${isFullscreen ? 'fixed' : 'absolute'} bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4 z-40 transition-opacity duration-300 ${controlsVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -1138,7 +947,6 @@ const LiveTV = () => {
           </div>
         </div>
 
-        {/* Schedule Bar */}
         {currentChannel && upcomingVideos.length > 0 && (
           <div className="bg-[#0a0a0f] border-t border-white/10 p-3">
             <div className="flex items-center gap-4">
@@ -1152,12 +960,14 @@ const LiveTV = () => {
                     key={`${video.video_id}-${idx}`}
                     className="flex items-center gap-2 bg-white/5 rounded px-2 py-1 shrink-0"
                   >
-                    <span className="text-xs text-gray-500">
-                      {formatScheduleTime(video.start_time)}
-                    </span>
-                    <span className="text-xs text-gray-300 truncate max-w-[150px]">
+                    <span className="text-xs text-gray-300 truncate max-w-[200px]">
                       {video.title}
                     </span>
+                    {video.duration && (
+                      <span className="text-xs text-gray-500">
+                        ({Math.floor(video.duration / 60)}m)
+                      </span>
+                    )}
                   </div>
                 ))}
               </div>
@@ -1166,7 +976,6 @@ const LiveTV = () => {
         )}
       </div>
 
-      {/* Admin Panel */}
       {showAdminPanel && isAdmin && (
         <div className="w-80 bg-[#0a0a0f] border-l border-white/10 p-4 h-screen overflow-y-auto">
           <div className="flex items-center justify-between mb-4">
@@ -1224,10 +1033,9 @@ const LiveTV = () => {
           </div>
           
           <div className="mt-6 p-3 bg-white/5 rounded-lg text-xs text-gray-400">
-            <p className="font-medium text-gray-300 mb-2">Schedule Info</p>
+            <p className="font-medium text-gray-300 mb-2">Playlist Info</p>
             <p>Date: {scheduleDate}</p>
-            <p>Timezone: Eastern (ET)</p>
-            <p className="mt-2">Resets at midnight ET</p>
+            <p className="mt-2">Randomized daily playlist</p>
           </div>
         </div>
       )}
