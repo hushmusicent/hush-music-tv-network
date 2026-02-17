@@ -185,21 +185,21 @@ The admin dashboard includes a "Delete Channel" button for each channel. Users c
 
 ## Recent Changes (Feb 17, 2026)
 
-### Session-Based Playback (LATEST)
-- **Removed time-based synchronization** - Videos no longer sync to Eastern time
-- **New behavior**: Each viewer has their own playback session
-  - On app load, a session start time is recorded
+### Session-Based Random Playback (LATEST)
+- **Fresh random playlist every session** - Each time you open Live TV, videos are shuffled into a new random order
+- **Playlist locked during session** - While channel surfing, the shuffled order stays consistent
+- **New behavior**:
+  - On page load, all channel playlists are shuffled (Fisher-Yates algorithm)
   - Videos play from start to finish (full duration)
-  - When video ends, automatically advances to next in playlist
-  - Random playlists generated daily per channel (locked for the day)
+  - When video ends, automatically advances to next in shuffled playlist
+  - When switching back to a channel, continues based on elapsed session time
 - **Channel surfing behavior**:
   - Playlist continues "playing in background" based on elapsed session time
-  - When switching back to a channel, continues from where that channel's playlist would be
-  - Example: Start watching Channel 1 at 0s → Switch to Channel 2 at 30s → Switch back to Channel 1 at 60s → Resumes at 60s into the playlist
-- **UI changes**:
-  - Shows "PLAYING" indicator instead of "LIVE"
-  - Shows video duration instead of time slot
-  - Sidebar shows "Playlist: [date]" instead of "Schedule"
+  - Example: Start watching Channel 1 at 0s → Switch to Channel 2 at 30s → Switch back to Channel 1 at 60s → Resumes at 60s into the shuffled playlist
+- **UI indicators**:
+  - Shows "PLAYING" indicator
+  - Shows video duration
+  - Sidebar shows "Playlist: [date]"
 - **Testing**: All frontend features verified (100% pass rate)
 
 ### Self-Healing Video Duration
