@@ -593,7 +593,7 @@ const LiveTV = () => {
       if (errorTimeout) clearTimeout(errorTimeout);
       if (playbackCheckTimeout) clearTimeout(playbackCheckTimeout);
     };
-  }, [currentVideo, seekTime, isMuted, isUploadedVideo, skipToNextVideo]);
+  }, [currentVideo, seekTime, isMuted, isUploadedVideo, skipToNextVideo, playNextVideo]);
 
   // Handle uploaded video
   useEffect(() => {
