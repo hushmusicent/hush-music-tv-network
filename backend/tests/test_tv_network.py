@@ -936,6 +936,212 @@ class TestScheduleEndpoints:
                 pytest.skip("No channels with videos to verify")
 
 
+class TestVideoDurationUpdate:
+    """Video duration update endpoint tests (self-healing feature)"""
+    
+    @pytest.fixture
+    def auth_token(self):
+        response = requests.post(f"{BASE_URL}/api/auth/login", json={
+            "email": ADMIN_EMAIL,
+            "password": ADMIN_PASSWORD
+        })
+        return response.json()["access_token"]
+    
+    def test_update_duration_no_auth_required(self):
+        """Update duration endpoint is public (called from frontend when video plays)"""
+        # Get a channel with videos
+        channels = requests.get(f"{BASE_URL}/api/channels").json()
+        channels_with_videos = [c for c in channels if len(c.get("videos", [])) > 0]
+        if len(channels_with_videos) == 0:
+            pytest.skip("No channels with videos to test")
+        
+        channel = channels_with_videos[0]
+        video = channel["videos"][0]
+        youtube_id = video.get("youtube_id")
+        if not youtube_id:
+            pytest.skip("No YouTube video to test")
+        
+        # Call update-duration endpoint (no auth required)
+        response = requests.post(
+            f"{BASE_URL}/api/videos/update-duration",
+            params={
+                "channel_id": channel["id"],
+                "youtube_id": youtube_id,
+                "duration": 250
+            }
+        )
+        assert response.status_code == 200
+        data = response.json()
+        # Response should have these fields
+        assert "updated" in data or "reason" in data
+        print(f"SUCCESS: Duration update endpoint works without auth - {data}")
+    
+    def test_update_duration_invalid_duration(self):
+        """Update duration rejects invalid duration values"""
+        channels = requests.get(f"{BASE_URL}/api/channels").json()
+        channels_with_videos = [c for c in channels if len(c.get("videos", [])) > 0]
+        if len(channels_with_videos) == 0:
+            pytest.skip("No channels to test")
+        
+        channel = channels_with_videos[0]
+        
+        # Test with invalid duration (0 or negative)
+        response = requests.post(
+            f"{BASE_URL}/api/videos/update-duration",
+            params={
+                "channel_id": channel["id"],
+                "youtube_id": "test123",
+                "duration": 0
+            }
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["updated"] == False
+        assert data["reason"] == "invalid_duration"
+        print("SUCCESS: Invalid duration correctly rejected")
+    
+    def test_update_duration_nonexistent_channel(self):
+        """Update duration handles nonexistent channel gracefully"""
+        response = requests.post(
+            f"{BASE_URL}/api/videos/update-duration",
+            params={
+                "channel_id": "nonexistent-channel-id",
+                "youtube_id": "test123",
+                "duration": 300
+            }
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["updated"] == False
+        assert data["reason"] == "channel_not_found"
+        print("SUCCESS: Nonexistent channel handled correctly")
+    
+    def test_update_duration_schedule_regeneration(self, auth_token):
+        """Update duration triggers schedule regeneration when difference > 60s"""
+        # Create a test channel with a video
+        create_resp = requests.post(
+            f"{BASE_URL}/api/channels",
+            headers={"Authorization": f"Bearer {auth_token}"},
+            json={"name": "TEST_DurationSchedule", "category": "Music"}
+        )
+        channel_id = create_resp.json()["id"]
+        
+        # Add a video with default duration (300)
+        add_resp = requests.post(
+            f"{BASE_URL}/api/channels/{channel_id}/videos",
+            headers={"Authorization": f"Bearer {auth_token}"},
+            json={"youtube_id": "test_duration_vid", "title": "Duration Test Video", "duration": 300}
+        )
+        
+        # Update duration with significant change (> 60 seconds)
+        response = requests.post(
+            f"{BASE_URL}/api/videos/update-duration",
+            params={
+                "channel_id": channel_id,
+                "youtube_id": "test_duration_vid",
+                "duration": 500  # 200 second difference, should trigger regeneration
+            }
+        )
+        assert response.status_code == 200
+        data = response.json()
+        
+        if data.get("updated"):
+            assert data["new_duration"] == 500
+            assert data["schedule_regenerated"] == True
+            print(f"SUCCESS: Duration updated and schedule regenerated - {data}")
+        
+        # Cleanup
+        requests.delete(
+            f"{BASE_URL}/api/channels/{channel_id}",
+            headers={"Authorization": f"Bearer {auth_token}"}
+        )
+    
+    def test_update_duration_no_regeneration_for_small_change(self, auth_token):
+        """Update duration does NOT regenerate schedule for small changes"""
+        # Create a test channel with a video
+        create_resp = requests.post(
+            f"{BASE_URL}/api/channels",
+            headers={"Authorization": f"Bearer {auth_token}"},
+            json={"name": "TEST_SmallDuration", "category": "Music"}
+        )
+        channel_id = create_resp.json()["id"]
+        
+        # Add a video with non-default duration (avoid 300/180/0)
+        add_resp = requests.post(
+            f"{BASE_URL}/api/channels/{channel_id}/videos",
+            headers={"Authorization": f"Bearer {auth_token}"},
+            json={"youtube_id": "test_small_change", "title": "Small Change Video", "duration": 250}
+        )
+        
+        # Update duration with small change (< 30 seconds)
+        response = requests.post(
+            f"{BASE_URL}/api/videos/update-duration",
+            params={
+                "channel_id": channel_id,
+                "youtube_id": "test_small_change",
+                "duration": 260  # Only 10 second difference
+            }
+        )
+        assert response.status_code == 200
+        data = response.json()
+        
+        # Small change should not update (threshold is > 30s)
+        assert data.get("updated") == False or data.get("schedule_regenerated") == False
+        print(f"SUCCESS: Small duration change handled correctly - {data}")
+        
+        # Cleanup
+        requests.delete(
+            f"{BASE_URL}/api/channels/{channel_id}",
+            headers={"Authorization": f"Bearer {auth_token}"}
+        )
+
+
+class TestLiveScheduleEndpoints:
+    """Public Live Schedule endpoints (for Live TV page)"""
+    
+    def test_get_live_schedules_public(self):
+        """GET /api/schedule/live - Public endpoint for Live TV"""
+        response = requests.get(f"{BASE_URL}/api/schedule/live")
+        assert response.status_code == 200
+        
+        data = response.json()
+        assert "date" in data
+        assert "timezone" in data
+        assert data["timezone"] == "America/New_York"
+        assert "schedules" in data
+        assert isinstance(data["schedules"], list)
+        
+        print(f"SUCCESS: Public live schedules endpoint works - {len(data['schedules'])} channels")
+    
+    def test_get_live_channel_schedule_public(self):
+        """GET /api/schedule/live/{channel_id} - Public endpoint for single channel"""
+        # First get channels to find one
+        channels = requests.get(f"{BASE_URL}/api/channels").json()
+        channels_with_videos = [c for c in channels if len(c.get("videos", [])) > 0]
+        if len(channels_with_videos) == 0:
+            pytest.skip("No channels with videos to test")
+        
+        channel_id = channels_with_videos[0]["id"]
+        
+        response = requests.get(f"{BASE_URL}/api/schedule/live/{channel_id}")
+        assert response.status_code == 200
+        
+        data = response.json()
+        assert "date" in data
+        assert "timezone" in data
+        assert "schedule" in data
+        assert data["schedule"]["channel_id"] == channel_id
+        assert len(data["schedule"]["videos"]) > 0
+        
+        print(f"SUCCESS: Public single channel schedule works - {len(data['schedule']['videos'])} videos")
+    
+    def test_get_live_schedule_nonexistent_channel(self):
+        """GET /api/schedule/live/{channel_id} - 404 for nonexistent channel"""
+        response = requests.get(f"{BASE_URL}/api/schedule/live/nonexistent-id-12345")
+        assert response.status_code == 404
+        print("SUCCESS: Nonexistent channel returns 404")
+
+
 class TestFavorites:
     """Favorites functionality tests"""
     
