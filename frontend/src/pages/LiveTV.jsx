@@ -209,7 +209,29 @@ const LiveTV = () => {
       const schedule = schedules[currentChannel.id];
       const { video, seekTime: newSeekTime, videoIndex } = getCurrentVideoFromSchedule(schedule);
       
+      // Don't switch to a video that's known to be failed
       if (video && (!currentVideo || video.video_id !== currentVideo.video_id)) {
+        // Check if this scheduled video has failed before
+        if (failedVideoIds.has(video.youtube_id)) {
+          // Skip to the next available video instead
+          let nextIndex = videoIndex;
+          const maxAttempts = schedule.videos.length;
+          
+          for (let i = 0; i < maxAttempts; i++) {
+            nextIndex = (nextIndex + 1) % schedule.videos.length;
+            const nextVideo = schedule.videos[nextIndex];
+            
+            if (!failedVideoIds.has(nextVideo.youtube_id)) {
+              console.log('Schedule: Skipping failed video, playing:', nextVideo.title);
+              setCurrentVideo(nextVideo);
+              setSeekTime(0);
+              return;
+            }
+          }
+          // All videos have failed
+          return;
+        }
+        
         console.log('Schedule video change:', video.title);
         setCurrentVideo(video);
         setSeekTime(newSeekTime);
@@ -225,7 +247,7 @@ const LiveTV = () => {
         clearInterval(scheduleCheckRef.current);
       }
     };
-  }, [currentChannel, schedules, currentVideo]);
+  }, [currentChannel, schedules, currentVideo, failedVideoIds]);
 
   const loadChannelsAndSchedules = async () => {
     try {
