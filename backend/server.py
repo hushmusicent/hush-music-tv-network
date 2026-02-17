@@ -877,12 +877,13 @@ async def update_single_video_duration(
     
     videos = channel.get("videos", [])
     updated = False
+    old_duration = 0
     
     for i, video in enumerate(videos):
         if video.get("youtube_id") == youtube_id:
-            # Only update if current duration is a default value
-            current_duration = video.get("duration", 300)
-            if current_duration in [300, 180, 0] or abs(current_duration - duration) > 10:
+            old_duration = video.get("duration", 300)
+            # Only update if current duration is a default value OR significantly different
+            if old_duration in [300, 180, 0] or abs(old_duration - duration) > 30:
                 videos[i]["duration"] = duration
                 updated = True
                 break
@@ -892,7 +893,19 @@ async def update_single_video_duration(
             {"id": channel_id},
             {"$set": {"videos": videos}}
         )
-        return {"updated": True, "new_duration": duration}
+        
+        # If duration changed significantly (more than 60 seconds difference), regenerate schedule
+        if abs(old_duration - duration) > 60:
+            today = get_eastern_date()
+            # Delete existing schedule for this channel
+            await db.schedules.delete_one({"channel_id": channel_id, "schedule_date": today})
+            # Generate new schedule
+            updated_channel = await db.channels.find_one({"id": channel_id}, {"_id": 0})
+            if updated_channel:
+                schedule = generate_24h_schedule(updated_channel, today, force_random=False)
+                await db.schedules.insert_one(schedule)
+        
+        return {"updated": True, "new_duration": duration, "schedule_regenerated": abs(old_duration - duration) > 60}
     
     return {"updated": False, "reason": "video_not_found_or_already_set"}
 
