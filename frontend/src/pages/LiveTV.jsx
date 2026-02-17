@@ -552,9 +552,36 @@ const LiveTV = () => {
                   currentChannel.id, 
                   currentVideo.youtube_id, 
                   actualDuration
-                ).then(res => {
+                ).then(async (res) => {
                   if (res.data.updated) {
                     console.log(`Updated video duration: ${actualDuration}s`);
+                    
+                    // If schedule was regenerated, refetch it immediately
+                    if (res.data.schedule_regenerated) {
+                      console.log('Schedule regenerated! Fetching updated schedule...');
+                      try {
+                        const scheduleRes = await axios.get(`${BACKEND_URL}/api/schedule/live/${currentChannel.id}`);
+                        const newSchedule = scheduleRes.data.schedule;
+                        
+                        // Update schedules state
+                        setSchedules(prev => ({
+                          ...prev,
+                          [currentChannel.id]: newSchedule
+                        }));
+                        
+                        // Re-sync with the updated schedule
+                        const { video, seekTime: newSeekTime, videoIndex } = getCurrentVideoFromSchedule(newSchedule);
+                        if (video) {
+                          console.log('Re-syncing to updated schedule, video:', video.title, 'at', newSeekTime, 'seconds');
+                          setCurrentVideoIndex(videoIndex);
+                          setCurrentVideo(video);
+                          setSeekTime(newSeekTime);
+                          toast.success('Schedule updated with correct video duration');
+                        }
+                      } catch (err) {
+                        console.error('Failed to fetch updated schedule:', err);
+                      }
+                    }
                   }
                 }).catch(() => {});
               }
