@@ -392,37 +392,44 @@ const LiveTV = () => {
 
   const isUploadedVideo = currentVideo && (currentVideo.video_url || !currentVideo.youtube_id);
 
-  // Play next video in playlist (called when current video ends)
+  // Play next video based on schedule (called when current video ends)
   const playNextVideo = useCallback(() => {
     if (!currentChannel || !schedules[currentChannel.id]) return;
     
     const schedule = schedules[currentChannel.id];
-    const videos = schedule.videos || [];
     
-    if (videos.length === 0) return;
+    // Re-sync with schedule to get the current video
+    const { video, seekTime: newSeekTime, videoIndex } = getCurrentVideoFromSchedule(schedule);
     
-    // Find next video that hasn't failed
-    let nextIndex = currentVideoIndex;
-    let attempts = 0;
-    const maxAttempts = videos.length;
+    if (!video) return;
     
-    while (attempts < maxAttempts) {
-      nextIndex = (nextIndex + 1) % videos.length;
-      const nextVideo = videos[nextIndex];
+    // If the scheduled video has failed, find next available
+    if (failedVideoIds.has(video.youtube_id)) {
+      let nextIndex = videoIndex;
+      const maxAttempts = schedule.videos.length;
       
-      if (!failedVideoIds.has(nextVideo.youtube_id)) {
-        console.log('Playing next video:', nextVideo.title);
-        setCurrentVideoIndex(nextIndex);
-        setCurrentVideo(nextVideo);
-        setSeekTime(0);
-        return;
+      for (let i = 0; i < maxAttempts; i++) {
+        nextIndex = (nextIndex + 1) % schedule.videos.length;
+        const nextVideo = schedule.videos[nextIndex];
+        
+        if (!failedVideoIds.has(nextVideo.youtube_id)) {
+          console.log('Playing next available video:', nextVideo.title);
+          setCurrentVideoIndex(nextIndex);
+          setCurrentVideo(nextVideo);
+          setSeekTime(0);
+          return;
+        }
       }
-      attempts++;
+      toast.error('No more playable videos on this channel');
+      return;
     }
     
-    // All videos failed
-    toast.error('No more playable videos on this channel');
-  }, [currentChannel, schedules, currentVideoIndex, failedVideoIds]);
+    // Play the scheduled video
+    console.log('Re-syncing with schedule, playing:', video.title);
+    setCurrentVideoIndex(videoIndex);
+    setCurrentVideo(video);
+    setSeekTime(newSeekTime);
+  }, [currentChannel, schedules, failedVideoIds]);
 
   // Skip to next video (for unavailable/age-restricted videos - also deletes from DB)
   const skipToNextVideo = useCallback(async () => {
