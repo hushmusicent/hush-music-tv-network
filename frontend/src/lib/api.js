@@ -149,6 +149,9 @@ export const videoCleanupAPI = {
   
   // Run cleanup - delete all unplayable videos
   runCleanup: () => api.post('/videos/cleanup'),
+  
+  // Update video durations from YouTube
+  updateDurations: () => api.post('/videos/update-durations'),
 };
 
 export default api;
