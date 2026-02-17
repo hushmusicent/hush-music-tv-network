@@ -733,26 +733,51 @@ async def check_videos_status(user: dict = Depends(require_user)):
     return results
 
 async def fetch_youtube_duration(youtube_id: str) -> int:
-    """Fetch video duration from YouTube using yt-dlp simulation or page scraping"""
+    """Fetch video duration from YouTube"""
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
             # Try to get video info from YouTube's video page
             response = await client.get(
                 f"https://www.youtube.com/watch?v={youtube_id}",
-                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+                headers={
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                    "Accept-Language": "en-US,en;q=0.9"
+                },
+                follow_redirects=True
             )
             if response.status_code == 200:
                 content = response.text
-                # Look for duration in the page content
                 import re
-                # Try to find "lengthSeconds" in the page
-                match = re.search(r'"lengthSeconds":"(\d+)"', content)
-                if match:
-                    return int(match.group(1))
-                # Alternative pattern
-                match = re.search(r'approxDurationMs.*?(\d+)', content)
-                if match:
-                    return int(match.group(1)) // 1000
+                
+                # Try multiple patterns to find duration
+                patterns = [
+                    r'"lengthSeconds":"(\d+)"',
+                    r'"length_seconds":(\d+)',
+                    r'approxDurationMs":"(\d+)"',
+                    r'"duration":{"seconds":"(\d+)"',
+                ]
+                
+                for pattern in patterns:
+                    match = re.search(pattern, content)
+                    if match:
+                        value = int(match.group(1))
+                        # If it's milliseconds (approxDurationMs), convert to seconds
+                        if 'Ms' in pattern:
+                            value = value // 1000
+                        if value > 0:
+                            return value
+                
+                # Try to find PT format (ISO 8601 duration)
+                pt_match = re.search(r'"duration":"PT(\d+)M(\d+)S"', content)
+                if pt_match:
+                    minutes = int(pt_match.group(1))
+                    seconds = int(pt_match.group(2))
+                    return minutes * 60 + seconds
+                
+                pt_match2 = re.search(r'"duration":"PT(\d+)M"', content)
+                if pt_match2:
+                    return int(pt_match2.group(1)) * 60
+                    
     except Exception as e:
         print(f"Error fetching duration for {youtube_id}: {e}")
     
