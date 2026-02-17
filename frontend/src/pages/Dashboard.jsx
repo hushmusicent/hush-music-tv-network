@@ -118,6 +118,60 @@ const Dashboard = () => {
     }
   };
 
+  // Video cleanup functions
+  const checkVideoStatus = async () => {
+    setCleanupLoading(true);
+    try {
+      const response = await videoCleanupAPI.checkStatus();
+      setCleanupStatus(response.data);
+      toast.success(`Checked ${response.data.total} videos: ${response.data.unplayable} unplayable found`);
+    } catch (error) {
+      toast.error('Failed to check video status');
+    } finally {
+      setCleanupLoading(false);
+    }
+  };
+
+  const runCleanup = async () => {
+    if (!window.confirm('This will permanently delete all unplayable videos from the database. Continue?')) {
+      return;
+    }
+    
+    setCleanupLoading(true);
+    try {
+      const response = await videoCleanupAPI.runCleanup();
+      const { total_checked, deleted_count, deleted_videos } = response.data;
+      toast.success(`Cleaned up ${deleted_count} unplayable videos out of ${total_checked} checked`);
+      setCleanupStatus(null);
+      // Reload data to reflect changes
+      loadData();
+    } catch (error) {
+      toast.error('Failed to run cleanup');
+    } finally {
+      setCleanupLoading(false);
+    }
+  };
+
+  const loadDeletedVideos = async () => {
+    try {
+      const response = await videoCleanupAPI.getDeletedVideos();
+      setDeletedVideos(response.data);
+      setShowDeletedVideos(true);
+    } catch (error) {
+      toast.error('Failed to load deleted videos');
+    }
+  };
+
+  const clearDeletedLog = async () => {
+    try {
+      await videoCleanupAPI.clearDeletedLog();
+      setDeletedVideos([]);
+      toast.success('Deleted videos log cleared');
+    } catch (error) {
+      toast.error('Failed to clear log');
+    }
+  };
+
   const toggleChannelExpanded = (channelId) => {
     setExpandedChannels(prev => ({
       ...prev,
