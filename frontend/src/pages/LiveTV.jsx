@@ -90,6 +90,7 @@ const LiveTV = () => {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
+  const [failedVideoIds, setFailedVideoIds] = useState(new Set()); // Track videos that failed to play
   const playerRef = useRef(null);
   const videoRef = useRef(null);
   const youtubePlayerRef = useRef(null);
