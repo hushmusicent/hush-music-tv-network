@@ -387,12 +387,44 @@ const LiveTV = () => {
 
   const isUploadedVideo = currentVideo && (currentVideo.video_url || !currentVideo.youtube_id);
 
-  // Skip to next video in schedule (for unavailable/age-restricted videos)
+  // Play next video in playlist (called when current video ends)
+  const playNextVideo = useCallback(() => {
+    if (!currentChannel || !schedules[currentChannel.id]) return;
+    
+    const schedule = schedules[currentChannel.id];
+    const videos = schedule.videos || [];
+    
+    if (videos.length === 0) return;
+    
+    // Find next video that hasn't failed
+    let nextIndex = currentVideoIndex;
+    let attempts = 0;
+    const maxAttempts = videos.length;
+    
+    while (attempts < maxAttempts) {
+      nextIndex = (nextIndex + 1) % videos.length;
+      const nextVideo = videos[nextIndex];
+      
+      if (!failedVideoIds.has(nextVideo.youtube_id)) {
+        console.log('Playing next video:', nextVideo.title);
+        setCurrentVideoIndex(nextIndex);
+        setCurrentVideo(nextVideo);
+        setSeekTime(0);
+        return;
+      }
+      attempts++;
+    }
+    
+    // All videos failed
+    toast.error('No more playable videos on this channel');
+  }, [currentChannel, schedules, currentVideoIndex, failedVideoIds]);
+
+  // Skip to next video (for unavailable/age-restricted videos - also deletes from DB)
   const skipToNextVideo = useCallback(async () => {
     if (!currentChannel || !schedules[currentChannel.id]) return;
     
     const schedule = schedules[currentChannel.id];
-    const { videoIndex } = getCurrentVideoFromSchedule(schedule);
+    const videos = schedule.videos || [];
     
     // Mark current video as failed and delete from database
     if (currentVideo?.youtube_id) {
@@ -409,24 +441,26 @@ const LiveTV = () => {
       }
     }
     
-    // Find next video that hasn't failed (try up to the total number of videos)
-    let nextIndex = videoIndex;
+    // Find next video that hasn't failed
+    let nextIndex = currentVideoIndex;
     let attempts = 0;
-    const maxAttempts = schedule.videos.length;
+    const maxAttempts = videos.length;
     
     while (attempts < maxAttempts) {
-      nextIndex = (nextIndex + 1) % schedule.videos.length;
-      const nextVideo = schedule.videos[nextIndex];
+      nextIndex = (nextIndex + 1) % videos.length;
+      const nextVideo = videos[nextIndex];
       
       // Check if this video hasn't failed before
       if (!failedVideoIds.has(nextVideo.youtube_id) && nextVideo.youtube_id !== currentVideo?.youtube_id) {
         console.log('Skipping to next video:', nextVideo.title);
+        setCurrentVideoIndex(nextIndex);
         setCurrentVideo(nextVideo);
-        setSeekTime(0); // Start from beginning of next video
+        setSeekTime(0);
         toast.info(`Skipped unavailable video, now playing: ${nextVideo.title}`);
         return;
       }
       attempts++;
+    }
     }
     
     // All videos have failed - show error message
