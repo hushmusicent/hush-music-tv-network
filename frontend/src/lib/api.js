@@ -156,6 +156,9 @@ export const videoCleanupAPI = {
   // Update a single video's duration (from frontend when video plays)
   updateSingleDuration: (channelId, youtubeId, duration) => 
     api.post(`/videos/update-duration?channel_id=${channelId}&youtube_id=${youtubeId}&duration=${duration}`),
+  
+  // Regenerate all schedules (use after updating durations)
+  regenerateSchedules: () => api.post('/schedules/regenerate-all'),
 };
 
 export default api;
