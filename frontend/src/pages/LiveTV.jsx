@@ -463,12 +463,11 @@ const LiveTV = () => {
       }
       attempts++;
     }
-    }
     
     // All videos have failed - show error message
     toast.error('No playable videos available on this channel');
     console.log('All videos on this channel appear to be unavailable');
-  }, [currentChannel, schedules, currentVideo, failedVideoIds]);
+  }, [currentChannel, schedules, currentVideo, currentVideoIndex, failedVideoIds]);
 
   // Initialize YouTube player when video changes
   useEffect(() => {
