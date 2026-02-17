@@ -1170,6 +1170,20 @@ const Dashboard = () => {
               </Button>
               
               <Button
+                onClick={regenerateSchedules}
+                disabled={cleanupLoading}
+                className="bg-purple-600 hover:bg-purple-700"
+                data-testid="regenerate-schedules-btn"
+              >
+                {cleanupLoading ? (
+                  <Loader2 size={16} className="mr-2 animate-spin" />
+                ) : (
+                  <Calendar size={16} className="mr-2" />
+                )}
+                Regenerate Schedules
+              </Button>
+              
+              <Button
                 onClick={loadDeletedVideos}
                 variant="outline"
                 className="border-white/20"
