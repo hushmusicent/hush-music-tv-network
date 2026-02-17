@@ -185,26 +185,27 @@ The admin dashboard includes a "Delete Channel" button for each channel. Users c
 
 ## Recent Changes (Feb 17, 2026)
 
-### Self-Healing Video Duration Fix (LATEST)
-- **P0 Bug Fixed**: Videos now play for their full duration instead of being cut off at 5 minutes
-- **Root Cause**: Default durations (300s) were stored in the database for many videos
-- **Solution - Self-Healing Mechanism**:
-  1. When a video plays, the YouTube player reports its actual duration to the backend
-  2. Backend updates the duration in the database if significantly different (>30s)
-  3. If duration change is substantial (>60s), backend automatically regenerates the channel's schedule
-  4. Backend returns `schedule_regenerated: true` in the response
-  5. **NEW**: Frontend now detects this flag and immediately refetches the updated schedule
-  6. Player re-syncs to the new schedule with correct video timings
-  7. Toast notification shows "Schedule updated with correct video duration"
-- **Benefit**: Video durations self-correct over time as users watch channels
-- **Testing**: 55/55 backend tests pass, all frontend features verified
+### Session-Based Playback (LATEST)
+- **Removed time-based synchronization** - Videos no longer sync to Eastern time
+- **New behavior**: Each viewer has their own playback session
+  - On app load, a session start time is recorded
+  - Videos play from start to finish (full duration)
+  - When video ends, automatically advances to next in playlist
+  - Random playlists generated daily per channel (locked for the day)
+- **Channel surfing behavior**:
+  - Playlist continues "playing in background" based on elapsed session time
+  - When switching back to a channel, continues from where that channel's playlist would be
+  - Example: Start watching Channel 1 at 0s → Switch to Channel 2 at 30s → Switch back to Channel 1 at 60s → Resumes at 60s into the playlist
+- **UI changes**:
+  - Shows "PLAYING" indicator instead of "LIVE"
+  - Shows video duration instead of time slot
+  - Sidebar shows "Playlist: [date]" instead of "Schedule"
+- **Testing**: All frontend features verified (100% pass rate)
 
-- **Synchronized Random Playback** - Videos play in random order but synchronized across all viewers
-  - Schedule is randomly generated daily (same seed per channel per day)
-  - All viewers see the same video at the same position when tuning in
-  - Videos play their full duration before moving to the next
-  - When a video ends, the schedule automatically advances to the next video
-  - Unplayable videos are auto-skipped AND deleted from the database
+### Self-Healing Video Duration
+- When a video plays, the YouTube player reports its actual duration to the backend
+- Backend updates the duration in the database if significantly different
+- Video durations self-correct over time as users watch channels
 
 - **Video Cleanup System** - Comprehensive handling of unplayable videos
   - **Auto-delete on failure**: When videos fail to play (age-restricted, deleted, private), they're automatically removed from the database
