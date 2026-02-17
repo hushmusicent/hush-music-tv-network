@@ -173,16 +173,20 @@ const Dashboard = () => {
   };
 
   const updateVideoDurations = async () => {
-    if (!window.confirm('This will fetch actual video durations from YouTube for all videos with default 5-minute duration. This may take several minutes. Continue?')) {
+    if (!window.confirm('This will fetch actual video durations from YouTube. Videos are processed in batches of 50. You may need to click multiple times to update all videos. Continue?')) {
       return;
     }
     
     setCleanupLoading(true);
-    toast.info('Fetching video durations from YouTube... This may take a while.');
+    toast.info('Fetching video durations from YouTube...');
     try {
       const response = await videoCleanupAPI.updateDurations();
-      const { updated, failed } = response.data;
-      toast.success(`Updated ${updated} video durations. ${failed} failed.`);
+      const { updated, failed, remaining } = response.data;
+      if (remaining > 0) {
+        toast.success(`Updated ${updated} videos. ${remaining} remaining. Click again to continue.`);
+      } else {
+        toast.success(`Updated ${updated} video durations. All done!`);
+      }
       // Reload data to reflect changes
       loadData();
     } catch (error) {
