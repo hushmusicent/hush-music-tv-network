@@ -301,10 +301,12 @@ const LiveTV = () => {
     setFailedVideoIds(new Set());
     
     const schedule = scheduleMap[channel.id];
-    if (schedule) {
-      const { video, seekTime: newSeekTime } = getCurrentVideoFromSchedule(schedule);
-      setCurrentVideo(video);
-      setSeekTime(newSeekTime);
+    if (schedule && schedule.videos && schedule.videos.length > 0) {
+      // Start with the first video in the playlist (play from beginning)
+      const firstVideo = schedule.videos[0];
+      setCurrentVideoIndex(0);
+      setCurrentVideo(firstVideo);
+      setSeekTime(0); // Always start videos from the beginning
     }
     
     // Track view
