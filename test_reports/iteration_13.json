@@ -1,0 +1,72 @@
+{
+  "summary": "Completed testing of self-healing video duration update feature. All 55 backend tests pass including 8 new tests for duration update and live schedule endpoints. Live TV page works correctly with channel switching, video playback, and schedule synchronization. The duration update flow is working - frontend reports actual durations to backend, and schedule regenerates when needed.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "Live TV",
+        "issues": ["Some YouTube videos are unavailable (error 150) due to embedding restrictions - this is expected behavior and the app correctly skips to next video"]
+      }
+    ]
+  },
+  "passed_tests": [
+    "POST /api/videos/update-duration - Updates video duration (no auth required)",
+    "POST /api/videos/update-duration - Returns schedule_regenerated: true when duration change > 60s",
+    "POST /api/videos/update-duration - Handles invalid duration (returns updated: false)",
+    "POST /api/videos/update-duration - Handles nonexistent channel gracefully",
+    "POST /api/videos/update-duration - Small duration changes (< 30s) don't update",
+    "GET /api/schedule/live - Public endpoint returns all channel schedules",
+    "GET /api/schedule/live/{channel_id} - Public endpoint returns single channel schedule",
+    "GET /api/schedule/live/{channel_id} - Returns 404 for nonexistent channel",
+    "Live TV page loads correctly with data-testid='live-tv-page'",
+    "Channel sidebar shows 18 channels with current video info",
+    "Channel up/down buttons work for switching channels",
+    "YouTube player container present and playing videos",
+    "Schedule date displayed (2026-02-16)",
+    "Up Next section shows upcoming videos from schedule",
+    "Console shows 'Updated video duration: 280s' - duration reporting working",
+    "Console shows 'Deleted unplayable video from database' - cleanup working"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_tv_network.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Duration update endpoint correctly regenerates schedule when difference > 60s",
+    "Frontend refetch logic in LiveTV.jsx lines 559-583 correctly handles schedule_regenerated response",
+    "Public /api/schedule/live endpoints don't require authentication - good for Live TV page"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_tv_network.py"
+  ],
+  "success_rate": {
+    "backend": "100% (55/55 tests passed)",
+    "frontend": "100% (all Live TV features verified)"
+  },
+  "test_credentials": {
+    "admin_email": "Hushmusicent419@gmail.com",
+    "admin_password": "sstisdd419"
+  },
+  "seed_data_creation": "",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Self-healing duration update feature fully tested. Backend endpoint POST /api/videos/update-duration updates video duration in DB and regenerates schedule when difference > 60s. Frontend LiveTV.jsx onReady handler reports actual duration and refetches schedule when regenerated. 8 new test cases added in TestVideoDurationUpdate and TestLiveScheduleEndpoints classes. All 55 tests pass.",
+  "features_verified": {
+    "duration_update_no_auth": true,
+    "duration_update_schedule_regeneration": true,
+    "live_schedule_public_endpoint": true,
+    "live_schedule_single_channel": true,
+    "live_tv_page_loads": true,
+    "channel_switching": true,
+    "video_playback": true,
+    "schedule_sync": true,
+    "up_next_section": true,
+    "auto_skip_unavailable_videos": true
+  }
+}
