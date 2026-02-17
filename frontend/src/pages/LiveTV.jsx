@@ -101,6 +101,16 @@ const LiveTV = () => {
 
   // Auto-hide controls after inactivity
   const CONTROLS_HIDE_DELAY = 3000; // 3 seconds
+  const isPausedRef = useRef(isPaused);
+  
+  // Keep ref in sync with state
+  useEffect(() => {
+    isPausedRef.current = isPaused;
+    // When paused, always show controls
+    if (isPaused) {
+      setControlsVisible(true);
+    }
+  }, [isPaused]);
 
   // Single effect to handle all control visibility logic
   useEffect(() => {
@@ -114,12 +124,12 @@ const LiveTV = () => {
         clearTimeout(hideTimeout);
       }
       
-      // Start new hide timer (only if not paused)
+      // Start new hide timer
       hideTimeout = setTimeout(() => {
-        setControlsVisible((prev) => {
-          // Only hide if not currently paused
-          return isPaused ? true : false;
-        });
+        // Only hide if not currently paused (use ref for current value)
+        if (!isPausedRef.current) {
+          setControlsVisible(false);
+        }
       }, CONTROLS_HIDE_DELAY);
     };
     
@@ -143,14 +153,7 @@ const LiveTV = () => {
         clearTimeout(hideTimeout);
       }
     };
-  }, []); // Only run on mount - isPaused is checked inside the timeout callback
-
-  // When video is paused, always keep controls visible
-  useEffect(() => {
-    if (isPaused) {
-      setControlsVisible(true);
-    }
-  }, [isPaused]);
+  }, []); // Only run on mount
 
   // Track fullscreen state
   useEffect(() => {
