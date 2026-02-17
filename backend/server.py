@@ -539,6 +539,199 @@ async def update_video_duration(
     
     return {"message": "Duration updated"}
 
+# ===================== VIDEO CLEANUP ROUTES =====================
+import httpx
+
+class DeleteVideoByYoutubeId(BaseModel):
+    youtube_id: str
+    channel_id: str
+
+@api_router.post("/videos/delete-by-youtube-id")
+async def delete_video_by_youtube_id(data: DeleteVideoByYoutubeId):
+    """Delete a video from a channel by its YouTube ID (for auto-cleanup of unplayable videos)"""
+    channel = await db.channels.find_one({"id": data.channel_id})
+    if not channel:
+        return {"message": "Channel not found", "deleted": False}
+    
+    # Find and remove the video with matching youtube_id
+    videos = channel.get("videos", [])
+    video_to_remove = None
+    for video in videos:
+        if video.get("youtube_id") == data.youtube_id:
+            video_to_remove = video
+            break
+    
+    if not video_to_remove:
+        return {"message": "Video not found", "deleted": False}
+    
+    # Remove the video
+    await db.channels.update_one(
+        {"id": data.channel_id},
+        {"$pull": {"videos": {"youtube_id": data.youtube_id}}}
+    )
+    
+    # Log the deletion
+    await db.deleted_videos.insert_one({
+        "youtube_id": data.youtube_id,
+        "channel_id": data.channel_id,
+        "title": video_to_remove.get("title", "Unknown"),
+        "deleted_at": datetime.now(timezone.utc).isoformat(),
+        "reason": "unplayable"
+    })
+    
+    return {"message": f"Video '{video_to_remove.get('title', 'Unknown')}' deleted", "deleted": True}
+
+@api_router.get("/videos/deleted")
+async def get_deleted_videos(user: dict = Depends(require_user)):
+    """Get list of auto-deleted videos (admin only)"""
+    if not user.get("is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    deleted = await db.deleted_videos.find({}, {"_id": 0}).sort("deleted_at", -1).to_list(100)
+    return deleted
+
+@api_router.delete("/videos/deleted/clear")
+async def clear_deleted_videos_log(user: dict = Depends(require_user)):
+    """Clear the deleted videos log (admin only)"""
+    if not user.get("is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    await db.deleted_videos.delete_many({})
+    return {"message": "Deleted videos log cleared"}
+
+async def check_youtube_video_playable(youtube_id: str) -> dict:
+    """Check if a YouTube video is playable using oEmbed API"""
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            # Try oEmbed API - it returns error for unavailable videos
+            response = await client.get(
+                f"https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v={youtube_id}&format=json"
+            )
+            if response.status_code == 200:
+                return {"playable": True, "title": response.json().get("title", "")}
+            elif response.status_code == 401:
+                return {"playable": False, "reason": "embedding_disabled"}
+            elif response.status_code == 404:
+                return {"playable": False, "reason": "not_found"}
+            else:
+                return {"playable": False, "reason": f"error_{response.status_code}"}
+    except Exception as e:
+        return {"playable": None, "reason": f"check_failed: {str(e)}"}
+
+class CleanupResult(BaseModel):
+    total_checked: int
+    deleted_count: int
+    deleted_videos: List[dict]
+    errors: List[str]
+
+@api_router.post("/videos/cleanup", response_model=CleanupResult)
+async def cleanup_unplayable_videos(user: dict = Depends(require_user)):
+    """Check all videos and remove unplayable ones (admin only)"""
+    if not user.get("is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    total_checked = 0
+    deleted_count = 0
+    deleted_videos = []
+    errors = []
+    
+    # Get all channels
+    channels = await db.channels.find({}, {"_id": 0}).to_list(None)
+    
+    for channel in channels:
+        videos = channel.get("videos", [])
+        videos_to_delete = []
+        
+        for video in videos:
+            youtube_id = video.get("youtube_id")
+            if not youtube_id:
+                continue
+            
+            total_checked += 1
+            
+            # Check if video is playable
+            result = await check_youtube_video_playable(youtube_id)
+            
+            if result.get("playable") == False:
+                videos_to_delete.append({
+                    "youtube_id": youtube_id,
+                    "title": video.get("title", "Unknown"),
+                    "channel": channel.get("name", "Unknown"),
+                    "reason": result.get("reason", "unknown")
+                })
+        
+        # Delete unplayable videos from this channel
+        for video_info in videos_to_delete:
+            try:
+                await db.channels.update_one(
+                    {"id": channel["id"]},
+                    {"$pull": {"videos": {"youtube_id": video_info["youtube_id"]}}}
+                )
+                
+                # Log deletion
+                await db.deleted_videos.insert_one({
+                    "youtube_id": video_info["youtube_id"],
+                    "channel_id": channel["id"],
+                    "title": video_info["title"],
+                    "deleted_at": datetime.now(timezone.utc).isoformat(),
+                    "reason": video_info["reason"]
+                })
+                
+                deleted_videos.append(video_info)
+                deleted_count += 1
+            except Exception as e:
+                errors.append(f"Failed to delete {video_info['title']}: {str(e)}")
+    
+    return CleanupResult(
+        total_checked=total_checked,
+        deleted_count=deleted_count,
+        deleted_videos=deleted_videos,
+        errors=errors
+    )
+
+@api_router.get("/videos/check-status")
+async def check_videos_status(user: dict = Depends(require_user)):
+    """Check status of all videos without deleting (admin only)"""
+    if not user.get("is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    results = {
+        "total": 0,
+        "playable": 0,
+        "unplayable": 0,
+        "unknown": 0,
+        "unplayable_videos": []
+    }
+    
+    channels = await db.channels.find({}, {"_id": 0}).to_list(None)
+    
+    for channel in channels:
+        videos = channel.get("videos", [])
+        
+        for video in videos:
+            youtube_id = video.get("youtube_id")
+            if not youtube_id:
+                continue
+            
+            results["total"] += 1
+            
+            status = await check_youtube_video_playable(youtube_id)
+            
+            if status.get("playable") == True:
+                results["playable"] += 1
+            elif status.get("playable") == False:
+                results["unplayable"] += 1
+                results["unplayable_videos"].append({
+                    "youtube_id": youtube_id,
+                    "title": video.get("title", "Unknown"),
+                    "channel": channel.get("name", "Unknown"),
+                    "reason": status.get("reason", "unknown")
+                })
+            else:
+                results["unknown"] += 1
+    
+    return results
+
 # ===================== IMAGE UPLOAD ROUTES =====================
 
 class UploadedImageResponse(BaseModel):
