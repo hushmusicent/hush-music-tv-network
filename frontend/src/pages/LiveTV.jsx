@@ -558,8 +558,10 @@ const LiveTV = () => {
             } else if (event.data === window.YT.PlayerState.PAUSED) {
               setIsPaused(true);
             } else if (event.data === window.YT.PlayerState.ENDED) {
-              // Schedule will handle next video automatically
+              // Video finished - play the next one
+              console.log('Video ended, playing next...');
               setIsPaused(false);
+              playNextVideo();
             }
           },
           onError: (event) => {
