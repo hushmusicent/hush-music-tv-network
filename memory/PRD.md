@@ -184,6 +184,13 @@ The admin dashboard includes a "Delete Channel" button for each channel. Users c
   - Spiritual Channel (157 videos)
 
 ## Recent Changes (Feb 17, 2026)
+- **YouTube Age Restriction Handling** - Improved video playback reliability
+  - Switched to `youtube-nocookie.com` for privacy-enhanced embedding
+  - Added auto-skip for unavailable/age-restricted videos (error codes 100, 101, 150)
+  - System tracks failed videos and finds the next playable one in the schedule
+  - Users see a toast notification when a video is skipped
+  - Failed video list clears when changing channels
+
 - **Auto-Hide Controls on Live TV** - Controls now fade out after 3 seconds of inactivity
   - Channel changer, info overlay, and player controls automatically hide when user is inactive
   - Controls reappear on mouse movement, touch, or keyboard activity
