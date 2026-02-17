@@ -184,6 +184,21 @@ The admin dashboard includes a "Delete Channel" button for each channel. Users c
   - Spiritual Channel (157 videos)
 
 ## Recent Changes (Feb 17, 2026)
+
+### Self-Healing Video Duration Fix (LATEST)
+- **P0 Bug Fixed**: Videos now play for their full duration instead of being cut off at 5 minutes
+- **Root Cause**: Default durations (300s) were stored in the database for many videos
+- **Solution - Self-Healing Mechanism**:
+  1. When a video plays, the YouTube player reports its actual duration to the backend
+  2. Backend updates the duration in the database if significantly different (>30s)
+  3. If duration change is substantial (>60s), backend automatically regenerates the channel's schedule
+  4. Backend returns `schedule_regenerated: true` in the response
+  5. **NEW**: Frontend now detects this flag and immediately refetches the updated schedule
+  6. Player re-syncs to the new schedule with correct video timings
+  7. Toast notification shows "Schedule updated with correct video duration"
+- **Benefit**: Video durations self-correct over time as users watch channels
+- **Testing**: 55/55 backend tests pass, all frontend features verified
+
 - **Synchronized Random Playback** - Videos play in random order but synchronized across all viewers
   - Schedule is randomly generated daily (same seed per channel per day)
   - All viewers see the same video at the same position when tuning in
