@@ -102,35 +102,45 @@ const LiveTV = () => {
   // Auto-hide controls after inactivity
   const CONTROLS_HIDE_DELAY = 3000; // 3 seconds
 
-  const showControls = useCallback(() => {
+  // Reset the hide timer - call this on any user activity
+  const resetControlsTimer = useCallback(() => {
+    // Always show controls on activity
     setControlsVisible(true);
     
-    // Clear existing timeout
+    // Clear any existing hide timeout
     if (controlsTimeoutRef.current) {
       clearTimeout(controlsTimeoutRef.current);
+      controlsTimeoutRef.current = null;
     }
     
-    // Set new timeout to hide controls (only if not paused)
+    // Only start hide timer if video is playing (not paused)
+    if (!isPaused) {
+      controlsTimeoutRef.current = setTimeout(() => {
+        setControlsVisible(false);
+      }, CONTROLS_HIDE_DELAY);
+    }
+  }, [isPaused]);
+
+  // Show controls on mouse move, touch, or keyboard activity
+  useEffect(() => {
+    const handleActivity = () => {
+      resetControlsTimer();
+    };
+
+    // Listen on the whole document for activity
+    document.addEventListener('mousemove', handleActivity);
+    document.addEventListener('touchstart', handleActivity);
+    document.addEventListener('keydown', handleActivity);
+
+    // Show controls immediately on mount
+    setControlsVisible(true);
+    
+    // Start initial hide timer
     controlsTimeoutRef.current = setTimeout(() => {
       if (!isPaused) {
         setControlsVisible(false);
       }
     }, CONTROLS_HIDE_DELAY);
-  }, [isPaused]);
-
-  // Show controls on mouse move or touch
-  useEffect(() => {
-    const handleActivity = () => {
-      showControls();
-    };
-
-    // Listen on the whole document for mouse/touch activity
-    document.addEventListener('mousemove', handleActivity);
-    document.addEventListener('touchstart', handleActivity);
-    document.addEventListener('keydown', handleActivity);
-
-    // Initial show
-    showControls();
 
     return () => {
       document.removeEventListener('mousemove', handleActivity);
@@ -140,19 +150,24 @@ const LiveTV = () => {
         clearTimeout(controlsTimeoutRef.current);
       }
     };
-  }, [showControls]);
+  }, []); // Empty dependency - only run on mount
 
-  // Keep controls visible when paused
+  // When paused state changes, update control visibility
   useEffect(() => {
     if (isPaused) {
+      // When paused, always show controls and cancel hide timer
       setControlsVisible(true);
       if (controlsTimeoutRef.current) {
         clearTimeout(controlsTimeoutRef.current);
+        controlsTimeoutRef.current = null;
       }
     } else {
-      showControls();
+      // When unpaused, start the hide timer
+      controlsTimeoutRef.current = setTimeout(() => {
+        setControlsVisible(false);
+      }, CONTROLS_HIDE_DELAY);
     }
-  }, [isPaused, showControls]);
+  }, [isPaused]);
 
   // Track fullscreen state
   useEffect(() => {
