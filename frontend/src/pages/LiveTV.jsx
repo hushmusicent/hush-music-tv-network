@@ -543,6 +543,23 @@ const LiveTV = () => {
               errorTimeout = null;
             }
             
+            // Get actual video duration and report it to update the database
+            try {
+              const actualDuration = Math.floor(event.target.getDuration());
+              if (actualDuration > 0 && currentChannel && currentVideo?.youtube_id) {
+                // Report duration to backend (will update if different from stored value)
+                videoCleanupAPI.updateSingleDuration(
+                  currentChannel.id, 
+                  currentVideo.youtube_id, 
+                  actualDuration
+                ).then(res => {
+                  if (res.data.updated) {
+                    console.log(`Updated video duration: ${actualDuration}s`);
+                  }
+                }).catch(() => {});
+              }
+            } catch (e) {}
+            
             // Check if video actually starts playing after 5 seconds
             playbackCheckTimeout = setTimeout(() => {
               try {
