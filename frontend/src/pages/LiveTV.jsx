@@ -36,6 +36,16 @@ const getViewerId = () => {
   return viewerId;
 };
 
+// Fisher-Yates shuffle algorithm - creates a new random order each time
+const shuffleArray = (array) => {
+  const shuffled = [...array];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+};
+
 // Calculate current video from playlist based on elapsed time since session start
 const getVideoFromPlaylist = (playlist, elapsedSeconds, failedVideoIds = new Set()) => {
   if (!playlist || playlist.length === 0) {
