@@ -759,31 +759,43 @@ async def fetch_youtube_duration(youtube_id: str) -> int:
     return 0
 
 @api_router.post("/videos/update-durations")
-async def update_video_durations(user: dict = Depends(require_user)):
-    """Fetch and update durations for all videos from YouTube (admin only)"""
+async def update_video_durations(user: dict = Depends(require_user), limit: int = 50):
+    """Fetch and update durations for videos from YouTube (admin only). 
+    Processes videos in batches - call multiple times to update all videos."""
     if not user.get("is_admin", False):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     updated_count = 0
     failed_count = 0
+    skipped_count = 0
     results = []
     
     channels = await db.channels.find({}, {"_id": 0}).to_list(None)
     
+    processed = 0
     for channel in channels:
+        if processed >= limit:
+            break
+            
         videos = channel.get("videos", [])
         channel_updated = False
         
         for i, video in enumerate(videos):
+            if processed >= limit:
+                break
+                
             youtube_id = video.get("youtube_id")
             current_duration = video.get("duration", 300)
             
-            # Skip if already has a non-default duration (not 300)
-            if current_duration != 300 and current_duration > 0:
+            # Skip if already has a non-default duration (not 300 or 180)
+            if current_duration not in [300, 180, 0]:
+                skipped_count += 1
                 continue
             
             if not youtube_id:
                 continue
+            
+            processed += 1
             
             # Fetch duration from YouTube
             duration = await fetch_youtube_duration(youtube_id)
@@ -808,10 +820,19 @@ async def update_video_durations(user: dict = Depends(require_user)):
                 {"$set": {"videos": videos}}
             )
     
+    # Count remaining videos with default duration
+    remaining = 0
+    for channel in channels:
+        for video in channel.get("videos", []):
+            if video.get("duration", 300) in [300, 180, 0]:
+                remaining += 1
+    
     return {
         "updated": updated_count,
         "failed": failed_count,
-        "results": results[:50]  # Return first 50 results
+        "skipped": skipped_count,
+        "remaining": remaining - updated_count - failed_count,
+        "results": results
     }
 
 # ===================== IMAGE UPLOAD ROUTES =====================
