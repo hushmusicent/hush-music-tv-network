@@ -184,12 +184,12 @@ The admin dashboard includes a "Delete Channel" button for each channel. Users c
   - Spiritual Channel (157 videos)
 
 ## Recent Changes (Feb 17, 2026)
-- **Videos Play to Completion** - Changed playback behavior
-  - Videos now play from start to finish before moving to next video
-  - When a video ends, the next video in the playlist automatically starts
-  - No more mid-video switching based on schedule time
-  - Channel selection starts with the first video in the playlist
-  - Each viewer's playback is independent (not synchronized)
+- **Synchronized Random Playback** - Videos play in random order but synchronized across all viewers
+  - Schedule is randomly generated daily (same seed per channel per day)
+  - All viewers see the same video at the same position when tuning in
+  - Videos play their full duration before moving to the next
+  - When a video ends, the schedule automatically advances to the next video
+  - Unplayable videos are auto-skipped AND deleted from the database
 
 - **Video Cleanup System** - Comprehensive handling of unplayable videos
   - **Auto-delete on failure**: When videos fail to play (age-restricted, deleted, private), they're automatically removed from the database
@@ -197,8 +197,6 @@ The admin dashboard includes a "Delete Channel" button for each channel. Users c
   - **Status check**: "Check Video Status" button scans all videos without deleting, showing counts
   - **Deleted log**: View history of auto-deleted videos
   - Switched to `youtube-nocookie.com` for privacy-enhanced embedding
-  - Failed video IDs tracked to prevent retry loops
-  - Toast notifications inform users when videos are skipped
 
 - **Auto-Hide Controls on Live TV** - Controls now fade out after 3 seconds of inactivity
   - Channel changer, info overlay, and player controls automatically hide when user is inactive
