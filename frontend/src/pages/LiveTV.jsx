@@ -202,6 +202,9 @@ const LiveTV = () => {
   }, [currentChannel]);
 
   // Check for video changes based on schedule (every second)
+  // DISABLED: Videos now play to completion before switching
+  // The schedule is only used for initial video selection when channel changes
+  /*
   useEffect(() => {
     if (!currentChannel || !schedules[currentChannel.id]) return;
     
@@ -248,6 +251,7 @@ const LiveTV = () => {
       }
     };
   }, [currentChannel, schedules, currentVideo, failedVideoIds]);
+  */
 
   const loadChannelsAndSchedules = async () => {
     try {
