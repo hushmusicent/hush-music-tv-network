@@ -356,6 +356,25 @@ const LiveTV = () => {
 
   const isUploadedVideo = currentVideo && (currentVideo.video_url || !currentVideo.youtube_id);
 
+  // Skip to next video in schedule (for unavailable/age-restricted videos)
+  const skipToNextVideo = useCallback(() => {
+    if (!currentChannel || !schedules[currentChannel.id]) return;
+    
+    const schedule = schedules[currentChannel.id];
+    const { videoIndex } = getCurrentVideoFromSchedule(schedule);
+    
+    // Get next video
+    const nextIndex = (videoIndex + 1) % schedule.videos.length;
+    const nextVideo = schedule.videos[nextIndex];
+    
+    if (nextVideo) {
+      console.log('Skipping to next video:', nextVideo.title);
+      setCurrentVideo(nextVideo);
+      setSeekTime(0); // Start from beginning of next video
+      toast.info(`Skipped unavailable video, now playing: ${nextVideo.title}`);
+    }
+  }, [currentChannel, schedules]);
+
   // Initialize YouTube player when video changes
   useEffect(() => {
     if (!currentVideo?.youtube_id || isUploadedVideo) return;
@@ -369,6 +388,7 @@ const LiveTV = () => {
     }
 
     let errorTimeout = null;
+    let playbackCheckTimeout = null;
 
     const initPlayer = () => {
       if (!window.YT || !window.YT.Player) {
@@ -387,6 +407,7 @@ const LiveTV = () => {
 
       youtubePlayerRef.current = new window.YT.Player('yt-player-instance', {
         videoId: currentVideo.youtube_id,
+        host: 'https://www.youtube-nocookie.com', // Privacy-enhanced mode, helps with some restrictions
         playerVars: {
           autoplay: 1,
           controls: 0,  // Hide YouTube controls - we have our own
@@ -400,6 +421,7 @@ const LiveTV = () => {
           showinfo: 0,  // Hide video info
           cc_load_policy: 0,  // Hide closed captions by default
           enablejsapi: 1,  // Enable JS API
+          origin: window.location.origin,
         },
         events: {
           onReady: (event) => {
@@ -414,12 +436,32 @@ const LiveTV = () => {
             // Clear error timeout
             if (errorTimeout) {
               clearTimeout(errorTimeout);
+              errorTimeout = null;
             }
+            
+            // Check if video actually starts playing after 5 seconds
+            playbackCheckTimeout = setTimeout(() => {
+              try {
+                const state = youtubePlayerRef.current?.getPlayerState();
+                // States: -1 (unstarted), 0 (ended), 1 (playing), 2 (paused), 3 (buffering), 5 (video cued)
+                if (state === -1 || state === 5) {
+                  console.log('Video not playing after ready, skipping...');
+                  skipToNextVideo();
+                }
+              } catch (e) {
+                console.error('Error checking playback state:', e);
+              }
+            }, 5000);
           },
           onStateChange: (event) => {
             // Update paused state based on player state
             if (event.data === window.YT.PlayerState.PLAYING) {
               setIsPaused(false);
+              // Video is playing, clear any pending skip
+              if (playbackCheckTimeout) {
+                clearTimeout(playbackCheckTimeout);
+                playbackCheckTimeout = null;
+              }
             } else if (event.data === window.YT.PlayerState.PAUSED) {
               setIsPaused(true);
             } else if (event.data === window.YT.PlayerState.ENDED) {
@@ -428,15 +470,23 @@ const LiveTV = () => {
             }
           },
           onError: (event) => {
+            // YouTube error codes:
+            // 2 - Invalid video ID
+            // 5 - HTML5 player error
+            // 100 - Video not found (removed or private)
+            // 101/150 - Video not allowed for embedded playback (age-restricted, etc.)
             console.error('YouTube error:', event.data);
-            // Schedule will handle next video
+            
+            // Auto-skip to next video on any error
+            skipToNextVideo();
           }
         }
       });
 
-      // Timeout for unavailable videos
+      // Timeout for videos that never fire onReady (completely blocked)
       errorTimeout = setTimeout(() => {
-        console.log('Video timeout - may be unavailable');
+        console.log('Video timeout - may be unavailable or age-restricted');
+        skipToNextVideo();
       }, 10000);
     };
 
@@ -444,8 +494,9 @@ const LiveTV = () => {
 
     return () => {
       if (errorTimeout) clearTimeout(errorTimeout);
+      if (playbackCheckTimeout) clearTimeout(playbackCheckTimeout);
     };
-  }, [currentVideo, seekTime, isMuted, isUploadedVideo]);
+  }, [currentVideo, seekTime, isMuted, isUploadedVideo, skipToNextVideo]);
 
   // Handle uploaded video
   useEffect(() => {
