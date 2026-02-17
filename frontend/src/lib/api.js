@@ -132,4 +132,23 @@ export const analyticsAPI = {
   getStats: () => api.get('/analytics/stats'),
 };
 
+// Video Cleanup API
+export const videoCleanupAPI = {
+  // Auto-delete a video by YouTube ID (called when video fails to play)
+  deleteByYoutubeId: (youtubeId, channelId) => 
+    api.post('/videos/delete-by-youtube-id', { youtube_id: youtubeId, channel_id: channelId }),
+  
+  // Get list of auto-deleted videos
+  getDeletedVideos: () => api.get('/videos/deleted'),
+  
+  // Clear deleted videos log
+  clearDeletedLog: () => api.delete('/videos/deleted/clear'),
+  
+  // Check status of all videos (without deleting)
+  checkStatus: () => api.get('/videos/check-status'),
+  
+  // Run cleanup - delete all unplayable videos
+  runCleanup: () => api.post('/videos/cleanup'),
+};
+
 export default api;
