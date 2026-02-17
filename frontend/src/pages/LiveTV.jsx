@@ -76,6 +76,7 @@ const LiveTV = () => {
   const [schedules, setSchedules] = useState({}); // channel_id -> schedule
   const [currentChannel, setCurrentChannel] = useState(null);
   const [currentVideo, setCurrentVideo] = useState(null);
+  const [currentVideoIndex, setCurrentVideoIndex] = useState(0); // Track current position in playlist
   const [seekTime, setSeekTime] = useState(0);
   const [loading, setLoading] = useState(true);
   const [isMuted, setIsMuted] = useState(false);
