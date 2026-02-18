@@ -764,10 +764,6 @@ const LiveTV = () => {
                         }}
                       />
                     ) : null}
-                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                        <Tv size={20} className="text-primary" />
-                      </div>
-                    )}
                     {isActive && (
                       <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-pulse" />
                     )}
