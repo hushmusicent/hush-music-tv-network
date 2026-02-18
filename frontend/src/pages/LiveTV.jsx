@@ -351,24 +351,29 @@ const LiveTV = () => {
     setSeekTime(0); // Start from beginning
   }, [currentChannel, playlists, currentVideo, failedVideoIds]);
 
-  // Skip to next video (for unavailable videos - also deletes from DB)
+  // Skip to next video (for unavailable videos - only deletes from DB if admin)
   const skipToNextVideo = useCallback(async () => {
     if (!currentChannel || !playlists[currentChannel.id]) return;
     
     const playlist = playlists[currentChannel.id];
     
-    // Mark current video as failed and delete from database
+    // Mark current video as failed
     if (currentVideo?.youtube_id) {
       setFailedVideoIds(prev => new Set(prev).add(currentVideo.youtube_id));
       
-      try {
-        const result = await videoCleanupAPI.deleteByYoutubeId(currentVideo.youtube_id, currentChannel.id);
-        if (result.data.deleted) {
-          console.log('Deleted unplayable video:', currentVideo.title);
-          toast.info(`Removed unavailable video: ${currentVideo.title}`);
+      // Only delete from database if user is admin
+      if (isAdmin) {
+        try {
+          const result = await videoCleanupAPI.deleteByYoutubeId(currentVideo.youtube_id, currentChannel.id);
+          if (result.data.deleted) {
+            console.log('Admin: Deleted unplayable video:', currentVideo.title);
+            toast.info(`Removed unavailable video: ${currentVideo.title}`);
+          }
+        } catch (e) {
+          console.error('Failed to delete video:', e);
         }
-      } catch (e) {
-        console.error('Failed to delete video:', e);
+      } else {
+        console.log('Skipping unplayable video (not admin, not deleting):', currentVideo.title);
       }
     }
     
@@ -391,7 +396,7 @@ const LiveTV = () => {
     setCurrentVideoIndex(actualIndex);
     setCurrentVideo(nextVideo);
     setSeekTime(0);
-  }, [currentChannel, playlists, currentVideo, failedVideoIds]);
+  }, [currentChannel, playlists, currentVideo, failedVideoIds, isAdmin]);
 
   // Initialize YouTube player when video changes
   useEffect(() => {
