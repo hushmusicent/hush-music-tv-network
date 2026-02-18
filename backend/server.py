@@ -1525,7 +1525,7 @@ async def get_channel_schedule(channel_id: str, user: dict = Depends(require_use
 @api_router.get("/schedule/live")
 async def get_live_schedules():
     """Get 24-hour schedules for all public channels (for Live TV)"""
-    channels = await db.channels.find({"is_public": True}, {"_id": 0}).to_list(100)
+    channels = await db.channels.find({"is_public": True}, {"_id": 0}).sort([("sort_order", 1), ("favorites_count", -1)]).to_list(100)
     today = get_eastern_date()
     
     schedules = []
