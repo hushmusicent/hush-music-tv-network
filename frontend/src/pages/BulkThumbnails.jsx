@@ -28,6 +28,9 @@ const BulkThumbnails = () => {
   const fileInputRefs = useRef({});
 
   useEffect(() => {
+    // Wait for auth to load before checking
+    if (isAuthenticated === undefined) return;
+    
     if (!isAuthenticated || !user?.is_admin) {
       navigate('/login');
       return;
