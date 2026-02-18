@@ -100,12 +100,22 @@ const Dashboard = () => {
   const [savingChannel, setSavingChannel] = useState(null);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [editingVideoDuration, setEditingVideoDuration] = useState({ channelId: null, videoId: null, value: '' });
+  const [reorderMode, setReorderMode] = useState(false);
+  const [savingOrder, setSavingOrder] = useState(false);
   
   // Video cleanup states
   const [cleanupLoading, setCleanupLoading] = useState(false);
   const [cleanupStatus, setCleanupStatus] = useState(null);
   const [deletedVideos, setDeletedVideos] = useState([]);
   const [showDeletedVideos, setShowDeletedVideos] = useState(false);
+
+  // DnD sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
   useEffect(() => {
     if (authLoading) return;
