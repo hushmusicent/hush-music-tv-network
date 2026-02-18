@@ -694,6 +694,30 @@ const Dashboard = () => {
                 <Skeleton key={i} className="h-32 w-full bg-white/10 rounded-lg" />
               ))}
             </div>
+          ) : reorderMode ? (
+            // Reorder Mode - Simplified drag & drop view
+            <div className="space-y-2">
+              <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3 mb-4">
+                <p className="text-yellow-400 text-sm flex items-center gap-2">
+                  <ArrowUpDown size={16} />
+                  Drag channels to reorder. Click "Save Order" when done.
+                </p>
+              </div>
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleDragEnd}
+              >
+                <SortableContext
+                  items={channels.map(c => c.id)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  {channels.map((channel, index) => (
+                    <SortableChannelItem key={channel.id} channel={channel} index={index} />
+                  ))}
+                </SortableContext>
+              </DndContext>
+            </div>
           ) : channels.length > 0 ? (
             <div className="space-y-4">
               {channels.map((channel) => {
