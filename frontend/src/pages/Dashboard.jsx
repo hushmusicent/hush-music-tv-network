@@ -466,6 +466,15 @@ const Dashboard = () => {
             Analytics
           </Button>
           <Button
+            onClick={() => navigate('/bulk-thumbnails')}
+            variant="outline"
+            className="border-orange-500/50 text-orange-400 hover:bg-orange-500/10"
+            data-testid="bulk-thumbnails-btn"
+          >
+            <ImageIcon size={18} className="mr-2" />
+            Thumbnails
+          </Button>
+          <Button
             onClick={() => navigate('/create')}
             className="bg-primary hover:bg-primary-hover font-bold glow-primary-hover"
             data-testid="create-channel-btn"
