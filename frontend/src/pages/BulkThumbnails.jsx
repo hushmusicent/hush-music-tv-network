@@ -20,7 +20,7 @@ const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 
 const BulkThumbnails = () => {
   const navigate = useNavigate();
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, loading: authLoading } = useAuth();
   const [channels, setChannels] = useState([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState({});
@@ -28,15 +28,14 @@ const BulkThumbnails = () => {
   const fileInputRefs = useRef({});
 
   useEffect(() => {
-    // Wait for auth to load before checking
-    if (isAuthenticated === undefined) return;
+    if (authLoading) return;
     
     if (!isAuthenticated || !user?.is_admin) {
       navigate('/login');
       return;
     }
     loadChannels();
-  }, [isAuthenticated, user, navigate]);
+  }, [authLoading, isAuthenticated, user, navigate]);
 
   const loadChannels = async () => {
     try {
