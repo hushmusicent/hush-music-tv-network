@@ -49,6 +49,7 @@ export const channelsAPI = {
   create: (data) => api.post('/channels', data),
   update: (id, data) => api.put(`/channels/${id}`, data),
   delete: (id) => api.delete(`/channels/${id}`),
+  reorder: (channelIds) => api.put('/channels/reorder', { channel_ids: channelIds }),
   
   // Videos
   addVideo: (channelId, data) => api.post(`/channels/${channelId}/videos`, data),
