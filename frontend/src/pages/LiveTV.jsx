@@ -456,9 +456,44 @@ const LiveTV = () => {
               errorTimeout = null;
             }
             
-            // Report actual duration to backend for self-healing
+            // Get actual video info from YouTube player
             try {
               const actualDuration = Math.floor(event.target.getDuration());
+              const videoData = event.target.getVideoData();
+              const actualTitle = videoData?.title;
+              
+              // Update local state with actual title if it's different and not generic
+              if (actualTitle && currentVideo && actualTitle !== currentVideo.title) {
+                // Check if current title is generic (like "Video 123")
+                const isGenericTitle = /^Video \d+$/i.test(currentVideo.title);
+                
+                if (isGenericTitle) {
+                  console.log(`Updating video title: "${currentVideo.title}" -> "${actualTitle}"`);
+                  
+                  // Update local state immediately for display
+                  setCurrentVideo(prev => prev ? { ...prev, title: actualTitle } : prev);
+                  
+                  // Update in playlists state too
+                  setPlaylists(prev => {
+                    const updated = { ...prev };
+                    if (currentChannel && updated[currentChannel.id]) {
+                      updated[currentChannel.id] = updated[currentChannel.id].map(v => 
+                        v.youtube_id === currentVideo.youtube_id ? { ...v, title: actualTitle } : v
+                      );
+                    }
+                    return updated;
+                  });
+                  
+                  // Save to backend if admin
+                  if (isAdmin && currentChannel && currentVideo?.video_id) {
+                    channelsAPI.updateVideo(currentChannel.id, currentVideo.video_id, { title: actualTitle })
+                      .then(() => console.log('Saved video title to database'))
+                      .catch(() => {});
+                  }
+                }
+              }
+              
+              // Report actual duration to backend for self-healing
               if (actualDuration > 0 && currentChannel && currentVideo?.youtube_id) {
                 videoCleanupAPI.updateSingleDuration(
                   currentChannel.id, 
@@ -470,7 +505,9 @@ const LiveTV = () => {
                   }
                 }).catch(() => {});
               }
-            } catch (e) {}
+            } catch (e) {
+              console.error('Error getting video info:', e);
+            }
             
             playbackCheckTimeout = setTimeout(() => {
               try {
