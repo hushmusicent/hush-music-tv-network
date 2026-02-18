@@ -141,6 +141,7 @@ class ChannelResponse(ChannelBase):
     favorites_count: int = 0
     created_at: str
     random_play: bool = False
+    sort_order: Optional[int] = None
 
 class CategoryResponse(BaseModel):
     name: str
