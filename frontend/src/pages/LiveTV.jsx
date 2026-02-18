@@ -754,10 +754,17 @@ const LiveTV = () => {
                       <img 
                         src={channel.thumbnail} 
                         alt={channel.name}
-                        className="w-12 h-12 rounded object-cover"
+                        className="w-12 h-12 rounded object-cover bg-primary/20"
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                          e.target.nextSibling.style.display = 'flex';
+                        }}
                       />
-                    ) : (
-                      <div className="w-12 h-12 rounded bg-primary/20 flex items-center justify-center">
+                    ) : null}
+                    <div 
+                      className={`w-12 h-12 rounded bg-primary/20 items-center justify-center ${channel.thumbnail ? 'hidden' : 'flex'}`}
+                      style={{ display: channel.thumbnail ? 'none' : 'flex' }}
+                    >
                         <Tv size={20} className="text-primary" />
                       </div>
                     )}
