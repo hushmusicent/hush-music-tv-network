@@ -236,7 +236,8 @@ async def get_channels(
             {"description": {"$regex": search, "$options": "i"}}
         ]
     
-    channels = await db.channels.find(query, {"_id": 0}).sort("favorites_count", -1).to_list(100)
+    # Sort by sort_order first, then by favorites_count
+    channels = await db.channels.find(query, {"_id": 0}).sort([("sort_order", 1), ("favorites_count", -1)]).to_list(100)
     return channels
 
 @api_router.get("/channels/featured", response_model=List[ChannelResponse])
