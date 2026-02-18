@@ -50,7 +50,8 @@ import {
   BarChart3,
   Calendar,
   AlertTriangle,
-  RefreshCw
+  RefreshCw,
+  ArrowUpDown
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -63,6 +64,22 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '../components/ui/alert-dialog';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 const Dashboard = () => {
   const { user, isAuthenticated, loading: authLoading } = useAuth();
