@@ -500,7 +500,7 @@ const Dashboard = () => {
           </p>
         </div>
 
-        <div className="flex gap-3">
+        <div className="flex gap-3 flex-wrap">
           <Button
             onClick={() => navigate('/schedule')}
             variant="outline"
@@ -528,6 +528,36 @@ const Dashboard = () => {
             <ImageIcon size={18} className="mr-2" />
             Thumbnails
           </Button>
+          {reorderMode ? (
+            <>
+              <Button
+                onClick={() => setReorderMode(false)}
+                variant="outline"
+                className="border-gray-500/50 text-gray-400 hover:bg-gray-500/10"
+              >
+                <X size={18} className="mr-2" />
+                Cancel
+              </Button>
+              <Button
+                onClick={saveChannelOrder}
+                disabled={savingOrder}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                {savingOrder ? <Loader2 size={18} className="mr-2 animate-spin" /> : <Save size={18} className="mr-2" />}
+                Save Order
+              </Button>
+            </>
+          ) : (
+            <Button
+              onClick={() => setReorderMode(true)}
+              variant="outline"
+              className="border-yellow-500/50 text-yellow-400 hover:bg-yellow-500/10"
+              data-testid="reorder-channels-btn"
+            >
+              <ArrowUpDown size={18} className="mr-2" />
+              Reorder
+            </Button>
+          )}
           <Button
             onClick={() => navigate('/create')}
             className="bg-primary hover:bg-primary-hover font-bold glow-primary-hover"
