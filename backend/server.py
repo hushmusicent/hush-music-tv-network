@@ -323,6 +323,24 @@ async def delete_channel(channel_id: str, user: dict = Depends(require_user)):
     
     return {"message": "Channel deleted"}
 
+class ChannelOrderUpdate(BaseModel):
+    channel_ids: List[str]  # List of channel IDs in the desired order
+
+@api_router.put("/channels/reorder")
+async def reorder_channels(data: ChannelOrderUpdate, user: dict = Depends(require_user)):
+    """Reorder channels - admin only"""
+    if not user.get("is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    # Update sort_order for each channel
+    for index, channel_id in enumerate(data.channel_ids):
+        await db.channels.update_one(
+            {"id": channel_id},
+            {"$set": {"sort_order": index}}
+        )
+    
+    return {"message": "Channels reordered", "count": len(data.channel_ids)}
+
 # ===================== VIDEO ROUTES =====================
 
 @api_router.post("/channels/{channel_id}/videos", response_model=ChannelResponse)
