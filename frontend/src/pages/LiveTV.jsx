@@ -749,22 +749,22 @@ const LiveTV = () => {
                   }`}
                   data-testid={`channel-${channel.id}`}
                 >
-                  <div className="relative">
+                  <div className="relative w-12 h-12 rounded overflow-hidden bg-primary/20 flex-shrink-0">
                     {channel.thumbnail ? (
                       <img 
-                        src={channel.thumbnail} 
+                        src={channel.thumbnail.startsWith('/api') 
+                          ? `${BACKEND_URL}${channel.thumbnail}` 
+                          : channel.thumbnail
+                        }
                         alt={channel.name}
-                        className="w-12 h-12 rounded object-cover bg-primary/20"
+                        className="w-full h-full object-cover"
+                        loading="lazy"
                         onError={(e) => {
                           e.target.style.display = 'none';
-                          e.target.nextSibling.style.display = 'flex';
                         }}
                       />
                     ) : null}
-                    <div 
-                      className={`w-12 h-12 rounded bg-primary/20 items-center justify-center ${channel.thumbnail ? 'hidden' : 'flex'}`}
-                      style={{ display: channel.thumbnail ? 'none' : 'flex' }}
-                    >
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                         <Tv size={20} className="text-primary" />
                       </div>
                     )}
