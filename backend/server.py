@@ -253,6 +253,24 @@ async def get_my_channels(user: dict = Depends(require_user)):
     channels = await db.channels.find({"owner_id": user["id"]}, {"_id": 0}).to_list(100)
     return channels
 
+class ChannelOrderUpdate(BaseModel):
+    channel_ids: List[str]  # List of channel IDs in the desired order
+
+@api_router.put("/channels/reorder")
+async def reorder_channels(data: ChannelOrderUpdate, user: dict = Depends(require_user)):
+    """Reorder channels - admin only"""
+    if not user.get("is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    # Update sort_order for each channel
+    for index, channel_id in enumerate(data.channel_ids):
+        await db.channels.update_one(
+            {"id": channel_id},
+            {"$set": {"sort_order": index}}
+        )
+    
+    return {"message": "Channels reordered", "count": len(data.channel_ids)}
+
 @api_router.get("/channels/{channel_id}", response_model=ChannelResponse)
 async def get_channel(channel_id: str, user: Optional[dict] = Depends(get_current_user)):
     channel = await db.channels.find_one({"id": channel_id}, {"_id": 0})
