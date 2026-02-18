@@ -246,6 +246,33 @@ const Dashboard = () => {
     }));
   };
 
+  // Channel reorder handlers
+  const handleDragEnd = (event) => {
+    const { active, over } = event;
+    
+    if (active.id !== over?.id) {
+      setChannels((items) => {
+        const oldIndex = items.findIndex((i) => i.id === active.id);
+        const newIndex = items.findIndex((i) => i.id === over.id);
+        return arrayMove(items, oldIndex, newIndex);
+      });
+    }
+  };
+
+  const saveChannelOrder = async () => {
+    setSavingOrder(true);
+    try {
+      const channelIds = channels.map(c => c.id);
+      await channelsAPI.reorder(channelIds);
+      toast.success('Channel order saved!');
+      setReorderMode(false);
+    } catch (error) {
+      toast.error('Failed to save channel order');
+    } finally {
+      setSavingOrder(false);
+    }
+  };
+
   const startEditingChannel = (channel) => {
     setEditingChannel({
       id: channel.id,
