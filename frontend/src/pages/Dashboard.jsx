@@ -81,6 +81,55 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
+// Sortable Channel Item for drag-and-drop reordering
+const SortableChannelItem = ({ channel, index }) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: channel.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`glass rounded-lg p-4 flex items-center gap-4 ${isDragging ? 'ring-2 ring-primary' : ''}`}
+    >
+      <div
+        {...attributes}
+        {...listeners}
+        className="cursor-grab active:cursor-grabbing p-2 hover:bg-white/10 rounded"
+      >
+        <GripVertical size={20} className="text-gray-400" />
+      </div>
+      
+      <span className="text-2xl font-bold text-primary w-8">{index + 1}</span>
+      
+      <div className="w-16 h-10 bg-black rounded overflow-hidden flex-shrink-0">
+        <img
+          src={channel.thumbnail || 'https://images.unsplash.com/photo-1576307302704-b6142d572612?w=400'}
+          alt={channel.name}
+          className="w-full h-full object-cover"
+        />
+      </div>
+      
+      <div className="flex-1 min-w-0">
+        <h3 className="font-semibold truncate">{channel.name}</h3>
+        <p className="text-sm text-gray-400">{channel.videos?.length || 0} videos</p>
+      </div>
+    </div>
+  );
+};
+
 const Dashboard = () => {
   const { user, isAuthenticated, loading: authLoading } = useAuth();
   const navigate = useNavigate();
