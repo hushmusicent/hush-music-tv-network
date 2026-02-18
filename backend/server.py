@@ -1588,7 +1588,8 @@ def generate_24h_schedule(channel: dict, date: str, force_random: bool = False) 
             "channel_thumbnail": channel.get("thumbnail"),
             "schedule_date": date,
             "videos": [],
-            "total_duration": 0
+            "total_duration": 0,
+            "unique_video_count": 0
         }
     
     # Use date as seed for consistent daily schedule (unless force_random)
