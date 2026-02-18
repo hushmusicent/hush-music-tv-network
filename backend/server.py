@@ -1644,7 +1644,8 @@ def generate_24h_schedule(channel: dict, date: str, force_random: bool = False) 
         "channel_thumbnail": channel.get("thumbnail"),
         "schedule_date": date,
         "videos": scheduled,
-        "total_duration": min(current_time, total_seconds)
+        "total_duration": min(current_time, total_seconds),
+        "unique_video_count": len(videos)  # Actual number of unique videos in the channel
     }
 
 # Include router and middleware
