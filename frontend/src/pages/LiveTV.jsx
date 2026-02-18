@@ -223,7 +223,7 @@ const LiveTV = () => {
           id: schedule.channel_id,
           name: schedule.channel_name,
           thumbnail: schedule.channel_thumbnail,
-          videoCount: videos.length
+          videoCount: schedule.unique_video_count || videos.length
         });
       }
       
