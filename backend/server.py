@@ -1451,6 +1451,9 @@ async def get_or_create_schedule(channel: dict, date: str) -> dict:
     )
     
     if existing:
+        # Always use current channel thumbnail (in case it was updated)
+        existing["channel_thumbnail"] = channel.get("thumbnail")
+        existing["channel_name"] = channel.get("name")
         return existing
     
     # Generate new schedule for this date
