@@ -46,18 +46,25 @@ const shuffleArray = (array) => {
   return shuffled;
 };
 
-// Generate a 24-hour schedule from videos (fills 24 hours by looping)
+// Generate a 24-hour schedule from videos
+// Videos play in random order, NO repeats until ALL videos have played
 const generate24HourSchedule = (videos) => {
   if (!videos || videos.length === 0) return [];
   
-  const shuffled = shuffleArray(videos);
   const schedule = [];
   const totalSeconds = 24 * 60 * 60; // 24 hours in seconds
   let currentTime = 0;
-  let videoIndex = 0;
+  let currentBatch = []; // Current shuffled batch of videos
+  let batchIndex = 0;
   
   while (currentTime < totalSeconds) {
-    const video = shuffled[videoIndex % shuffled.length];
+    // If we've played all videos in current batch, create a new shuffled batch
+    if (batchIndex >= currentBatch.length) {
+      currentBatch = shuffleArray(videos);
+      batchIndex = 0;
+    }
+    
+    const video = currentBatch[batchIndex];
     const duration = video.duration || 300;
     
     schedule.push({
@@ -67,9 +74,10 @@ const generate24HourSchedule = (videos) => {
     });
     
     currentTime += duration;
-    videoIndex++;
+    batchIndex++;
   }
   
+  console.log(`Schedule: ${videos.length} unique videos, plays all before repeating`);
   return schedule;
 };
 
