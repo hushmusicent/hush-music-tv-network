@@ -46,7 +46,65 @@ const shuffleArray = (array) => {
   return shuffled;
 };
 
-// Calculate current video from playlist based on elapsed time since session start
+// Generate a 24-hour schedule from videos (fills 24 hours by looping)
+const generate24HourSchedule = (videos) => {
+  if (!videos || videos.length === 0) return [];
+  
+  const shuffled = shuffleArray(videos);
+  const schedule = [];
+  const totalSeconds = 24 * 60 * 60; // 24 hours in seconds
+  let currentTime = 0;
+  let videoIndex = 0;
+  
+  while (currentTime < totalSeconds) {
+    const video = shuffled[videoIndex % shuffled.length];
+    const duration = video.duration || 300;
+    
+    schedule.push({
+      ...video,
+      start_time: currentTime,
+      end_time: currentTime + duration
+    });
+    
+    currentTime += duration;
+    videoIndex++;
+  }
+  
+  return schedule;
+};
+
+// Get current video from 24-hour schedule based on elapsed time
+const getVideoFromSchedule = (schedule, elapsedSeconds, failedVideoIds = new Set()) => {
+  if (!schedule || schedule.length === 0) {
+    return { video: null, seekTime: 0, videoIndex: -1 };
+  }
+  
+  // Wrap elapsed time within 24 hours
+  const totalSeconds = 24 * 60 * 60;
+  const wrappedTime = elapsedSeconds % totalSeconds;
+  
+  // Find the video that should be playing at this time
+  for (let i = 0; i < schedule.length; i++) {
+    const slot = schedule[i];
+    if (failedVideoIds.has(slot.youtube_id)) continue;
+    
+    if (wrappedTime >= slot.start_time && wrappedTime < slot.end_time) {
+      const seekTime = wrappedTime - slot.start_time;
+      return { video: slot, seekTime, videoIndex: i };
+    }
+  }
+  
+  // Fallback to first playable video
+  for (let i = 0; i < schedule.length; i++) {
+    if (!failedVideoIds.has(schedule[i].youtube_id)) {
+      return { video: schedule[i], seekTime: 0, videoIndex: i };
+    }
+  }
+  
+  return { video: null, seekTime: 0, videoIndex: -1 };
+};
+
+// Calculate current video from playlist (for non-scheduled channels)
 const getVideoFromPlaylist = (playlist, elapsedSeconds, failedVideoIds = new Set()) => {
   if (!playlist || playlist.length === 0) {
     return { video: null, seekTime: 0, videoIndex: -1 };
