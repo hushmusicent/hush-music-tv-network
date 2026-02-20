@@ -1056,6 +1056,11 @@ const LiveTV = () => {
                     <Pause size={12} className="text-yellow-400" />
                     <span className="text-xs text-yellow-400 font-medium">PAUSED</span>
                   </>
+                ) : isScheduledChannel ? (
+                  <>
+                    <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                    <span className="text-xs text-red-400 font-medium">LIVE</span>
+                  </>
                 ) : (
                   <>
                     <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
