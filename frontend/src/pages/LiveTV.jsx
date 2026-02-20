@@ -517,6 +517,23 @@ const LiveTV = () => {
     const newFailedIds = new Set(failedVideoIds);
     if (currentVideo?.youtube_id) newFailedIds.add(currentVideo.youtube_id);
     
+    // For scheduled channels, use schedule
+    if (schedule && schedule.length > 0) {
+      const playableSlots = schedule.filter(v => !newFailedIds.has(v.youtube_id));
+      if (playableSlots.length === 0) {
+        toast.error('No playable videos on this channel');
+        return;
+      }
+      const nextVideo = playableSlots[0];
+      const actualIndex = schedule.findIndex(v => v.video_id === nextVideo.video_id);
+      console.log('[SCHEDULED] Skipping to:', nextVideo.title);
+      setCurrentVideoIndex(actualIndex);
+      setCurrentVideo(nextVideo);
+      setSeekTime(0);
+      return;
+    }
+    
+    // For regular channels
     const playableVideos = playlist.filter(v => !newFailedIds.has(v.youtube_id));
     
     if (playableVideos.length === 0) {
@@ -532,7 +549,7 @@ const LiveTV = () => {
     setCurrentVideoIndex(actualIndex);
     setCurrentVideo(nextVideo);
     setSeekTime(0);
-  }, [currentChannel, playlists, currentVideo, failedVideoIds, isAdmin]);
+  }, [currentChannel, playlists, schedules, currentVideo, failedVideoIds, isAdmin]);
 
   // Initialize YouTube player when video changes
   useEffect(() => {
