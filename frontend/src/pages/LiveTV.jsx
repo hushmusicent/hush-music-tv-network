@@ -326,20 +326,37 @@ const LiveTV = () => {
     return Math.floor((Date.now() - sessionStartTime) / 1000);
   }, [sessionStartTime]);
 
-  const selectChannel = useCallback((channel, playlistMap = playlists, startTime = sessionStartTime) => {
+  const selectChannel = useCallback((channel, playlistMap = playlists, scheduleMap = schedules, startTime = sessionStartTime) => {
     setCurrentChannel(channel);
     setFailedVideoIds(new Set());
     
-    const playlist = playlistMap[channel.id];
-    if (playlist && playlist.length > 0) {
-      const elapsed = startTime ? Math.floor((Date.now() - startTime) / 1000) : 0;
-      const { video, seekTime: newSeekTime, videoIndex } = getVideoFromPlaylist(playlist, elapsed, new Set());
+    const elapsed = startTime ? Math.floor((Date.now() - startTime) / 1000) : 0;
+    
+    // Check if this is a scheduled channel (Hush Music Radio)
+    const channelSchedule = scheduleMap[channel.id];
+    
+    if (channelSchedule && channelSchedule.length > 0) {
+      // Use 24-hour schedule for this channel
+      const { video, seekTime: newSeekTime, videoIndex } = getVideoFromSchedule(channelSchedule, elapsed, new Set());
       
       if (video) {
-        console.log(`Channel: ${channel.name} - Playing: ${video.title} at ${newSeekTime}s`);
+        console.log(`[SCHEDULED] ${channel.name} - Playing: ${video.title} at ${newSeekTime}s (elapsed: ${elapsed}s)`);
         setCurrentVideoIndex(videoIndex);
         setCurrentVideo(video);
         setSeekTime(newSeekTime);
+      }
+    } else {
+      // Use regular playlist for other channels
+      const playlist = playlistMap[channel.id];
+      if (playlist && playlist.length > 0) {
+        const { video, seekTime: newSeekTime, videoIndex } = getVideoFromPlaylist(playlist, elapsed, new Set());
+        
+        if (video) {
+          console.log(`Channel: ${channel.name} - Playing: ${video.title} at ${newSeekTime}s`);
+          setCurrentVideoIndex(videoIndex);
+          setCurrentVideo(video);
+          setSeekTime(newSeekTime);
+        }
       }
     }
     
@@ -348,7 +365,7 @@ const LiveTV = () => {
     } catch (e) {}
     
     showOSD();
-  }, [playlists, sessionStartTime]);
+  }, [playlists, schedules, sessionStartTime]);
 
   const showOSD = () => {
     setShowChannelOSD(true);
