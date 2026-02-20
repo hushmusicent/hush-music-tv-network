@@ -279,7 +279,9 @@ const LiveTV = () => {
       
       setScheduleDate(date);
       
-      // Convert to playlist map and create 24-hour schedule for Hush Music Radio
+      // Convert to playlist map
+      // Hush Music Radio uses the BACKEND schedule (persistent, synchronized for all viewers)
+      // Other channels get shuffled playlists (random per session)
       const playlistMap = {};
       const scheduleMap = {};
       const channelList = [];
@@ -291,13 +293,13 @@ const LiveTV = () => {
                                    channelName?.toLowerCase().includes('hush music');
         
         if (isScheduledChannel) {
-          // Generate a 24-hour random schedule for Hush Music Radio
-          const schedule24h = generate24HourSchedule(videos);
-          scheduleMap[schedule.channel_id] = schedule24h;
-          playlistMap[schedule.channel_id] = videos; // Keep original for reference
-          console.log(`Generated 24-hour schedule for ${channelName}: ${schedule24h.length} slots`);
+          // Use the BACKEND schedule directly (already has start_time, end_time from server)
+          // This ensures all viewers are synchronized to the same schedule
+          scheduleMap[schedule.channel_id] = videos; // Backend schedule with time slots
+          playlistMap[schedule.channel_id] = videos; // Keep reference
+          console.log(`Using backend schedule for ${channelName}: ${videos.length} slots (synchronized)`);
         } else {
-          // Shuffle videos for other channels
+          // Shuffle videos for other channels (random per session)
           const shuffledVideos = shuffleArray(videos);
           playlistMap[schedule.channel_id] = shuffledVideos;
         }
