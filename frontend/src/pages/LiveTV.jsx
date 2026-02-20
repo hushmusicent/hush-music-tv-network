@@ -828,9 +828,29 @@ const LiveTV = () => {
     });
   };
 
-  // Get upcoming videos from playlist
+  // Get upcoming videos from playlist or schedule
   const getUpcomingVideos = () => {
-    if (!currentChannel || !playlists[currentChannel.id]) return [];
+    if (!currentChannel) return [];
+    
+    // For scheduled channels, use schedule
+    const schedule = schedules[currentChannel.id];
+    if (schedule && schedule.length > 0) {
+      const playable = schedule.filter(v => !failedVideoIds.has(v.youtube_id));
+      if (playable.length === 0) return [];
+      
+      const currentIdx = playable.findIndex(v => v.video_id === currentVideo?.video_id);
+      const upcoming = [];
+      
+      for (let i = 1; i <= 3; i++) {
+        const idx = (currentIdx + i) % playable.length;
+        upcoming.push(playable[idx]);
+      }
+      
+      return upcoming;
+    }
+    
+    // For regular channels, use playlist
+    if (!playlists[currentChannel.id]) return [];
     
     const playlist = playlists[currentChannel.id];
     const playable = playlist.filter(v => !failedVideoIds.has(v.youtube_id));
