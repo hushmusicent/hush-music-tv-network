@@ -77,7 +77,7 @@ const generate24HourSchedule = (videos) => {
     batchIndex++;
   }
   
-  console.log(`Schedule: ${videos.length} unique videos, plays all before repeating`);
+  console.log(`Schedule: ${videos.length} unique videos, ${schedule.length} slots (plays all before repeating)`);
   return schedule;
 };
 
