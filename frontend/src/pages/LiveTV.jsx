@@ -271,31 +271,46 @@ const LiveTV = () => {
       
       setScheduleDate(date);
       
-      // Convert to playlist map - SHUFFLE videos for each channel on load
+      // Convert to playlist map and create 24-hour schedule for Hush Music Radio
       const playlistMap = {};
+      const scheduleMap = {};
       const channelList = [];
       
       for (const schedule of scheduleList) {
-        // Shuffle the videos array to create a new random order each session
         const videos = schedule.videos || [];
-        const shuffledVideos = shuffleArray(videos);
+        const channelName = schedule.channel_name?.trim();
+        const isScheduledChannel = channelName === SCHEDULED_CHANNEL_NAME || 
+                                   channelName?.toLowerCase().includes('hush music');
         
-        playlistMap[schedule.channel_id] = shuffledVideos;
+        if (isScheduledChannel) {
+          // Generate a 24-hour random schedule for Hush Music Radio
+          const schedule24h = generate24HourSchedule(videos);
+          scheduleMap[schedule.channel_id] = schedule24h;
+          playlistMap[schedule.channel_id] = videos; // Keep original for reference
+          console.log(`Generated 24-hour schedule for ${channelName}: ${schedule24h.length} slots`);
+        } else {
+          // Shuffle videos for other channels
+          const shuffledVideos = shuffleArray(videos);
+          playlistMap[schedule.channel_id] = shuffledVideos;
+        }
+        
         channelList.push({
           id: schedule.channel_id,
-          name: schedule.channel_name,
+          name: channelName,
           thumbnail: schedule.channel_thumbnail,
-          videoCount: schedule.unique_video_count || videos.length
+          videoCount: schedule.unique_video_count || videos.length,
+          isScheduled: isScheduledChannel
         });
       }
       
-      console.log('Playlists shuffled for this session');
+      console.log('Playlists loaded for this session');
       setPlaylists(playlistMap);
+      setSchedules(scheduleMap);
       setChannels(channelList);
       
       // Select first channel
       if (channelList.length > 0) {
-        selectChannel(channelList[0], playlistMap, Date.now());
+        selectChannel(channelList[0], playlistMap, scheduleMap, Date.now());
       }
     } catch (error) {
       console.error('Failed to load playlists:', error);
