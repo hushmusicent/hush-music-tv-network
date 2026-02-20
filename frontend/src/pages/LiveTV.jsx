@@ -81,23 +81,29 @@ const generate24HourSchedule = (videos) => {
   return schedule;
 };
 
-// Get current video from 24-hour schedule based on elapsed time
-const getVideoFromSchedule = (schedule, elapsedSeconds, failedVideoIds = new Set()) => {
+// Get current Eastern time in seconds since midnight
+const getEasternTimeSeconds = () => {
+  const now = new Date();
+  const eastern = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+  return eastern.getHours() * 3600 + eastern.getMinutes() * 60 + eastern.getSeconds();
+};
+
+// Get current video from 24-hour schedule based on ACTUAL Eastern time (synchronized for all viewers)
+const getVideoFromSchedule = (schedule, failedVideoIds = new Set()) => {
   if (!schedule || schedule.length === 0) {
     return { video: null, seekTime: 0, videoIndex: -1 };
   }
   
-  // Wrap elapsed time within 24 hours
-  const totalSeconds = 24 * 60 * 60;
-  const wrappedTime = elapsedSeconds % totalSeconds;
+  // Use actual Eastern time for synchronized playback
+  const currentSeconds = getEasternTimeSeconds();
   
   // Find the video that should be playing at this time
   for (let i = 0; i < schedule.length; i++) {
     const slot = schedule[i];
     if (failedVideoIds.has(slot.youtube_id)) continue;
     
-    if (wrappedTime >= slot.start_time && wrappedTime < slot.end_time) {
-      const seekTime = wrappedTime - slot.start_time;
+    if (currentSeconds >= slot.start_time && currentSeconds < slot.end_time) {
+      const seekTime = currentSeconds - slot.start_time;
       return { video: slot, seekTime, videoIndex: i };
     }
   }
