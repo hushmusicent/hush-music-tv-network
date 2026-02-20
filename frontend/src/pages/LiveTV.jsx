@@ -144,6 +144,9 @@ const getVideoFromPlaylist = (playlist, elapsedSeconds, failedVideoIds = new Set
   return { video: playableVideos[0], seekTime: 0, videoIndex: 0 };
 };
 
+// The scheduled channel name
+const SCHEDULED_CHANNEL_NAME = "Hush Music Radio";
+
 const LiveTV = () => {
   const navigate = useNavigate();
   const { user, isAuthenticated } = useAuth();
@@ -151,6 +154,7 @@ const LiveTV = () => {
   
   const [channels, setChannels] = useState([]);
   const [playlists, setPlaylists] = useState({}); // channel_id -> playlist (array of videos)
+  const [schedules, setSchedules] = useState({}); // channel_id -> 24-hour schedule (only for scheduled channels)
   const [currentChannel, setCurrentChannel] = useState(null);
   const [currentVideo, setCurrentVideo] = useState(null);
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
