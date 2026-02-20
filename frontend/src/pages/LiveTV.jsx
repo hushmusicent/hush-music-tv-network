@@ -418,10 +418,51 @@ const LiveTV = () => {
   };
 
   const isUploadedVideo = currentVideo && (currentVideo.video_url || !currentVideo.youtube_id);
+  
+  // Check if current channel is scheduled
+  const isScheduledChannel = currentChannel && schedules[currentChannel.id];
 
   // Play next video in playlist (called when current video ends)
   const playNextVideo = useCallback(() => {
-    if (!currentChannel || !playlists[currentChannel.id]) return;
+    if (!currentChannel) return;
+    
+    // For scheduled channels, find next slot in schedule
+    if (schedules[currentChannel.id]) {
+      const schedule = schedules[currentChannel.id];
+      const playableSlots = schedule.filter(v => !failedVideoIds.has(v.youtube_id));
+      
+      if (playableSlots.length === 0) {
+        toast.error('No playable videos on this channel');
+        return;
+      }
+      
+      // Find current slot and move to next
+      const currentSlotIndex = schedule.findIndex(v => v.video_id === currentVideo?.video_id);
+      let nextSlotIndex = currentSlotIndex + 1;
+      
+      // Find next playable slot
+      while (nextSlotIndex < schedule.length && failedVideoIds.has(schedule[nextSlotIndex].youtube_id)) {
+        nextSlotIndex++;
+      }
+      
+      // If we're at the end, loop to beginning
+      if (nextSlotIndex >= schedule.length) {
+        nextSlotIndex = 0;
+        while (nextSlotIndex < schedule.length && failedVideoIds.has(schedule[nextSlotIndex].youtube_id)) {
+          nextSlotIndex++;
+        }
+      }
+      
+      const nextVideo = schedule[nextSlotIndex];
+      console.log('[SCHEDULED] Video ended, playing next:', nextVideo.title);
+      setCurrentVideoIndex(nextSlotIndex);
+      setCurrentVideo(nextVideo);
+      setSeekTime(0);
+      return;
+    }
+    
+    // For regular channels
+    if (!playlists[currentChannel.id]) return;
     
     const playlist = playlists[currentChannel.id];
     const playableVideos = playlist.filter(v => !failedVideoIds.has(v.youtube_id));
@@ -443,13 +484,14 @@ const LiveTV = () => {
     setCurrentVideoIndex(actualIndex);
     setCurrentVideo(nextVideo);
     setSeekTime(0); // Start from beginning
-  }, [currentChannel, playlists, currentVideo, failedVideoIds]);
+  }, [currentChannel, playlists, schedules, currentVideo, failedVideoIds]);
 
   // Skip to next video (for unavailable videos - only deletes from DB if admin)
   const skipToNextVideo = useCallback(async () => {
-    if (!currentChannel || !playlists[currentChannel.id]) return;
+    if (!currentChannel) return;
     
-    const playlist = playlists[currentChannel.id];
+    const playlist = playlists[currentChannel.id] || [];
+    const schedule = schedules[currentChannel.id];
     
     // Mark current video as failed
     if (currentVideo?.youtube_id) {
