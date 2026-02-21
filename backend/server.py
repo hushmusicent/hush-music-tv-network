@@ -1046,6 +1046,7 @@ def get_video_info_with_ytdlp(youtube_id: str, use_cookies: bool = True) -> dict
         "yt-dlp",
         "--dump-json",
         "--no-download",
+        "--no-warnings",
         "-f", "best[height<=720]/best",  # Limit quality for streaming
         f"https://www.youtube.com/watch?v={youtube_id}"
     ]
@@ -1055,14 +1056,17 @@ def get_video_info_with_ytdlp(youtube_id: str, use_cookies: bool = True) -> dict
         cmd.extend(["--cookies", str(COOKIES_FILE)])
     
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-        if result.returncode == 0:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+        if result.returncode == 0 and result.stdout.strip():
             return json.loads(result.stdout)
         else:
             logger.error(f"yt-dlp error for {youtube_id}: {result.stderr}")
             return None
     except subprocess.TimeoutExpired:
         logger.error(f"yt-dlp timeout for {youtube_id}")
+        return None
+    except json.JSONDecodeError as e:
+        logger.error(f"yt-dlp JSON decode error for {youtube_id}: {e}")
         return None
     except Exception as e:
         logger.error(f"yt-dlp exception for {youtube_id}: {e}")
@@ -1073,6 +1077,7 @@ def get_direct_video_url(youtube_id: str, use_cookies: bool = True) -> Optional[
     cmd = [
         "yt-dlp",
         "--get-url",
+        "--no-warnings",
         "-f", "best[height<=720][ext=mp4]/best[height<=720]/best",
         f"https://www.youtube.com/watch?v={youtube_id}"
     ]
@@ -1081,8 +1086,8 @@ def get_direct_video_url(youtube_id: str, use_cookies: bool = True) -> Optional[
         cmd.extend(["--cookies", str(COOKIES_FILE)])
     
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-        if result.returncode == 0:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+        if result.returncode == 0 and result.stdout.strip():
             urls = result.stdout.strip().split('\n')
             return urls[0] if urls else None
         else:
