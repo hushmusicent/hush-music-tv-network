@@ -1053,7 +1053,7 @@ const LiveTV = () => {
             </Button>
           )}
 
-          {currentVideo?.youtube_id && !isUploadedVideo && (
+          {currentVideo?.youtube_id && !isUploadedVideo && !useProxyPlayer && (
             <div className={`relative ${isFullscreen ? 'w-full h-full' : 'w-full h-full'}`}>
               <div 
                 id="youtube-player" 
@@ -1073,6 +1073,65 @@ const LiveTV = () => {
                 }}
                 data-testid="video-lock-overlay"
               />
+              {/* Age-restricted warning overlay */}
+              {ageRestrictedWarning && (
+                <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/80">
+                  <div className="text-center p-6">
+                    <AlertTriangle size={48} className="mx-auto mb-4 text-yellow-500" />
+                    <p className="text-lg font-medium text-white mb-2">Age-Restricted Content</p>
+                    <p className="text-sm text-gray-400">Attempting to load via proxy...</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Proxy video player for age-restricted content */}
+          {currentVideo?.youtube_id && !isUploadedVideo && useProxyPlayer && proxyVideoUrl && (
+            <div className="relative w-full h-full">
+              <video
+                ref={proxyVideoRef}
+                src={proxyVideoUrl}
+                className="w-full h-full object-contain"
+                autoPlay
+                muted={isMuted}
+                playsInline
+                onEnded={playNextVideo}
+                onError={() => {
+                  console.error('Proxy video error');
+                  toast.error('Failed to play via proxy');
+                  skipToNextVideo();
+                }}
+                onPlay={() => setIsPaused(false)}
+                onPause={() => setIsPaused(true)}
+              />
+              <div 
+                className="absolute inset-0 z-10 cursor-pointer"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  // Toggle play/pause for proxy video
+                  if (proxyVideoRef.current) {
+                    if (proxyVideoRef.current.paused) {
+                      proxyVideoRef.current.play();
+                      setIsPaused(false);
+                    } else {
+                      proxyVideoRef.current.pause();
+                      setIsPaused(true);
+                    }
+                  }
+                }}
+                onDoubleClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  toggleFullscreen();
+                }}
+              />
+              {/* Proxy badge */}
+              <div className="absolute top-4 left-4 z-30 bg-yellow-600/90 text-white text-xs px-2 py-1 rounded flex items-center gap-1">
+                <AlertTriangle size={12} />
+                Proxy Mode
+              </div>
             </div>
           )}
 
