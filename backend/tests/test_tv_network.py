@@ -1191,6 +1191,141 @@ class TestFavorites:
         print("SUCCESS: Channel removed from favorites")
 
 
+class TestYouTubeHealthCheck:
+    """YouTube video health check endpoints (bulk check feature)"""
+    
+    @pytest.fixture
+    def auth_token(self):
+        response = requests.post(f"{BASE_URL}/api/auth/login", json={
+            "email": ADMIN_EMAIL,
+            "password": ADMIN_PASSWORD
+        })
+        return response.json()["access_token"]
+    
+    def test_check_video_endpoint(self):
+        """GET /api/youtube/check/{videoId} - Check a single video (public)"""
+        # Test with a known working video (Rick Astley - Never Gonna Give You Up)
+        response = requests.get(f"{BASE_URL}/api/youtube/check/dQw4w9WgXcQ")
+        assert response.status_code == 200
+        
+        data = response.json()
+        assert "playable" in data
+        assert "age_restricted" in data
+        assert "needs_proxy" in data
+        print(f"SUCCESS: Video check endpoint works - playable: {data['playable']}, age_restricted: {data['age_restricted']}")
+    
+    def test_check_video_unavailable(self):
+        """GET /api/youtube/check/{videoId} - Check an invalid video ID"""
+        response = requests.get(f"{BASE_URL}/api/youtube/check/invalid_video_id_xyz")
+        assert response.status_code == 200
+        
+        data = response.json()
+        # Invalid video should return playable: False
+        assert data["playable"] == False or "error" in data
+        print(f"SUCCESS: Invalid video check handled - {data}")
+    
+    def test_quick_check_requires_auth(self):
+        """GET /api/youtube/quick-check requires admin authentication"""
+        response = requests.get(f"{BASE_URL}/api/youtube/quick-check")
+        assert response.status_code == 401
+        print("SUCCESS: Quick check endpoint requires authentication")
+    
+    def test_quick_check_endpoint(self, auth_token):
+        """GET /api/youtube/quick-check - Quick sample check (admin only)"""
+        # Use sample_size=2 to speed up the test
+        response = requests.get(
+            f"{BASE_URL}/api/youtube/quick-check",
+            params={"sample_size": 2},
+            headers={"Authorization": f"Bearer {auth_token}"},
+            timeout=120  # Longer timeout for yt-dlp processing
+        )
+        assert response.status_code == 200, f"Quick check failed: {response.text}"
+        
+        data = response.json()
+        assert "total_checked" in data
+        assert "playable" in data
+        assert "age_restricted" in data
+        assert "unavailable" in data
+        assert "issues" in data
+        assert "cookies_configured" in data
+        
+        print(f"SUCCESS: Quick check completed - checked: {data['total_checked']}, playable: {data['playable']}, age_restricted: {data['age_restricted']}, unavailable: {data['unavailable']}")
+    
+    def test_bulk_check_requires_auth(self):
+        """GET /api/youtube/bulk-check requires admin authentication"""
+        response = requests.get(f"{BASE_URL}/api/youtube/bulk-check")
+        assert response.status_code == 401
+        print("SUCCESS: Bulk check endpoint requires authentication")
+    
+    def test_bulk_check_endpoint(self, auth_token):
+        """GET /api/youtube/bulk-check - Full video health check (admin only)"""
+        # Note: This can take a long time with many videos - we just verify structure
+        response = requests.get(
+            f"{BASE_URL}/api/youtube/bulk-check",
+            headers={"Authorization": f"Bearer {auth_token}"},
+            timeout=300  # 5 min timeout for full check
+        )
+        assert response.status_code == 200, f"Bulk check failed: {response.text}"
+        
+        data = response.json()
+        # Verify response structure
+        assert "total_videos" in data
+        assert "checked" in data
+        assert "playable" in data
+        assert "age_restricted" in data
+        assert "unavailable" in data
+        assert "skipped" in data
+        assert "age_restricted_videos" in data
+        assert "unavailable_videos" in data
+        assert "channels_summary" in data
+        assert "cookies_configured" in data
+        
+        # Verify summary totals add up
+        assert data["playable"] + data["age_restricted"] + data["unavailable"] == data["checked"]
+        
+        print(f"SUCCESS: Bulk check completed - total: {data['total_videos']}, checked: {data['checked']}, playable: {data['playable']}, age_restricted: {data['age_restricted']}, unavailable: {data['unavailable']}")
+        return data
+    
+    def test_cookies_status_requires_auth(self):
+        """GET /api/youtube/cookies/status requires admin authentication"""
+        response = requests.get(f"{BASE_URL}/api/youtube/cookies/status")
+        assert response.status_code == 401
+        print("SUCCESS: Cookies status endpoint requires authentication")
+    
+    def test_cookies_status_endpoint(self, auth_token):
+        """GET /api/youtube/cookies/status - Check cookies configuration"""
+        response = requests.get(
+            f"{BASE_URL}/api/youtube/cookies/status",
+            headers={"Authorization": f"Bearer {auth_token}"}
+        )
+        assert response.status_code == 200
+        
+        data = response.json()
+        assert "configured" in data
+        if data["configured"]:
+            assert "file_size" in data
+            assert "working" in data
+        else:
+            assert "message" in data
+        
+        print(f"SUCCESS: Cookies status - configured: {data['configured']}")
+    
+    def test_stream_info_endpoint(self):
+        """GET /api/youtube/stream-info/{videoId} - Get stream info for a video"""
+        response = requests.get(f"{BASE_URL}/api/youtube/stream-info/dQw4w9WgXcQ")
+        assert response.status_code == 200
+        
+        data = response.json()
+        assert "success" in data
+        if data["success"]:
+            assert "url" in data
+            assert "used_cookies" in data
+        else:
+            assert "error" in data or "cookies_available" in data
+        
+        print(f"SUCCESS: Stream info endpoint works - success: {data['success']}")
+
+
 # Cleanup any TEST_ prefixed channels after tests
 @pytest.fixture(scope="session", autouse=True)
 def cleanup_test_data():
