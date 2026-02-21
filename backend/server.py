@@ -1263,6 +1263,180 @@ async def delete_youtube_cookies(user: dict = Depends(require_user)):
     
     return {"message": "No cookies file to delete"}
 
+@api_router.get("/youtube/bulk-check")
+async def bulk_check_videos(user: dict = Depends(require_user)):
+    """
+    Bulk check all videos across all channels for age restrictions and playability.
+    Returns categorized lists of videos by status.
+    Admin only - this can take a while for large video libraries.
+    """
+    if not user.get("is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    # Get all channels
+    channels = await db.channels.find({}, {"_id": 0}).to_list(None)
+    
+    results = {
+        "total_videos": 0,
+        "checked": 0,
+        "playable": 0,
+        "age_restricted": 0,
+        "unavailable": 0,
+        "skipped": 0,  # Non-YouTube videos
+        "age_restricted_videos": [],
+        "unavailable_videos": [],
+        "channels_summary": []
+    }
+    
+    has_cookies = COOKIES_FILE.exists()
+    
+    for channel in channels:
+        channel_stats = {
+            "channel_id": channel.get("id"),
+            "channel_name": channel.get("name"),
+            "total": 0,
+            "playable": 0,
+            "age_restricted": 0,
+            "unavailable": 0
+        }
+        
+        videos = channel.get("videos", [])
+        
+        for video in videos:
+            youtube_id = video.get("youtube_id")
+            results["total_videos"] += 1
+            channel_stats["total"] += 1
+            
+            # Skip non-YouTube videos
+            if not youtube_id:
+                results["skipped"] += 1
+                continue
+            
+            results["checked"] += 1
+            
+            # Try to get video info without cookies first
+            info = get_video_info_with_ytdlp(youtube_id, use_cookies=False)
+            
+            if info:
+                age_limit = info.get("age_limit", 0)
+                if age_limit >= 18:
+                    results["age_restricted"] += 1
+                    channel_stats["age_restricted"] += 1
+                    results["age_restricted_videos"].append({
+                        "youtube_id": youtube_id,
+                        "title": video.get("title", info.get("title", "Unknown")),
+                        "channel_id": channel.get("id"),
+                        "channel_name": channel.get("name"),
+                        "age_limit": age_limit,
+                        "can_play_with_cookies": has_cookies
+                    })
+                else:
+                    results["playable"] += 1
+                    channel_stats["playable"] += 1
+            else:
+                # Video not accessible without cookies, try with cookies
+                if has_cookies:
+                    info_with_cookies = get_video_info_with_ytdlp(youtube_id, use_cookies=True)
+                    if info_with_cookies:
+                        # Video is age-restricted but playable with cookies
+                        results["age_restricted"] += 1
+                        channel_stats["age_restricted"] += 1
+                        results["age_restricted_videos"].append({
+                            "youtube_id": youtube_id,
+                            "title": video.get("title", info_with_cookies.get("title", "Unknown")),
+                            "channel_id": channel.get("id"),
+                            "channel_name": channel.get("name"),
+                            "age_limit": info_with_cookies.get("age_limit", 18),
+                            "can_play_with_cookies": True
+                        })
+                    else:
+                        # Video is unavailable even with cookies
+                        results["unavailable"] += 1
+                        channel_stats["unavailable"] += 1
+                        results["unavailable_videos"].append({
+                            "youtube_id": youtube_id,
+                            "title": video.get("title", "Unknown"),
+                            "channel_id": channel.get("id"),
+                            "channel_name": channel.get("name"),
+                            "reason": "Video unavailable or deleted"
+                        })
+                else:
+                    # No cookies, mark as potentially age-restricted or unavailable
+                    results["unavailable"] += 1
+                    channel_stats["unavailable"] += 1
+                    results["unavailable_videos"].append({
+                        "youtube_id": youtube_id,
+                        "title": video.get("title", "Unknown"),
+                        "channel_id": channel.get("id"),
+                        "channel_name": channel.get("name"),
+                        "reason": "Cannot verify - may be age-restricted (no cookies configured)"
+                    })
+        
+        # Only add channel to summary if it has videos
+        if channel_stats["total"] > 0:
+            results["channels_summary"].append(channel_stats)
+    
+    results["cookies_configured"] = has_cookies
+    
+    return results
+
+@api_router.get("/youtube/quick-check")
+async def quick_check_sample_videos(user: dict = Depends(require_user), sample_size: int = 10):
+    """
+    Quick check a sample of videos from each channel.
+    Faster than full bulk check - useful for quick status overview.
+    """
+    if not user.get("is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    channels = await db.channels.find({}, {"_id": 0}).to_list(None)
+    
+    results = {
+        "total_checked": 0,
+        "playable": 0,
+        "age_restricted": 0,
+        "unavailable": 0,
+        "issues": [],
+        "cookies_configured": COOKIES_FILE.exists()
+    }
+    
+    import random
+    
+    for channel in channels:
+        videos = channel.get("videos", [])
+        youtube_videos = [v for v in videos if v.get("youtube_id")]
+        
+        # Sample up to sample_size videos per channel
+        sample = random.sample(youtube_videos, min(sample_size, len(youtube_videos))) if youtube_videos else []
+        
+        for video in sample:
+            youtube_id = video.get("youtube_id")
+            results["total_checked"] += 1
+            
+            info = get_video_info_with_ytdlp(youtube_id, use_cookies=False)
+            
+            if info:
+                if info.get("age_limit", 0) >= 18:
+                    results["age_restricted"] += 1
+                    results["issues"].append({
+                        "type": "age_restricted",
+                        "youtube_id": youtube_id,
+                        "title": video.get("title", "Unknown"),
+                        "channel": channel.get("name")
+                    })
+                else:
+                    results["playable"] += 1
+            else:
+                results["unavailable"] += 1
+                results["issues"].append({
+                    "type": "unavailable",
+                    "youtube_id": youtube_id,
+                    "title": video.get("title", "Unknown"),
+                    "channel": channel.get("name")
+                })
+    
+    return results
+
 @api_router.put("/channels/{channel_id}/videos/reorder")
 async def reorder_videos(channel_id: str, video_ids: List[str], user: dict = Depends(require_user)):
     channel = await db.channels.find_one({"id": channel_id}, {"_id": 0})
