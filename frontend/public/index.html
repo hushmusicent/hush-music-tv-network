@@ -3,19 +3,180 @@
   <head>
     <meta charset="utf-8" />
     <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#0A0A0A" />
-    <meta name="description" content="Hush Music TV Network - 24/7 streaming channels" />
-    <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+    <meta name="theme-color" content="#7C3AED" />
+    <meta name="description" content="Hush Music TV Network - 24/7 streaming channels with music, comedy, entertainment and more" />
+    
+    <!-- PWA Meta Tags -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Hush Music TV" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="application-name" content="Hush Music TV" />
+    <meta name="msapplication-TileColor" content="#7C3AED" />
+    <meta name="msapplication-TileImage" content="%PUBLIC_URL%/icons/icon-144x144.png" />
+    
+    <!-- Apple Touch Icons -->
+    <link rel="apple-touch-icon" href="%PUBLIC_URL%/icons/icon-192x192.png" />
+    <link rel="apple-touch-icon" sizes="152x152" href="%PUBLIC_URL%/icons/icon-152x152.png" />
+    <link rel="apple-touch-icon" sizes="144x144" href="%PUBLIC_URL%/icons/icon-144x144.png" />
+    <link rel="apple-touch-icon" sizes="120x120" href="%PUBLIC_URL%/icons/icon-128x128.png" />
+    
+    <!-- Manifest -->
     <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
+    
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Manrope:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
     <title>Hush Music TV Network</title>
+    
+    <!-- Splash screens for iOS -->
+    <style>
+      /* PWA Install Banner Styles */
+      .pwa-install-banner {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+        padding: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        z-index: 9999;
+        border-top: 1px solid rgba(124, 58, 237, 0.3);
+        transform: translateY(100%);
+        transition: transform 0.3s ease;
+      }
+      .pwa-install-banner.show {
+        transform: translateY(0);
+      }
+      .pwa-install-banner .content {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .pwa-install-banner img {
+        width: 48px;
+        height: 48px;
+        border-radius: 12px;
+      }
+      .pwa-install-banner .text h3 {
+        margin: 0;
+        font-size: 14px;
+        color: white;
+      }
+      .pwa-install-banner .text p {
+        margin: 4px 0 0;
+        font-size: 12px;
+        color: #999;
+      }
+      .pwa-install-banner button {
+        padding: 10px 20px;
+        border: none;
+        border-radius: 8px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+      .pwa-install-banner .install-btn {
+        background: #7C3AED;
+        color: white;
+      }
+      .pwa-install-banner .install-btn:hover {
+        background: #6D28D9;
+      }
+      .pwa-install-banner .close-btn {
+        background: transparent;
+        color: #999;
+        padding: 8px;
+      }
+    </style>
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>
     <div id="root"></div>
+    
+    <!-- PWA Install Banner -->
+    <div id="pwa-install-banner" class="pwa-install-banner">
+      <div class="content">
+        <img src="/icons/icon-96x96.png" alt="Hush Music TV" />
+        <div class="text">
+          <h3>Install Hush Music TV</h3>
+          <p>Add to home screen for the best experience</p>
+        </div>
+      </div>
+      <div style="display: flex; gap: 8px;">
+        <button class="install-btn" id="pwa-install-btn">Install</button>
+        <button class="close-btn" id="pwa-close-btn">✕</button>
+      </div>
+    </div>
+    
+    <!-- Service Worker Registration -->
+    <script>
+      // Register service worker
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then((registration) => {
+              console.log('SW registered:', registration.scope);
+            })
+            .catch((error) => {
+              console.log('SW registration failed:', error);
+            });
+        });
+      }
+      
+      // PWA Install Prompt
+      let deferredPrompt;
+      const installBanner = document.getElementById('pwa-install-banner');
+      const installBtn = document.getElementById('pwa-install-btn');
+      const closeBtn = document.getElementById('pwa-close-btn');
+      
+      window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        deferredPrompt = e;
+        
+        // Check if user hasn't dismissed the banner recently
+        const dismissed = localStorage.getItem('pwa-banner-dismissed');
+        if (!dismissed || Date.now() - parseInt(dismissed) > 7 * 24 * 60 * 60 * 1000) {
+          setTimeout(() => {
+            installBanner.classList.add('show');
+          }, 3000);
+        }
+      });
+      
+      installBtn?.addEventListener('click', async () => {
+        if (!deferredPrompt) return;
+        
+        deferredPrompt.prompt();
+        const { outcome } = await deferredPrompt.userChoice;
+        
+        if (outcome === 'accepted') {
+          console.log('User accepted the install prompt');
+        }
+        
+        deferredPrompt = null;
+        installBanner.classList.remove('show');
+      });
+      
+      closeBtn?.addEventListener('click', () => {
+        installBanner.classList.remove('show');
+        localStorage.setItem('pwa-banner-dismissed', Date.now().toString());
+      });
+      
+      // Hide banner if app is already installed
+      window.addEventListener('appinstalled', () => {
+        installBanner.classList.remove('show');
+        deferredPrompt = null;
+      });
+      
+      // Check if running as installed PWA
+      if (window.matchMedia('(display-mode: standalone)').matches) {
+        console.log('Running as installed PWA');
+      }
+    </script>
   </body>
 </html>
