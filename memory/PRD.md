@@ -56,6 +56,14 @@ Build a TV network app like Strimm for Hush Music TV Network with:
 - [x] **Test endpoint** - Check if any video is age-restricted before playback
 - [x] **YouTube Settings UI** - Dedicated admin page for managing cookies
 
+#### Video Health Check (Feb 21, 2026)
+- [x] **Quick Check** - Sample videos from each channel for fast status overview
+- [x] **Full Health Check** - Scan all videos across all channels  
+- [x] **Detailed Results** - Shows playable, age-restricted, and unavailable counts
+- [x] **Per-Channel Summary** - Breakdown of issues by channel
+- [x] **Video Lists** - Expandable lists of problematic videos with YouTube links
+- [x] **Cookie Status Integration** - Shows if age-restricted videos can be played
+
 ## Architecture
 - **Frontend**: React with Tailwind CSS, Shadcn UI components
 - **Backend**: FastAPI with MongoDB
