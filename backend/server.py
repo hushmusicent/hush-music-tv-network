@@ -1046,7 +1046,7 @@ async def delete_uploaded_image(image_id: str, user: dict = Depends(require_user
 def get_video_info_with_ytdlp(youtube_id: str, use_cookies: bool = True) -> dict:
     """Get video info using yt-dlp, optionally with cookies for age-restricted content"""
     cmd = [
-        "yt-dlp",
+        YTDLP_PATH,
         "--dump-json",
         "--no-download",
         "--no-warnings",
