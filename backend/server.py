@@ -33,6 +33,9 @@ COOKIES_DIR = ROOT_DIR / "cookies"
 COOKIES_DIR.mkdir(parents=True, exist_ok=True)
 COOKIES_FILE = COOKIES_DIR / "youtube_cookies.txt"
 
+# yt-dlp binary path
+YTDLP_PATH = "/root/.venv/bin/yt-dlp"
+
 # MongoDB connection
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
