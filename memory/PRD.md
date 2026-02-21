@@ -44,6 +44,7 @@ Build a TV network app like Strimm for Hush Music TV Network with:
 - [x] **YouTube Settings Page** - Manage cookies for age-restricted content (NEW)
 - [x] **Live TV page with synchronized playback**
 - [x] **Auto-proxy fallback** - Automatically uses proxy for age-restricted videos (NEW)
+- [x] **Progressive Web App (PWA)** - Installable app with offline support (NEW)
 - [x] Embeddable player for single channel
 - [x] Embeddable network player
 - [x] Top navigation bar on all pages
