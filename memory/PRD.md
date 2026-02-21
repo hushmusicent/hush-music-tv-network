@@ -100,6 +100,8 @@ Build a TV network app like Strimm for Hush Music TV Network with:
 - POST /api/youtube/cookies - Upload cookies file (admin)
 - GET /api/youtube/cookies/status - Check cookies status (admin)
 - DELETE /api/youtube/cookies - Delete cookies (admin)
+- GET /api/youtube/bulk-check - Full health check all videos (admin)
+- GET /api/youtube/quick-check - Quick sample check (admin)
 
 ### Upload
 - POST /api/upload/video - Upload video file (MP4, max 2GB)
