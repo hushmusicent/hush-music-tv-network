@@ -358,10 +358,10 @@ const LiveTV = () => {
     
     if (channelSchedule && channelSchedule.length > 0) {
       // Use 24-hour schedule for this channel
-      const { video, seekTime: newSeekTime, videoIndex } = getVideoFromSchedule(channelSchedule, elapsed, new Set());
+      const { video, seekTime: newSeekTime, videoIndex } = getVideoFromSchedule(channelSchedule, new Set());
       
       if (video) {
-        console.log(`[SCHEDULED] ${channel.name} - Playing: ${video.title} at ${newSeekTime}s (elapsed: ${elapsed}s)`);
+        console.log(`[SCHEDULED] ${channel.name} - Playing: ${video.title} at ${newSeekTime}s`);
         setCurrentVideoIndex(videoIndex);
         setCurrentVideo(video);
         setSeekTime(newSeekTime);
