@@ -1,12 +1,15 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, UploadFile, File
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import StreamingResponse, RedirectResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
 import shutil
+import subprocess
+import json
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict, EmailStr
 from typing import List, Optional
@@ -24,6 +27,11 @@ UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
 IMAGES_DIR = ROOT_DIR / "uploads" / "images"
 IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+
+# YouTube cookies directory
+COOKIES_DIR = ROOT_DIR / "cookies"
+COOKIES_DIR.mkdir(parents=True, exist_ok=True)
+COOKIES_FILE = COOKIES_DIR / "youtube_cookies.txt"
 
 # MongoDB connection
 mongo_url = os.environ['MONGO_URL']
