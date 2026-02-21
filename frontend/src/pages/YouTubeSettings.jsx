@@ -389,6 +389,256 @@ const YouTubeSettings = () => {
           </div>
         </div>
 
+        {/* Bulk Health Check Card */}
+        <div className="glass rounded-xl p-6 mb-6">
+          <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+            <Activity size={20} className="text-primary" />
+            Video Health Check
+          </h2>
+          
+          <div className="space-y-4">
+            <p className="text-sm text-gray-400">
+              Scan all videos across your channels to identify age-restricted and unavailable content.
+            </p>
+            
+            <div className="flex items-center gap-4">
+              <Button 
+                onClick={handleQuickCheck}
+                disabled={bulkCheckRunning}
+                variant="outline"
+                className="border-blue-500/50 text-blue-400 hover:bg-blue-500/10"
+              >
+                {bulkCheckRunning ? (
+                  <RefreshCw size={16} className="mr-2 animate-spin" />
+                ) : (
+                  <Eye size={16} className="mr-2" />
+                )}
+                Quick Check
+              </Button>
+              <Button 
+                onClick={handleBulkCheck}
+                disabled={bulkCheckRunning}
+                className="bg-primary hover:bg-primary/90"
+              >
+                {bulkCheckRunning ? (
+                  <RefreshCw size={16} className="mr-2 animate-spin" />
+                ) : (
+                  <Activity size={16} className="mr-2" />
+                )}
+                Full Health Check
+              </Button>
+              {bulkCheckRunning && (
+                <span className="text-sm text-yellow-400">
+                  This may take several minutes...
+                </span>
+              )}
+            </div>
+
+            {/* Results */}
+            {bulkCheckResults && (
+              <div className="mt-6 space-y-4">
+                {/* Summary Stats */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="p-4 rounded-lg bg-black/30 border border-white/10">
+                    <div className="text-2xl font-bold text-white">
+                      {bulkCheckResults.is_quick_check ? bulkCheckResults.total_checked : bulkCheckResults.total_videos}
+                    </div>
+                    <div className="text-sm text-gray-400">
+                      {bulkCheckResults.is_quick_check ? 'Checked' : 'Total Videos'}
+                    </div>
+                  </div>
+                  <div className="p-4 rounded-lg bg-green-500/10 border border-green-500/30">
+                    <div className="text-2xl font-bold text-green-400">
+                      {bulkCheckResults.playable}
+                    </div>
+                    <div className="text-sm text-gray-400 flex items-center gap-1">
+                      <Play size={12} /> Playable
+                    </div>
+                  </div>
+                  <div className="p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
+                    <div className="text-2xl font-bold text-yellow-400">
+                      {bulkCheckResults.age_restricted}
+                    </div>
+                    <div className="text-sm text-gray-400 flex items-center gap-1">
+                      <AlertTriangle size={12} /> Age-Restricted
+                    </div>
+                  </div>
+                  <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/30">
+                    <div className="text-2xl font-bold text-red-400">
+                      {bulkCheckResults.unavailable}
+                    </div>
+                    <div className="text-sm text-gray-400 flex items-center gap-1">
+                      <Ban size={12} /> Unavailable
+                    </div>
+                  </div>
+                </div>
+
+                {/* Cookies Status */}
+                <div className={`p-3 rounded-lg ${bulkCheckResults.cookies_configured ? 'bg-green-500/10' : 'bg-yellow-500/10'}`}>
+                  <div className="flex items-center gap-2 text-sm">
+                    {bulkCheckResults.cookies_configured ? (
+                      <>
+                        <Check size={14} className="text-green-400" />
+                        <span className="text-green-400">Cookies configured - age-restricted videos can be played via proxy</span>
+                      </>
+                    ) : (
+                      <>
+                        <AlertTriangle size={14} className="text-yellow-400" />
+                        <span className="text-yellow-400">No cookies configured - age-restricted videos will be skipped</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Age-Restricted Videos List */}
+                {bulkCheckResults.age_restricted_videos && bulkCheckResults.age_restricted_videos.length > 0 && (
+                  <div className="rounded-lg border border-yellow-500/30 overflow-hidden">
+                    <div className="p-3 bg-yellow-500/10 flex items-center justify-between">
+                      <span className="font-medium text-yellow-400 flex items-center gap-2">
+                        <AlertTriangle size={16} />
+                        Age-Restricted Videos ({bulkCheckResults.age_restricted_videos.length})
+                      </span>
+                    </div>
+                    <div className="max-h-64 overflow-y-auto">
+                      {bulkCheckResults.age_restricted_videos.map((video, idx) => (
+                        <div 
+                          key={idx} 
+                          className="p-3 border-b border-white/5 last:border-b-0 flex items-center justify-between hover:bg-white/5"
+                        >
+                          <div className="flex-1">
+                            <div className="text-sm text-white truncate max-w-md">{video.title}</div>
+                            <div className="text-xs text-gray-500">{video.channel_name}</div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {video.can_play_with_cookies && (
+                              <span className="text-xs px-2 py-1 rounded bg-green-500/20 text-green-400">
+                                Proxy OK
+                              </span>
+                            )}
+                            <a 
+                              href={`https://youtube.com/watch?v=${video.youtube_id}`} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="text-gray-400 hover:text-white"
+                            >
+                              <ExternalLink size={14} />
+                            </a>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Unavailable Videos List */}
+                {bulkCheckResults.unavailable_videos && bulkCheckResults.unavailable_videos.length > 0 && (
+                  <div className="rounded-lg border border-red-500/30 overflow-hidden">
+                    <div className="p-3 bg-red-500/10 flex items-center justify-between">
+                      <span className="font-medium text-red-400 flex items-center gap-2">
+                        <Ban size={16} />
+                        Unavailable Videos ({bulkCheckResults.unavailable_videos.length})
+                      </span>
+                    </div>
+                    <div className="max-h-64 overflow-y-auto">
+                      {bulkCheckResults.unavailable_videos.map((video, idx) => (
+                        <div 
+                          key={idx} 
+                          className="p-3 border-b border-white/5 last:border-b-0 flex items-center justify-between hover:bg-white/5"
+                        >
+                          <div className="flex-1">
+                            <div className="text-sm text-white truncate max-w-md">{video.title}</div>
+                            <div className="text-xs text-gray-500">{video.channel_name}</div>
+                            <div className="text-xs text-red-400">{video.reason}</div>
+                          </div>
+                          <a 
+                            href={`https://youtube.com/watch?v=${video.youtube_id}`} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="text-gray-400 hover:text-white"
+                          >
+                            <ExternalLink size={14} />
+                          </a>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Quick Check Issues */}
+                {bulkCheckResults.is_quick_check && bulkCheckResults.issues && bulkCheckResults.issues.length > 0 && (
+                  <div className="rounded-lg border border-orange-500/30 overflow-hidden">
+                    <div className="p-3 bg-orange-500/10">
+                      <span className="font-medium text-orange-400 flex items-center gap-2">
+                        <AlertTriangle size={16} />
+                        Issues Found ({bulkCheckResults.issues.length})
+                      </span>
+                    </div>
+                    <div className="max-h-64 overflow-y-auto">
+                      {bulkCheckResults.issues.map((issue, idx) => (
+                        <div 
+                          key={idx} 
+                          className="p-3 border-b border-white/5 last:border-b-0 flex items-center justify-between hover:bg-white/5"
+                        >
+                          <div className="flex-1">
+                            <div className="text-sm text-white truncate max-w-md">{issue.title}</div>
+                            <div className="text-xs text-gray-500">{issue.channel}</div>
+                          </div>
+                          <span className={`text-xs px-2 py-1 rounded ${
+                            issue.type === 'age_restricted' 
+                              ? 'bg-yellow-500/20 text-yellow-400' 
+                              : 'bg-red-500/20 text-red-400'
+                          }`}>
+                            {issue.type === 'age_restricted' ? 'Age Restricted' : 'Unavailable'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Channel Summary (for full check) */}
+                {bulkCheckResults.channels_summary && bulkCheckResults.channels_summary.length > 0 && (
+                  <div className="rounded-lg border border-white/10 overflow-hidden">
+                    <div className="p-3 bg-white/5">
+                      <span className="font-medium text-gray-300">Channel Summary</span>
+                    </div>
+                    <div className="max-h-64 overflow-y-auto">
+                      {bulkCheckResults.channels_summary
+                        .filter(ch => ch.age_restricted > 0 || ch.unavailable > 0)
+                        .map((channel, idx) => (
+                          <div 
+                            key={idx} 
+                            className="p-3 border-b border-white/5 last:border-b-0 flex items-center justify-between hover:bg-white/5"
+                          >
+                            <div className="text-sm text-white">{channel.channel_name}</div>
+                            <div className="flex items-center gap-3 text-xs">
+                              <span className="text-green-400">{channel.playable} OK</span>
+                              {channel.age_restricted > 0 && (
+                                <span className="text-yellow-400">{channel.age_restricted} Restricted</span>
+                              )}
+                              {channel.unavailable > 0 && (
+                                <span className="text-red-400">{channel.unavailable} Unavailable</span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* All Good Message */}
+                {bulkCheckResults.age_restricted === 0 && bulkCheckResults.unavailable === 0 && (
+                  <div className="p-4 rounded-lg bg-green-500/10 border border-green-500/30 text-center">
+                    <Check size={32} className="mx-auto mb-2 text-green-400" />
+                    <p className="text-green-400 font-medium">All videos are playable!</p>
+                    <p className="text-sm text-gray-400">No age-restricted or unavailable videos found.</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* Help Card */}
         <div className="glass rounded-xl p-6">
           <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
