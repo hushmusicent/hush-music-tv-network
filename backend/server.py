@@ -1038,6 +1038,223 @@ async def delete_uploaded_image(image_id: str, user: dict = Depends(require_user
     
     return {"message": "Image deleted"}
 
+# ===================== YOUTUBE PROXY ROUTES (Age-Restricted Videos) =====================
+
+def get_video_info_with_ytdlp(youtube_id: str, use_cookies: bool = True) -> dict:
+    """Get video info using yt-dlp, optionally with cookies for age-restricted content"""
+    cmd = [
+        "yt-dlp",
+        "--dump-json",
+        "--no-download",
+        "-f", "best[height<=720]/best",  # Limit quality for streaming
+        f"https://www.youtube.com/watch?v={youtube_id}"
+    ]
+    
+    # Add cookies if available and requested
+    if use_cookies and COOKIES_FILE.exists():
+        cmd.extend(["--cookies", str(COOKIES_FILE)])
+    
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        if result.returncode == 0:
+            return json.loads(result.stdout)
+        else:
+            logger.error(f"yt-dlp error for {youtube_id}: {result.stderr}")
+            return None
+    except subprocess.TimeoutExpired:
+        logger.error(f"yt-dlp timeout for {youtube_id}")
+        return None
+    except Exception as e:
+        logger.error(f"yt-dlp exception for {youtube_id}: {e}")
+        return None
+
+def get_direct_video_url(youtube_id: str, use_cookies: bool = True) -> Optional[str]:
+    """Get direct video URL using yt-dlp"""
+    cmd = [
+        "yt-dlp",
+        "--get-url",
+        "-f", "best[height<=720][ext=mp4]/best[height<=720]/best",
+        f"https://www.youtube.com/watch?v={youtube_id}"
+    ]
+    
+    if use_cookies and COOKIES_FILE.exists():
+        cmd.extend(["--cookies", str(COOKIES_FILE)])
+    
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        if result.returncode == 0:
+            urls = result.stdout.strip().split('\n')
+            return urls[0] if urls else None
+        else:
+            logger.error(f"yt-dlp get-url error for {youtube_id}: {result.stderr}")
+            return None
+    except Exception as e:
+        logger.error(f"yt-dlp get-url exception for {youtube_id}: {e}")
+        return None
+
+@api_router.get("/youtube/check/{youtube_id}")
+async def check_youtube_video(youtube_id: str):
+    """Check if a YouTube video is playable and if it's age-restricted"""
+    info = get_video_info_with_ytdlp(youtube_id, use_cookies=False)
+    
+    if info is None:
+        # Try with cookies
+        info_with_cookies = get_video_info_with_ytdlp(youtube_id, use_cookies=True)
+        if info_with_cookies:
+            return {
+                "playable": True,
+                "age_restricted": True,
+                "needs_proxy": True,
+                "title": info_with_cookies.get("title", ""),
+                "duration": info_with_cookies.get("duration", 0),
+                "cookies_available": COOKIES_FILE.exists()
+            }
+        return {
+            "playable": False,
+            "age_restricted": False,
+            "needs_proxy": False,
+            "error": "Video unavailable"
+        }
+    
+    age_restricted = info.get("age_limit", 0) >= 18
+    
+    return {
+        "playable": True,
+        "age_restricted": age_restricted,
+        "needs_proxy": age_restricted,
+        "title": info.get("title", ""),
+        "duration": info.get("duration", 0),
+        "cookies_available": COOKIES_FILE.exists()
+    }
+
+@api_router.get("/youtube/stream/{youtube_id}")
+async def stream_youtube_video(youtube_id: str):
+    """Get direct stream URL for age-restricted videos (uses cookies)"""
+    # First check if cookies are available
+    if not COOKIES_FILE.exists():
+        raise HTTPException(
+            status_code=400, 
+            detail="YouTube cookies not configured. Please upload cookies file in admin settings."
+        )
+    
+    # Get direct URL
+    video_url = get_direct_video_url(youtube_id, use_cookies=True)
+    
+    if not video_url:
+        raise HTTPException(status_code=404, detail="Could not get video stream URL")
+    
+    # Return redirect to the direct video URL
+    return RedirectResponse(url=video_url, status_code=302)
+
+@api_router.get("/youtube/stream-info/{youtube_id}")
+async def get_stream_info(youtube_id: str):
+    """Get stream URL info for a YouTube video"""
+    has_cookies = COOKIES_FILE.exists()
+    
+    # Try without cookies first
+    video_url = get_direct_video_url(youtube_id, use_cookies=False)
+    
+    if video_url:
+        return {
+            "success": True,
+            "url": video_url,
+            "used_cookies": False
+        }
+    
+    # Try with cookies
+    if has_cookies:
+        video_url = get_direct_video_url(youtube_id, use_cookies=True)
+        if video_url:
+            return {
+                "success": True,
+                "url": video_url,
+                "used_cookies": True
+            }
+    
+    return {
+        "success": False,
+        "error": "Could not get video URL",
+        "cookies_available": has_cookies
+    }
+
+@api_router.post("/youtube/cookies")
+async def upload_youtube_cookies(
+    file: UploadFile = File(...),
+    user: dict = Depends(require_user)
+):
+    """Upload YouTube cookies file (Netscape format) - admin only"""
+    if not user.get("is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    # Validate file extension
+    if not file.filename.endswith('.txt'):
+        raise HTTPException(status_code=400, detail="Cookies file must be a .txt file in Netscape format")
+    
+    # Read and validate content
+    content = await file.read()
+    content_str = content.decode('utf-8', errors='ignore')
+    
+    # Basic validation - check for YouTube domain
+    if 'youtube.com' not in content_str.lower() and '.youtube' not in content_str.lower():
+        raise HTTPException(
+            status_code=400, 
+            detail="Invalid cookies file. Must contain YouTube cookies."
+        )
+    
+    # Save the file
+    try:
+        with open(COOKIES_FILE, 'wb') as f:
+            f.write(content)
+        
+        # Test if cookies work by checking a known video
+        test_result = get_video_info_with_ytdlp("dQw4w9WgXcQ", use_cookies=True)
+        
+        return {
+            "message": "Cookies uploaded successfully",
+            "filename": file.filename,
+            "size": len(content),
+            "test_result": "Cookies are working" if test_result else "Cookies uploaded but test failed"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save cookies: {str(e)}")
+
+@api_router.get("/youtube/cookies/status")
+async def get_cookies_status(user: dict = Depends(require_user)):
+    """Check if YouTube cookies are configured - admin only"""
+    if not user.get("is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    if not COOKIES_FILE.exists():
+        return {
+            "configured": False,
+            "message": "No cookies file uploaded"
+        }
+    
+    # Get file info
+    stat = COOKIES_FILE.stat()
+    
+    # Test cookies
+    test_result = get_video_info_with_ytdlp("dQw4w9WgXcQ", use_cookies=True)
+    
+    return {
+        "configured": True,
+        "file_size": stat.st_size,
+        "last_modified": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(),
+        "working": test_result is not None
+    }
+
+@api_router.delete("/youtube/cookies")
+async def delete_youtube_cookies(user: dict = Depends(require_user)):
+    """Delete YouTube cookies file - admin only"""
+    if not user.get("is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    if COOKIES_FILE.exists():
+        COOKIES_FILE.unlink()
+        return {"message": "Cookies deleted"}
+    
+    return {"message": "No cookies file to delete"}
+
 @api_router.put("/channels/{channel_id}/videos/reorder")
 async def reorder_videos(channel_id: str, video_ids: List[str], user: dict = Depends(require_user)):
     channel = await db.channels.find_one({"id": channel_id}, {"_id": 0})
