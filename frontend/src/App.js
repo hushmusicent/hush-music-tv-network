@@ -18,6 +18,7 @@ import EmbedNetwork from './pages/EmbedNetwork';
 import Analytics from './pages/Analytics';
 import Schedule from './pages/Schedule';
 import BulkThumbnails from './pages/BulkThumbnails';
+import YouTubeSettings from './pages/YouTubeSettings';
 
 function App() {
   return (
@@ -57,6 +58,7 @@ function App() {
                   <Route path="/edit/:channelId" element={<ChannelCreator />} />
                   <Route path="/favorites" element={<Favorites />} />
                   <Route path="/bulk-thumbnails" element={<BulkThumbnails />} />
+                  <Route path="/youtube-settings" element={<YouTubeSettings />} />
                 </Routes>
               </Layout>
             }
