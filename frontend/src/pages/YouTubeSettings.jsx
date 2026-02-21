@@ -14,7 +14,13 @@ import {
   Cookie,
   RefreshCw,
   ExternalLink,
-  Info
+  Info,
+  Activity,
+  Play,
+  Ban,
+  Eye,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -30,6 +36,11 @@ const YouTubeSettings = () => {
   const [uploading, setUploading] = useState(false);
   const [testingVideo, setTestingVideo] = useState('');
   const [testResult, setTestResult] = useState(null);
+  
+  // Bulk check state
+  const [bulkCheckRunning, setBulkCheckRunning] = useState(false);
+  const [bulkCheckResults, setBulkCheckResults] = useState(null);
+  const [expandedChannels, setExpandedChannels] = useState({});
   
   const fileInputRef = useRef(null);
 
