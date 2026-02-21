@@ -129,6 +129,57 @@ const YouTubeSettings = () => {
     }
   };
 
+  const handleBulkCheck = async () => {
+    try {
+      setBulkCheckRunning(true);
+      setBulkCheckResults(null);
+      toast.info('Starting bulk video health check... This may take several minutes.');
+      
+      const response = await youtubeProxyAPI.bulkCheck();
+      setBulkCheckResults(response.data);
+      
+      const { age_restricted, unavailable, total_videos } = response.data;
+      if (age_restricted === 0 && unavailable === 0) {
+        toast.success(`All ${total_videos} videos are playable!`);
+      } else {
+        toast.warning(`Found ${age_restricted} age-restricted and ${unavailable} unavailable videos.`);
+      }
+    } catch (error) {
+      console.error('Bulk check failed:', error);
+      toast.error('Bulk check failed. Please try again.');
+    } finally {
+      setBulkCheckRunning(false);
+    }
+  };
+
+  const handleQuickCheck = async () => {
+    try {
+      setBulkCheckRunning(true);
+      setBulkCheckResults(null);
+      toast.info('Running quick sample check...');
+      
+      const response = await youtubeProxyAPI.quickCheck(5);
+      setBulkCheckResults({
+        ...response.data,
+        is_quick_check: true
+      });
+      
+      toast.success('Quick check complete!');
+    } catch (error) {
+      console.error('Quick check failed:', error);
+      toast.error('Quick check failed. Please try again.');
+    } finally {
+      setBulkCheckRunning(false);
+    }
+  };
+
+  const toggleChannelExpand = (channelId) => {
+    setExpandedChannels(prev => ({
+      ...prev,
+      [channelId]: !prev[channelId]
+    }));
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
