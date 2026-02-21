@@ -577,6 +577,15 @@ const Dashboard = () => {
             <ImageIcon size={18} className="mr-2" />
             Thumbnails
           </Button>
+          <Button
+            onClick={() => navigate('/youtube-settings')}
+            variant="outline"
+            className="border-red-500/50 text-red-400 hover:bg-red-500/10"
+            data-testid="youtube-settings-btn"
+          >
+            <Youtube size={18} className="mr-2" />
+            YT Cookies
+          </Button>
           {reorderMode ? (
             <>
               <Button
