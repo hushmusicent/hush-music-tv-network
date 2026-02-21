@@ -187,6 +187,12 @@ export const youtubeProxyAPI = {
   
   // Delete cookies (admin only)
   deleteCookies: () => api.delete('/youtube/cookies'),
+  
+  // Bulk check all videos (admin only) - can take a while
+  bulkCheck: () => api.get('/youtube/bulk-check', { timeout: 300000 }), // 5 min timeout
+  
+  // Quick check sample videos (admin only)
+  quickCheck: (sampleSize = 10) => api.get(`/youtube/quick-check?sample_size=${sampleSize}`),
 };
 
 export default api;
