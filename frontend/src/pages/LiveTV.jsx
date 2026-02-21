@@ -801,6 +801,9 @@ const LiveTV = () => {
     if (videoRef.current) {
       videoRef.current.muted = !isMuted;
     }
+    if (proxyVideoRef.current) {
+      proxyVideoRef.current.muted = !isMuted;
+    }
   };
 
   const togglePlayPause = () => {
@@ -808,7 +811,7 @@ const LiveTV = () => {
     if (playPauseOsdTimeoutRef.current) clearTimeout(playPauseOsdTimeoutRef.current);
     playPauseOsdTimeoutRef.current = setTimeout(() => setShowPlayPauseOSD(false), 1000);
 
-    if (youtubePlayerRef.current) {
+    if (youtubePlayerRef.current && !useProxyPlayer) {
       const playerState = youtubePlayerRef.current.getPlayerState();
       if (playerState === window.YT.PlayerState.PLAYING) {
         youtubePlayerRef.current.pauseVideo();
@@ -816,6 +819,15 @@ const LiveTV = () => {
       } else {
         youtubePlayerRef.current.playVideo();
         setIsPaused(false);
+      }
+    }
+    if (proxyVideoRef.current && useProxyPlayer) {
+      if (proxyVideoRef.current.paused) {
+        proxyVideoRef.current.play();
+        setIsPaused(false);
+      } else {
+        proxyVideoRef.current.pause();
+        setIsPaused(true);
       }
     }
     if (videoRef.current) {
