@@ -120,4 +120,5 @@ uvicorn==0.25.0
 watchfiles==1.1.1
 websockets==15.0.1
 yarl==1.22.0
+yt-dlp==2026.2.4
 zipp==3.23.0
