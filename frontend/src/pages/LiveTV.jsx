@@ -572,9 +572,28 @@ const LiveTV = () => {
     setSeekTime(0);
   }, [currentChannel, playlists, schedules, currentVideo, failedVideoIds, isAdmin]);
 
+  // Check if video needs proxy (age-restricted) and get stream URL
+  const checkAndGetProxyUrl = useCallback(async (youtubeId) => {
+    try {
+      const response = await youtubeProxyAPI.getStreamInfo(youtubeId);
+      if (response.data.success) {
+        return response.data.url;
+      }
+      return null;
+    } catch (e) {
+      console.error('Error checking proxy:', e);
+      return null;
+    }
+  }, []);
+
   // Initialize YouTube player when video changes
   useEffect(() => {
     if (!currentVideo?.youtube_id || isUploadedVideo) return;
+    
+    // Reset proxy state
+    setUseProxyPlayer(false);
+    setProxyVideoUrl(null);
+    setAgeRestrictedWarning(false);
     
     if (youtubePlayerRef.current) {
       try {
@@ -585,6 +604,30 @@ const LiveTV = () => {
 
     let errorTimeout = null;
     let playbackCheckTimeout = null;
+    let ageRestrictionFallbackTimeout = null;
+
+    const tryProxyFallback = async () => {
+      console.log('Trying proxy fallback for age-restricted video...');
+      setAgeRestrictedWarning(true);
+      
+      try {
+        const proxyUrl = await checkAndGetProxyUrl(currentVideo.youtube_id);
+        if (proxyUrl) {
+          console.log('Got proxy URL, switching to proxy player');
+          setProxyVideoUrl(proxyUrl);
+          setUseProxyPlayer(true);
+          setAgeRestrictedWarning(false);
+          toast.success('Playing via proxy (age-restricted content)');
+        } else {
+          console.log('Proxy failed, skipping video');
+          toast.error('Age-restricted video - cookies not configured');
+          skipToNextVideo();
+        }
+      } catch (e) {
+        console.error('Proxy fallback failed:', e);
+        skipToNextVideo();
+      }
+    };
 
     const initPlayer = () => {
       if (!window.YT || !window.YT.Player) {
@@ -687,8 +730,8 @@ const LiveTV = () => {
               try {
                 const state = youtubePlayerRef.current?.getPlayerState();
                 if (state === -1 || state === 5) {
-                  console.log('Video not playing, skipping...');
-                  skipToNextVideo();
+                  console.log('Video not playing after 5s, trying proxy...');
+                  tryProxyFallback();
                 }
               } catch (e) {}
             }, 5000);
@@ -700,6 +743,10 @@ const LiveTV = () => {
                 clearTimeout(playbackCheckTimeout);
                 playbackCheckTimeout = null;
               }
+              if (ageRestrictionFallbackTimeout) {
+                clearTimeout(ageRestrictionFallbackTimeout);
+                ageRestrictionFallbackTimeout = null;
+              }
             } else if (event.data === window.YT.PlayerState.PAUSED) {
               setIsPaused(true);
             } else if (event.data === window.YT.PlayerState.ENDED) {
@@ -710,14 +757,21 @@ const LiveTV = () => {
           },
           onError: (event) => {
             console.error('YouTube error:', event.data);
-            skipToNextVideo();
+            // Error 150 = video unavailable/age-restricted in embed
+            // Error 101 = video owner doesn't allow embed
+            if (event.data === 150 || event.data === 101) {
+              console.log('Age-restricted or embed-blocked, trying proxy...');
+              tryProxyFallback();
+            } else {
+              skipToNextVideo();
+            }
           }
         }
       });
 
       errorTimeout = setTimeout(() => {
-        console.log('Video timeout - may be unavailable');
-        skipToNextVideo();
+        console.log('Video timeout - trying proxy fallback');
+        tryProxyFallback();
       }, 10000);
     };
 
@@ -726,8 +780,9 @@ const LiveTV = () => {
     return () => {
       if (errorTimeout) clearTimeout(errorTimeout);
       if (playbackCheckTimeout) clearTimeout(playbackCheckTimeout);
+      if (ageRestrictionFallbackTimeout) clearTimeout(ageRestrictionFallbackTimeout);
     };
-  }, [currentVideo, seekTime, isMuted, isUploadedVideo, skipToNextVideo, playNextVideo, currentChannel]);
+  }, [currentVideo, seekTime, isMuted, isUploadedVideo, skipToNextVideo, playNextVideo, currentChannel, checkAndGetProxyUrl]);
 
   // Handle uploaded video
   useEffect(() => {
