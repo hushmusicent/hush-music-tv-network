@@ -20,7 +20,7 @@ Build a TV network app like Strimm for Hush Music TV Network with:
 
 ## Core Requirements
 
-### Implemented Features (Feb 14, 2026)
+### Implemented Features
 
 #### Backend
 - [x] User auth (admin-only login, JWT tokens)
@@ -32,71 +32,37 @@ Build a TV network app like Strimm for Hush Music TV Network with:
 - [x] Uploaded videos management (list, delete)
 - [x] Static file serving for uploaded videos
 - [x] Seed data with sample channels
-- [x] **Random Play feature** - channels can play videos in shuffled order
+- [x] Random Play feature - channels can play videos in shuffled order
+- [x] **YouTube Proxy System for Age-Restricted Videos** (NEW - Feb 21, 2026)
 
 #### Frontend
 - [x] Home page with hero section and featured channels
 - [x] Browse page with search and category filters
 - [x] Watch page with YouTube/uploaded video player
-- [x] **24-Hour TV Guide Feature** - Classic TV Guide style schedule page:
-  - Grid layout showing all channels with their 24-hour schedules
-  - Time navigation with scroll controls
-  - "Now" button to jump to current time
-  - Individual channel shuffle/regenerate
-  - Current time indicator
-- [x] **TV Guide with dynamic schedule based on actual video durations**:
-  - 24-hour timeline with videos positioned at correct start times
-  - Supports random play channels (consistent shuffle across viewers)
-  - "Now Playing" indicator matches Live TV page
-  - "Now" button scrolls to current time position
-- [x] **Admin Dashboard with full management**:
-  - Stats overview (Channels, Videos, Viewers, Favorites)
-  - Expandable channel list showing all videos
-  - Inline editing (name, description, category, thumbnail, toggles)
-  - **Thumbnail upload** - upload images from local drive for channel preview
-  - **Random Play toggle** for shuffle mode
-  - **SHUFFLE badge** on channels with random play enabled
-  - Remove videos from channels
-  - Copy embed codes per channel
-- [x] **Channel Creator/Editor** with YouTube and Upload tabs
-  - **Random Play toggle** with "Shuffle video order daily" description
-- [x] Video upload UI with progress indicator
-- [x] Favorites page
-- [x] Admin-only Login page
-- [x] **Home page** (visitor-facing):
-  - Hero section with featured channel
-  - "Watch Now" and "Live TV" buttons (no Create Channel for visitors)
-  - Categories section
-  - Featured channels grid
-  - CTA section with "Watch Live TV" button
-- [x] **Live TV page with synchronized playback**:
-  - Channel sidebar with switching
-  - **Shuffle icon** next to channel names with random play enabled
-  - **Live sync** - calculates video position based on current time
-  - **Seeded shuffle** - all viewers see same shuffled order on same day
-  - All viewers see same content at same moment
-  - Schedule bar showing current/upcoming with NOW indicator
-  - Admin Panel sidebar (toggle with 'A' key or button)
-  - Edit channel button in player overlay
-  - Keyboard controls (↑↓ channels, M mute, G guide, A admin)
+- [x] **24-Hour TV Guide Feature** - Classic TV Guide style schedule page
+- [x] **Admin Dashboard with full management**
+- [x] **YouTube Settings Page** - Manage cookies for age-restricted content (NEW)
+- [x] **Live TV page with synchronized playback**
+- [x] **Auto-proxy fallback** - Automatically uses proxy for age-restricted videos (NEW)
 - [x] Embeddable player for single channel
 - [x] Embeddable network player
 - [x] Top navigation bar on all pages
-- [x] Scrollbars on all pages
 
-#### Video & Image Support
-- [x] YouTube video embeds
-- [x] Local MP4 file uploads (max 2GB)
-- [x] VideoPlayer component handles both video types
-- [x] Live sync for both YouTube and uploaded videos
-- [x] **Image uploads** for channel thumbnails (JPEG, PNG, WebP, GIF - max 10MB)
+#### YouTube Age-Restriction Bypass (Feb 21, 2026)
+- [x] **Backend proxy using yt-dlp** - Fetches direct video URLs for age-restricted content
+- [x] **Cookie management** - Admin can upload YouTube cookies in Netscape format
+- [x] **Auto-detection** - Frontend detects when video fails and tries proxy fallback
+- [x] **Stream redirection** - Backend provides direct video stream URLs
+- [x] **Test endpoint** - Check if any video is age-restricted before playback
+- [x] **YouTube Settings UI** - Dedicated admin page for managing cookies
 
 ## Architecture
 - **Frontend**: React with Tailwind CSS, Shadcn UI components
 - **Backend**: FastAPI with MongoDB
 - **Authentication**: JWT-based auth (admin-only)
-- **Video Playback**: YouTube iframe embeds + HTML5 video for uploads
+- **Video Playback**: YouTube iframe embeds + HTML5 video for uploads/proxy
 - **File Storage**: Local uploads directory with static file serving
+- **Age-Restriction Bypass**: yt-dlp with cookie authentication
 
 ## API Endpoints
 
@@ -112,11 +78,20 @@ Build a TV network app like Strimm for Hush Music TV Network with:
 - POST /api/channels - Create channel
 - PUT /api/channels/:id - Update channel
 - DELETE /api/channels/:id - Delete channel
+- PUT /api/channels/reorder - Reorder channels (admin)
 
 ### Videos
 - POST /api/channels/:id/videos - Add video to channel
 - DELETE /api/channels/:id/videos/:videoId - Remove video
 - PUT /api/channels/:id/videos/reorder - Reorder videos
+
+### YouTube Proxy (NEW)
+- GET /api/youtube/check/:videoId - Check if video is playable/age-restricted
+- GET /api/youtube/stream/:videoId - Get direct stream URL (redirects)
+- GET /api/youtube/stream-info/:videoId - Get stream URL info
+- POST /api/youtube/cookies - Upload cookies file (admin)
+- GET /api/youtube/cookies/status - Check cookies status (admin)
+- DELETE /api/youtube/cookies - Delete cookies (admin)
 
 ### Upload
 - POST /api/upload/video - Upload video file (MP4, max 2GB)
@@ -124,30 +99,23 @@ Build a TV network app like Strimm for Hush Music TV Network with:
 - DELETE /api/upload/video/:id - Delete uploaded video
 
 ### Schedule
-- GET /api/schedule/channels - Get 24-hour schedules for all channels
+- GET /api/schedule/live - Get 24-hour schedules for all channels
 - GET /api/schedule/channel/:id - Get schedule for specific channel
 - POST /api/schedule/regenerate/:id - Regenerate schedule with random order
 
-### Other
-- GET /api/categories - List categories
-- GET /api/tv-guide - Get TV guide data
-- POST /api/seed - Seed initial data
-
 ## Admin Credentials
-- Email: Hushmusicent419@gmail.com
-- Password: sstisdd419
+- Email: hushmusicent419@gmail.com
+- Password: $Stisdd419
 
 ## Prioritized Backlog
 
 ### P1 (High Priority)
-- [ ] YouTube API integration for auto-fetching video metadata
-- [ ] Real-time viewer count updates
-- [ ] Video thumbnail generation for uploaded videos
+- [ ] Embedding feature - Allow embedding channels/network on external sites
+- [ ] Analytics Page - Viewer statistics dashboard
 
 ### P2 (Medium Priority)
-- [ ] Drag-and-drop video reordering
+- [ ] Video Reordering - Drag-and-drop to reorder videos within a channel
 - [ ] Advanced scheduling with calendar
-- [ ] Channel analytics dashboard
 - [ ] Social sharing features
 
 ### P3 (Nice to Have)
@@ -155,96 +123,35 @@ Build a TV network app like Strimm for Hush Music TV Network with:
 - [ ] Channel subscriptions/notifications
 - [ ] Mobile app version
 
-## Known Issues
-- Some channel thumbnails may show as broken if using invalid URLs
-- Duplicate channels issue has been fixed (cleanup script applied)
+## Recent Changes (Feb 21, 2026)
 
-## Channel Deletion
-The admin dashboard includes a "Delete Channel" button for each channel. Users can delete unwanted channels via:
-1. Go to Dashboard
-2. Find the channel
-3. Click the trash icon
-4. Confirm deletion in the dialog
+### YouTube Age-Restriction Bypass System (LATEST)
+- **Backend Proxy**: Added yt-dlp integration to fetch direct video URLs
+- **Cookie Management**: Admin can upload YouTube cookies to enable age-restricted playback
+- **Auto-Fallback**: When a video fails to play in iframe, system automatically tries proxy
+- **YouTube Settings Page**: New admin page at `/youtube-settings` for cookie management
+- **Dashboard Integration**: "YT Cookies" button added to admin dashboard
 
-## Testing
-- Backend: 55/55 tests passed (pytest in /app/backend/tests/)
-- Frontend: All features tested and working
-- Test report: /app/test_reports/iteration_13.json (latest)
+### How It Works:
+1. Videos first try to play via YouTube embed (normal flow)
+2. If video fails (error 150/101 = age-restricted or embed-blocked), system tries proxy
+3. Proxy uses yt-dlp with uploaded cookies to get direct video URL
+4. Video plays via HTML5 video player instead of YouTube iframe
+5. "Proxy Mode" badge indicates when proxy is being used
+
+### How to Configure:
+1. Go to Dashboard → YT Cookies button
+2. Export cookies from logged-in YouTube account (using browser extension)
+3. Upload the cookies.txt file
+4. Test with an age-restricted video ID
+5. Age-restricted videos will now play automatically
 
 ## Data Migration (Feb 16, 2026)
 - Migrated all channels and videos from broadcaster.emergent.host
-- **16 Channels** total (6 new + 10 updated)
-- **1215 Videos** total
-- New channels added:
-  - Movies 4 Everyone (100 videos)
-  - Horror Channel (51 videos)
-  - Action Movies (51 videos)
-  - Romance Movies (52 videos)
-  - Biography Channel (64 videos)
-  - Spiritual Channel (157 videos)
+- **22 Channels** total
+- **1361 Videos** total
 
-## Recent Changes (Feb 17, 2026)
-
-### Session-Based Random Playback (LATEST)
-- **Fresh random playlist every session** - Each time you open Live TV, videos are shuffled into a new random order
-- **Playlist locked during session** - While channel surfing, the shuffled order stays consistent
-- **New behavior**:
-  - On page load, all channel playlists are shuffled (Fisher-Yates algorithm)
-  - Videos play from start to finish (full duration)
-  - When video ends, automatically advances to next in shuffled playlist
-  - When switching back to a channel, continues based on elapsed session time
-- **Channel surfing behavior**:
-  - Playlist continues "playing in background" based on elapsed session time
-  - Example: Start watching Channel 1 at 0s → Switch to Channel 2 at 30s → Switch back to Channel 1 at 60s → Resumes at 60s into the shuffled playlist
-- **UI indicators**:
-  - Shows "PLAYING" indicator
-  - Shows video duration
-  - Sidebar shows "Playlist: [date]"
-- **Testing**: All frontend features verified (100% pass rate)
-
-### Self-Healing Video Duration
-- When a video plays, the YouTube player reports its actual duration to the backend
-- Backend updates the duration in the database if significantly different
-- Video durations self-correct over time as users watch channels
-
-- **Video Cleanup System** - Comprehensive handling of unplayable videos
-  - **Auto-delete on failure**: When videos fail to play (age-restricted, deleted, private), they're automatically removed from the database
-  - **Admin cleanup button**: Dashboard has a "Run Cleanup" button to scan and delete all unplayable videos
-  - **Status check**: "Check Video Status" button scans all videos without deleting, showing counts
-  - **Deleted log**: View history of auto-deleted videos
-  - Switched to `youtube-nocookie.com` for privacy-enhanced embedding
-
-- **Auto-Hide Controls on Live TV** - Controls now fade out after 3 seconds of inactivity
-  - Channel changer, info overlay, and player controls automatically hide when user is inactive
-  - Controls reappear on mouse movement, touch, or keyboard activity
-  - Controls remain visible when video is paused
-  - Smooth CSS fade animation (300ms transition)
-
-## Previous Changes (Feb 16, 2026)
-- **24-Hour TV Guide Feature** - TV Guide with zoom
-  - **Zoom controls**: 3h, 6h, 12h, 24h view options with zoom in/out buttons
-  - Classic TV Guide grid layout showing all channels with their 24-hour schedules
-  - Time navigation with left/right scroll buttons
-  - "Now" button to jump to current time
-  - Individual channel shuffle/regenerate buttons
-  - Current time indicator (red line) showing "now"
-  - Shows "Now: Video XX" for what's currently playing on each channel
-  - Accessible from Dashboard via "TV Guide" button (cyan color)
-- **Backend Endpoints**:
-  - `GET /api/schedule/live` - Public endpoint for Live TV (returns all channel playlists)
-  - `GET /api/schedule/live/{channel_id}` - Public endpoint for single channel playlist
-  - `GET /api/schedule/channels` - Returns 24-hour schedules for all channels (admin)
-  - `POST /api/schedule/regenerate/{id}` - Regenerates schedule with random order (admin)
-  - `POST /api/schedule/regenerate/{id}` - Regenerates schedule with random order (admin)
-
-## Previous Changes (Feb 15, 2026)
-- **Analytics page auth fix** - Fixed redirect bug where analytics page was redirecting logged-in admins to home page
-- **Live sync restored** - Videos play at the current "live" position based on time of day
-- **Auto-skip unavailable videos** - Uses YouTube IFrame API with timeout detection
-- **Skip video feature removed** - Users can no longer skip to next video
-
-## Analytics Feature (Implemented)
-- **Backend**: `/api/analytics` and `/api/track-view` endpoints
-- **Frontend**: `Analytics.jsx` page accessible from Dashboard
-- Tracks: Current viewers (5 min window), 24h unique viewers, total views
-- Channel performance with progress bars
+## Testing
+- Backend API endpoints verified via curl
+- Frontend features tested via screenshot automation
+- All core features working as expected
