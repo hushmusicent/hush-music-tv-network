@@ -189,10 +189,14 @@ const LiveTV = () => {
   const [controlsVisible, setControlsVisible] = useState(true);
   const [failedVideoIds, setFailedVideoIds] = useState(new Set());
   const [sessionStartTime, setSessionStartTime] = useState(null); // When user started watching
+  const [useProxyPlayer, setUseProxyPlayer] = useState(false); // Whether to use proxy for current video
+  const [proxyVideoUrl, setProxyVideoUrl] = useState(null); // Direct video URL from proxy
+  const [ageRestrictedWarning, setAgeRestrictedWarning] = useState(false); // Show warning for age-restricted
   
   const playerRef = useRef(null);
   const videoRef = useRef(null);
   const youtubePlayerRef = useRef(null);
+  const proxyVideoRef = useRef(null); // For proxy video player
   const channelInputTimeoutRef = useRef(null);
   const osdTimeoutRef = useRef(null);
   const playPauseOsdTimeoutRef = useRef(null);
