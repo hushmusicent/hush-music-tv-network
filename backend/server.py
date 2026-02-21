@@ -1078,7 +1078,7 @@ def get_video_info_with_ytdlp(youtube_id: str, use_cookies: bool = True) -> dict
 def get_direct_video_url(youtube_id: str, use_cookies: bool = True) -> Optional[str]:
     """Get direct video URL using yt-dlp"""
     cmd = [
-        "yt-dlp",
+        YTDLP_PATH,
         "--get-url",
         "--no-warnings",
         "-f", "best[height<=720][ext=mp4]/best[height<=720]/best",
