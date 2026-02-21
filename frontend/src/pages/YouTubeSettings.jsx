@@ -34,6 +34,9 @@ const YouTubeSettings = () => {
   const fileInputRef = useRef(null);
 
   useEffect(() => {
+    // Wait for auth state to be determined
+    if (isAuthenticated === undefined) return;
+    
     if (!isAuthenticated || !isAdmin) {
       navigate('/login');
       return;
