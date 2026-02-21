@@ -162,4 +162,31 @@ export const videoCleanupAPI = {
   regenerateSchedules: () => api.post('/schedules/regenerate-all'),
 };
 
+// YouTube Proxy API (for age-restricted videos)
+export const youtubeProxyAPI = {
+  // Check if a video is playable and if it needs proxy
+  checkVideo: (youtubeId) => api.get(`/youtube/check/${youtubeId}`),
+  
+  // Get stream URL (returns direct video URL)
+  getStreamUrl: (youtubeId) => `${BACKEND_URL}/api/youtube/stream/${youtubeId}`,
+  
+  // Get stream info (URL + metadata)
+  getStreamInfo: (youtubeId) => api.get(`/youtube/stream-info/${youtubeId}`),
+  
+  // Upload cookies file (admin only)
+  uploadCookies: (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.post('/youtube/cookies', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+  
+  // Get cookies status (admin only)
+  getCookiesStatus: () => api.get('/youtube/cookies/status'),
+  
+  // Delete cookies (admin only)
+  deleteCookies: () => api.delete('/youtube/cookies'),
+};
+
 export default api;
