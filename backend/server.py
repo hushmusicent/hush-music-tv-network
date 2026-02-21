@@ -680,7 +680,7 @@ async def cleanup_unplayable_videos(user: dict = Depends(require_user)):
             # Check if video is playable
             result = await check_youtube_video_playable(youtube_id)
             
-            if result.get("playable") == False:
+            if result.get("playable") is False:
                 videos_to_delete.append({
                     "youtube_id": youtube_id,
                     "title": video.get("title", "Unknown"),
@@ -743,17 +743,17 @@ async def check_videos_status(user: dict = Depends(require_user)):
             
             results["total"] += 1
             
-            status = await check_youtube_video_playable(youtube_id)
+            video_status = await check_youtube_video_playable(youtube_id)
             
-            if status.get("playable") == True:
+            if video_status.get("playable") is True:
                 results["playable"] += 1
-            elif status.get("playable") == False:
+            elif video_status.get("playable") is False:
                 results["unplayable"] += 1
                 results["unplayable_videos"].append({
                     "youtube_id": youtube_id,
                     "title": video.get("title", "Unknown"),
                     "channel": channel.get("name", "Unknown"),
-                    "reason": status.get("reason", "unknown")
+                    "reason": video_status.get("reason", "unknown")
                 })
             else:
                 results["unknown"] += 1
