@@ -2244,8 +2244,17 @@ async def migrate_data_from_old_build(user: dict = Depends(require_user)):
         
         results["total_channels_processed"] += 1
         
-        # Find matching channel in current database (by name)
+        # Find matching channel in current database (by name - try exact and trimmed)
         current_channel = await db.channels.find_one({"name": old_name}, {"_id": 0})
+        if not current_channel:
+            # Try with trailing space (some channels have whitespace issues)
+            current_channel = await db.channels.find_one({"name": old_name + " "}, {"_id": 0})
+        if not current_channel:
+            # Try regex case-insensitive match
+            current_channel = await db.channels.find_one(
+                {"name": {"$regex": f"^{old_name.strip()}\\s*$", "$options": "i"}}, 
+                {"_id": 0}
+            )
         
         if not current_channel:
             results["errors"].append(f"Channel '{old_name}' not found in current DB")
