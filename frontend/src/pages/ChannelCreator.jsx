@@ -386,7 +386,31 @@ const ChannelCreator = () => {
     setSaving(true);
     try {
       if (isEditing) {
+        // Update channel metadata
         await channelsAPI.update(channelId, formData);
+        
+        // Find videos that need to be added (new videos added during editing)
+        const existingVideoIds = new Set(
+          (existingChannel?.videos || []).map(v => v.id)
+        );
+        
+        const newVideos = videos.filter(v => 
+          v.id?.startsWith('uploaded-') || 
+          v.id?.startsWith('temp-') || 
+          !existingVideoIds.has(v.id)
+        );
+        
+        // Add new videos to the channel
+        for (const video of newVideos) {
+          await channelsAPI.addVideo(channelId, {
+            youtube_id: video.youtube_id || null,
+            title: video.title,
+            thumbnail: video.thumbnail,
+            duration: video.duration,
+            video_url: video.video_url || null,
+          });
+        }
+        
         toast.success('Channel updated successfully');
       } else {
         const response = await channelsAPI.create(formData);
@@ -395,7 +419,7 @@ const ChannelCreator = () => {
         // Add videos to the new channel
         for (const video of videos) {
           await channelsAPI.addVideo(newChannelId, {
-            youtube_id: video.youtube_id || '',
+            youtube_id: video.youtube_id || null,
             title: video.title,
             thumbnail: video.thumbnail,
             duration: video.duration,
