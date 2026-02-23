@@ -1178,9 +1178,11 @@ const Dashboard = () => {
                                     checked={editingChannel.use_schedule}
                                     onCheckedChange={(checked) => setEditingChannel({...editingChannel, use_schedule: checked})}
                                   />
-                                  <span className="text-green-400 flex items-center gap-1">
-                                    <Radio size={12} />
-                                    Live Schedule
+                                  <span className={editingChannel.use_schedule ? "text-green-400" : "text-gray-400"}>
+                                    <span className="flex items-center gap-1">
+                                      <Radio size={12} />
+                                      {editingChannel.use_schedule ? "LIVE (TV Guide Schedule)" : "Go Live"}
+                                    </span>
                                   </span>
                                 </label>
                               </div>
