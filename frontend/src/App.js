@@ -19,6 +19,7 @@ import Analytics from './pages/Analytics';
 import Schedule from './pages/Schedule';
 import BulkThumbnails from './pages/BulkThumbnails';
 import YouTubeSettings from './pages/YouTubeSettings';
+import DownloadApp from './pages/DownloadApp';
 
 function App() {
   return (
@@ -28,6 +29,9 @@ function App() {
           {/* Embed pages - no layout, minimal UI */}
           <Route path="/embed/:channelId" element={<EmbedPlayer />} />
           <Route path="/embed" element={<EmbedNetwork />} />
+          
+          {/* Download page - no layout */}
+          <Route path="/download" element={<DownloadApp />} />
           
           {/* Live TV - with layout */}
           <Route
