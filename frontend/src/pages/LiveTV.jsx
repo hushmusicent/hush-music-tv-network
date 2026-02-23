@@ -439,8 +439,8 @@ const LiveTV = () => {
 
   const isUploadedVideo = currentVideo && (currentVideo.video_url || !currentVideo.youtube_id);
   
-  // Check if current channel is scheduled
-  const isScheduledChannel = currentChannel && schedules[currentChannel.id];
+  // Check if current channel is using synchronized schedule mode (via use_schedule flag)
+  const isCurrentChannelScheduled = currentChannel?.use_schedule === true;
 
   // Play next video in playlist (called when current video ends)
   const playNextVideo = useCallback(() => {
