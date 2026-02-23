@@ -249,6 +249,8 @@ const Dashboard = () => {
   const [editingVideoDuration, setEditingVideoDuration] = useState({ channelId: null, videoId: null, value: '' });
   const [reorderMode, setReorderMode] = useState(false);
   const [savingOrder, setSavingOrder] = useState(false);
+  const [videoReorderMode, setVideoReorderMode] = useState({}); // channelId -> boolean
+  const [savingVideoOrder, setSavingVideoOrder] = useState(null); // channelId being saved
   
   // Video cleanup states
   const [cleanupLoading, setCleanupLoading] = useState(false);
