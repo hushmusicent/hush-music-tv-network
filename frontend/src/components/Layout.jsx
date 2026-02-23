@@ -155,13 +155,23 @@ const Layout = ({ children }) => {
                 </DropdownMenuContent>
               </DropdownMenu>
             ) : (
-              <Button
-                onClick={() => navigate('/login')}
-                className="bg-primary hover:bg-primary-hover text-white font-medium px-6"
-                data-testid="login-btn"
-              >
-                Sign In
-              </Button>
+              <div className="flex items-center gap-2">
+                <Link
+                  to="/download"
+                  className="hidden sm:flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-300 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+                  data-testid="download-btn"
+                >
+                  <Download size={18} />
+                  <span className="hidden lg:inline">Get App</span>
+                </Link>
+                <Button
+                  onClick={() => navigate('/login')}
+                  className="bg-primary hover:bg-primary-hover text-white font-medium px-6"
+                  data-testid="login-btn"
+                >
+                  Sign In
+                </Button>
+              </div>
             )}
           </div>
         </div>
