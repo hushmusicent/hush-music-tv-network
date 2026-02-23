@@ -428,15 +428,29 @@ async def reorder_videos(request: Request, channel_id: str, user = Depends(requi
     videos = channel.get("videos", [])
     video_map = {v["id"]: v for v in videos}
     
+    # Validate all video IDs exist to prevent accidental deletion
+    invalid_ids = [vid for vid in video_ids if vid not in video_map]
+    if invalid_ids:
+        raise HTTPException(status_code=400, detail=f"Invalid video IDs: {invalid_ids[:5]}...")
+    
+    # Ensure all videos are included (in case some were missing from the request)
     reordered = []
+    seen_ids = set()
     for i, vid in enumerate(video_ids):
-        if vid in video_map:
+        if vid in video_map and vid not in seen_ids:
             video_map[vid]["order"] = i
             reordered.append(video_map[vid])
+            seen_ids.add(vid)
+    
+    # Add any videos that weren't in the reorder request at the end
+    for video in videos:
+        if video["id"] not in seen_ids:
+            video["order"] = len(reordered)
+            reordered.append(video)
     
     await db.channels.update_one({"id": channel_id}, {"$set": {"videos": reordered}})
     
-    return {"message": "Videos reordered"}
+    return {"message": "Videos reordered", "count": len(reordered)}
 
 class VideoUpdate(BaseModel):
     title: Optional[str] = None
