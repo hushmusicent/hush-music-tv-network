@@ -120,6 +120,17 @@ Build a TV network app like Strimm for Hush Music TV Network with:
 - [ ] Channel subscriptions/notifications
 - [ ] Mobile app version
 
+### Go Live Feature (Feb 23, 2026)
+- **Dashboard**: Added prominent "Go Live" / "LIVE" toggle button on each channel row
+- **One-Click Toggle**: Click "Go Live" to make channel follow TV Guide schedule
+- **Visual Feedback**: 
+  - Green outline "Go Live" = Offline (videos play randomly)
+  - Solid green "LIVE" = Live (videos follow TV Guide schedule)
+- **Toast Notifications**: Confirms when channel goes live or offline
+- **Live TV Behavior**:
+  - LIVE channels show red "LIVE" indicator, follow synchronized schedule
+  - Offline channels show green "PLAYING" indicator, play videos randomly
+
 ## Recent Changes (Feb 23, 2026)
 
 ### Video Reordering Feature
