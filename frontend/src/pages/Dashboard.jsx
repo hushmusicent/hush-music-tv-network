@@ -1144,115 +1144,197 @@ const Dashboard = () => {
                             <h4 className="text-sm font-medium text-gray-400">
                               Videos ({channel.videos?.length || 0})
                             </h4>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => navigate(`/edit/${channel.id}`)}
-                              className="border-white/20 text-xs"
-                            >
-                              <Plus size={14} className="mr-1" />
-                              Add Video
-                            </Button>
+                            <div className="flex items-center gap-2">
+                              {videoReorderMode[channel.id] ? (
+                                <>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => setVideoReorderMode(prev => ({ ...prev, [channel.id]: false }))}
+                                    className="border-gray-500/50 text-gray-400 text-xs"
+                                  >
+                                    <X size={12} className="mr-1" />
+                                    Cancel
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    onClick={() => saveVideoOrder(channel.id)}
+                                    disabled={savingVideoOrder === channel.id}
+                                    className="bg-green-600 hover:bg-green-700 text-xs"
+                                  >
+                                    {savingVideoOrder === channel.id ? (
+                                      <Loader2 size={12} className="mr-1 animate-spin" />
+                                    ) : (
+                                      <Save size={12} className="mr-1" />
+                                    )}
+                                    Save Order
+                                  </Button>
+                                </>
+                              ) : (
+                                <>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => toggleVideoReorderMode(channel.id)}
+                                    className="border-yellow-500/50 text-yellow-400 text-xs"
+                                    data-testid={`reorder-videos-${channel.id}`}
+                                  >
+                                    <ArrowUpDown size={12} className="mr-1" />
+                                    Reorder
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => navigate(`/edit/${channel.id}`)}
+                                    className="border-white/20 text-xs"
+                                  >
+                                    <Plus size={14} className="mr-1" />
+                                    Add Video
+                                  </Button>
+                                </>
+                              )}
+                            </div>
                           </div>
                           
+                          {videoReorderMode[channel.id] && (
+                            <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-2 mb-3">
+                              <p className="text-yellow-400 text-xs flex items-center gap-2">
+                                <GripVertical size={14} />
+                                Drag videos to reorder. Click "Save Order" when done.
+                              </p>
+                            </div>
+                          )}
+                          
                           {channel.videos && channel.videos.length > 0 ? (
-                            <div className="space-y-2">
-                              {channel.videos.map((video, index) => (
-                                <div
-                                  key={video.id}
-                                  className="flex items-center gap-3 p-2 bg-black/30 rounded-lg group hover:bg-black/40 transition-colors"
-                                  data-testid={`video-item-${video.id}`}
+                            videoReorderMode[channel.id] ? (
+                              <DndContext
+                                sensors={sensors}
+                                collisionDetection={closestCenter}
+                                onDragEnd={handleVideoDragEnd(channel.id)}
+                              >
+                                <SortableContext
+                                  items={channel.videos.map(v => v.id)}
+                                  strategy={verticalListSortingStrategy}
                                 >
-                                  <span className="w-6 text-center text-gray-500 text-sm font-mono">
-                                    {index + 1}
-                                  </span>
-                                  <div className="w-20 h-12 bg-black rounded overflow-hidden flex-shrink-0">
-                                    {video.youtube_id ? (
-                                      <img
-                                        src={video.thumbnail || `https://img.youtube.com/vi/${video.youtube_id}/mqdefault.jpg`}
-                                        alt={video.title}
-                                        className="w-full h-full object-cover"
+                                  <div className="space-y-2">
+                                    {channel.videos.map((video, index) => (
+                                      <SortableVideoItem
+                                        key={video.id}
+                                        video={video}
+                                        index={index}
+                                        channelId={channel.id}
+                                        onDelete={(videoId) => setDeleteChannelVideoInfo({ channelId: channel.id, videoId })}
+                                        onEditDuration={(v) => setEditingVideoDuration({
+                                          channelId: channel.id,
+                                          videoId: v.id,
+                                          value: formatDuration(v.duration || 300)
+                                        })}
+                                        editingDuration={editingVideoDuration.channelId === channel.id ? editingVideoDuration : null}
+                                        formatDuration={formatDuration}
                                       />
-                                    ) : (
-                                      <div className="w-full h-full flex items-center justify-center">
-                                        <FileVideo size={20} className="text-gray-500" />
-                                      </div>
-                                    )}
+                                    ))}
                                   </div>
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium truncate">{video.title}</p>
-                                    <div className="flex items-center gap-2 text-xs text-gray-500">
+                                </SortableContext>
+                              </DndContext>
+                            ) : (
+                              <div className="space-y-2">
+                                {channel.videos.map((video, index) => (
+                                  <div
+                                    key={video.id}
+                                    className="flex items-center gap-3 p-2 bg-black/30 rounded-lg group hover:bg-black/40 transition-colors"
+                                    data-testid={`video-item-${video.id}`}
+                                  >
+                                    <span className="w-6 text-center text-gray-500 text-sm font-mono">
+                                      {index + 1}
+                                    </span>
+                                    <div className="w-20 h-12 bg-black rounded overflow-hidden flex-shrink-0">
                                       {video.youtube_id ? (
-                                        <span className="flex items-center gap-1 text-red-400">
-                                          <Youtube size={10} /> YouTube
-                                        </span>
+                                        <img
+                                          src={video.thumbnail || `https://img.youtube.com/vi/${video.youtube_id}/mqdefault.jpg`}
+                                          alt={video.title}
+                                          className="w-full h-full object-cover"
+                                        />
                                       ) : (
-                                        <span className="flex items-center gap-1 text-primary">
-                                          <Upload size={10} /> Uploaded
-                                        </span>
+                                        <div className="w-full h-full flex items-center justify-center">
+                                          <FileVideo size={20} className="text-gray-500" />
+                                        </div>
                                       )}
-                                      <span className="flex items-center gap-1">
-                                        <Clock size={10} />
-                                        {editingVideoDuration.channelId === channel.id && editingVideoDuration.videoId === video.id ? (
-                                          <Input
-                                            value={editingVideoDuration.value}
-                                            onChange={(e) => setEditingVideoDuration(prev => ({ ...prev, value: e.target.value }))}
-                                            onBlur={() => {
-                                              if (editingVideoDuration.value.trim()) {
-                                                handleUpdateVideoDuration(channel.id, video.id, editingVideoDuration.value);
-                                              } else {
-                                                setEditingVideoDuration({ channelId: null, videoId: null, value: '' });
-                                              }
-                                            }}
-                                            onKeyDown={(e) => {
-                                              if (e.key === 'Enter') {
-                                                handleUpdateVideoDuration(channel.id, video.id, editingVideoDuration.value);
-                                              } else if (e.key === 'Escape') {
-                                                setEditingVideoDuration({ channelId: null, videoId: null, value: '' });
-                                              }
-                                            }}
-                                            className="w-16 h-5 text-xs bg-black/50 border-white/20 px-1"
-                                            placeholder="3:45"
-                                            autoFocus
-                                          />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm font-medium truncate">{video.title}</p>
+                                      <div className="flex items-center gap-2 text-xs text-gray-500">
+                                        {video.youtube_id ? (
+                                          <span className="flex items-center gap-1 text-red-400">
+                                            <Youtube size={10} /> YouTube
+                                          </span>
                                         ) : (
-                                          <button
-                                            onClick={() => setEditingVideoDuration({
-                                              channelId: channel.id,
-                                              videoId: video.id,
-                                              value: formatDuration(video.duration || 300)
-                                            })}
-                                            className="hover:text-primary transition-colors"
-                                            title="Click to edit duration"
-                                          >
-                                            {formatDuration(video.duration || 300)}
-                                          </button>
+                                          <span className="flex items-center gap-1 text-primary">
+                                            <Upload size={10} /> Uploaded
+                                          </span>
                                         )}
-                                      </span>
+                                        <span className="flex items-center gap-1">
+                                          <Clock size={10} />
+                                          {editingVideoDuration.channelId === channel.id && editingVideoDuration.videoId === video.id ? (
+                                            <Input
+                                              value={editingVideoDuration.value}
+                                              onChange={(e) => setEditingVideoDuration(prev => ({ ...prev, value: e.target.value }))}
+                                              onBlur={() => {
+                                                if (editingVideoDuration.value.trim()) {
+                                                  handleUpdateVideoDuration(channel.id, video.id, editingVideoDuration.value);
+                                                } else {
+                                                  setEditingVideoDuration({ channelId: null, videoId: null, value: '' });
+                                                }
+                                              }}
+                                              onKeyDown={(e) => {
+                                                if (e.key === 'Enter') {
+                                                  handleUpdateVideoDuration(channel.id, video.id, editingVideoDuration.value);
+                                                } else if (e.key === 'Escape') {
+                                                  setEditingVideoDuration({ channelId: null, videoId: null, value: '' });
+                                                }
+                                              }}
+                                              className="w-16 h-5 text-xs bg-black/50 border-white/20 px-1"
+                                              placeholder="3:45"
+                                              autoFocus
+                                            />
+                                          ) : (
+                                            <button
+                                              onClick={() => setEditingVideoDuration({
+                                                channelId: channel.id,
+                                                videoId: video.id,
+                                                value: formatDuration(video.duration || 300)
+                                              })}
+                                              className="hover:text-primary transition-colors"
+                                              title="Click to edit duration"
+                                            >
+                                              {formatDuration(video.duration || 300)}
+                                            </button>
+                                          )}
+                                        </span>
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                      {video.youtube_id && (
+                                        <a
+                                          href={`https://youtube.com/watch?v=${video.youtube_id}`}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="p-1.5 text-gray-400 hover:text-white rounded transition-colors"
+                                        >
+                                          <ExternalLink size={14} />
+                                        </a>
+                                      )}
+                                      <button
+                                        onClick={() => setDeleteChannelVideoInfo({ channelId: channel.id, videoId: video.id })}
+                                        className="p-1.5 text-gray-400 hover:text-red-500 rounded transition-colors"
+                                        data-testid={`remove-video-${video.id}`}
+                                      >
+                                        <Trash2 size={14} />
+                                      </button>
                                     </div>
                                   </div>
-                                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    {video.youtube_id && (
-                                      <a
-                                        href={`https://youtube.com/watch?v=${video.youtube_id}`}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="p-1.5 text-gray-400 hover:text-white rounded transition-colors"
-                                      >
-                                        <ExternalLink size={14} />
-                                      </a>
-                                    )}
-                                    <button
-                                      onClick={() => setDeleteChannelVideoInfo({ channelId: channel.id, videoId: video.id })}
-                                      className="p-1.5 text-gray-400 hover:text-red-500 rounded transition-colors"
-                                      data-testid={`remove-video-${video.id}`}
-                                    >
-                                      <Trash2 size={14} />
-                                    </button>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
+                                ))}
+                              </div>
+                            )
                           ) : (
                             <div className="text-center py-6 text-gray-500 text-sm">
                               <Film size={24} className="mx-auto mb-2 opacity-50" />
