@@ -1085,16 +1085,6 @@ const LiveTV = () => {
                 }}
                 data-testid="video-lock-overlay"
               />
-              {/* Age-restricted warning overlay */}
-              {ageRestrictedWarning && (
-                <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/80">
-                  <div className="text-center p-6">
-                    <AlertTriangle size={48} className="mx-auto mb-4 text-yellow-500" />
-                    <p className="text-lg font-medium text-white mb-2">Age-Restricted Content</p>
-                    <p className="text-sm text-gray-400">Attempting to load via proxy...</p>
-                  </div>
-                </div>
-              )}
             </div>
           )}
 
