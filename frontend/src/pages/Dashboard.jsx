@@ -331,7 +331,8 @@ const Dashboard = () => {
       thumbnail: channel.thumbnail || '',
       is_public: channel.is_public,
       is_24_7: channel.is_24_7,
-      random_play: channel.random_play || false
+      random_play: channel.random_play || false,
+      use_schedule: channel.use_schedule || false
     });
   };
 
