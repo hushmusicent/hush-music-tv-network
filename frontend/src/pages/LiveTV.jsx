@@ -19,8 +19,7 @@ import {
   X,
   Calendar,
   Play,
-  Pause,
-  AlertTriangle
+  Pause
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
