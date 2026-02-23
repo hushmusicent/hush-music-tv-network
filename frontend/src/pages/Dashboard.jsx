@@ -991,6 +991,20 @@ const Dashboard = () => {
                             >
                               <Edit size={16} />
                             </Button>
+                            <Button
+                              size="sm"
+                              variant={channel.use_schedule ? "default" : "outline"}
+                              onClick={() => handleQuickToggleLive(channel)}
+                              className={channel.use_schedule 
+                                ? "bg-green-600 hover:bg-green-700 text-white" 
+                                : "border-green-500/50 text-green-400 hover:bg-green-500/10"
+                              }
+                              title={channel.use_schedule ? "Currently LIVE - Click to go offline" : "Click to Go Live"}
+                              data-testid={`go-live-${channel.id}`}
+                            >
+                              <Radio size={14} className="mr-1" />
+                              {channel.use_schedule ? "LIVE" : "Go Live"}
+                            </Button>
                             {channel.use_schedule && (
                               <Button
                                 size="sm"
