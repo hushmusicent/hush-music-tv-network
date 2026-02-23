@@ -551,6 +551,30 @@ const Dashboard = () => {
     }
   };
 
+  // Quick toggle for Go Live button
+  const handleQuickToggleLive = async (channel) => {
+    const newUseSchedule = !channel.use_schedule;
+    try {
+      await channelsAPI.update(channel.id, {
+        use_schedule: newUseSchedule
+      });
+      
+      setChannels(prev => prev.map(ch => 
+        ch.id === channel.id 
+          ? { ...ch, use_schedule: newUseSchedule }
+          : ch
+      ));
+      
+      if (newUseSchedule) {
+        toast.success(`${channel.name} is now LIVE! Videos will follow the TV Guide schedule.`);
+      } else {
+        toast.success(`${channel.name} is now offline. Videos will play randomly.`);
+      }
+    } catch (error) {
+      toast.error('Failed to update channel');
+    }
+  };
+
   const formatDuration = (seconds) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
