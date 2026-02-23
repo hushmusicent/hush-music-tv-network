@@ -128,6 +128,7 @@ class ChannelBase(BaseModel):
     is_public: bool = True
     is_24_7: bool = True
     random_play: bool = False  # If True, videos play in random order
+    use_schedule: bool = False  # If True, channel uses synchronized 24-hour schedule
 
 class ChannelCreate(ChannelBase):
     pass
@@ -140,6 +141,7 @@ class ChannelUpdate(BaseModel):
     is_public: Optional[bool] = None
     is_24_7: Optional[bool] = None
     random_play: Optional[bool] = None
+    use_schedule: Optional[bool] = None
 
 class ChannelResponse(ChannelBase):
     model_config = ConfigDict(extra="ignore")
@@ -152,6 +154,7 @@ class ChannelResponse(ChannelBase):
     favorites_count: int = 0
     created_at: str
     random_play: bool = False
+    use_schedule: bool = False
     sort_order: Optional[int] = None
 
 class CategoryResponse(BaseModel):
