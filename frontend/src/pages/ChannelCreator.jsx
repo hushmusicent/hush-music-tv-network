@@ -108,6 +108,7 @@ const ChannelCreator = () => {
     try {
       const response = await channelsAPI.getById(channelId);
       const channel = response.data;
+      setExistingChannel(channel); // Store the original channel data
       setFormData({
         name: channel.name,
         description: channel.description || '',
