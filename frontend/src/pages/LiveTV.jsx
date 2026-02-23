@@ -1129,11 +1129,6 @@ const LiveTV = () => {
                   toggleFullscreen();
                 }}
               />
-              {/* Proxy badge */}
-              <div className="absolute top-4 left-4 z-30 bg-yellow-600/90 text-white text-xs px-2 py-1 rounded flex items-center gap-1">
-                <AlertTriangle size={12} />
-                Proxy Mode
-              </div>
             </div>
           )}
 
