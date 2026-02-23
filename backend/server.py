@@ -1445,7 +1445,7 @@ class VideoOrderUpdate(BaseModel):
     video_ids: List[str]
 
 @api_router.put("/channels/{channel_id}/videos/reorder")
-async def reorder_videos(channel_id: str, video_ids: List[str] = Body(...), user: dict = Depends(require_user)):
+async def reorder_videos(channel_id: str, video_ids: List[str] = Body(..., embed=False), user: dict = Depends(require_user)):
     channel = await db.channels.find_one({"id": channel_id}, {"_id": 0})
     if not channel:
         raise HTTPException(status_code=404, detail="Channel not found")
