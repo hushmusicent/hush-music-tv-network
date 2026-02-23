@@ -786,6 +786,12 @@ const Dashboard = () => {
                           {channel.random_play && (
                             <span className="text-purple-400 text-xs font-bold">SHUFFLE</span>
                           )}
+                          {channel.use_schedule && (
+                            <span className="text-green-400 text-xs font-bold flex items-center gap-1">
+                              <Radio size={10} />
+                              LIVE
+                            </span>
+                          )}
                         </div>
                       </div>
                       
