@@ -2082,6 +2082,103 @@ def generate_24h_schedule(channel: dict, date: str, force_random: bool = False) 
         "unique_video_count": len(videos)  # Actual number of unique videos in the channel
     }
 
+# Save custom schedule (for manual scheduling)
+class ScheduleVideoInput(BaseModel):
+    video_id: str
+    youtube_id: Optional[str] = None
+    title: str
+    duration: int
+    start_time: str
+    end_time: str
+    video_url: Optional[str] = None
+
+class SaveScheduleInput(BaseModel):
+    channel_id: str
+    date: str
+    videos: List[ScheduleVideoInput]
+
+@api_router.post("/schedule/save")
+async def save_schedule(data: SaveScheduleInput, current_user: dict = Depends(get_current_user)):
+    """Save a custom schedule created by admin"""
+    if not current_user.get("is_admin"):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    # Get channel info
+    channel = await db.channels.find_one({"id": data.channel_id}, {"_id": 0})
+    if not channel:
+        raise HTTPException(status_code=404, detail="Channel not found")
+    
+    # Calculate total duration
+    total_duration = sum(v.duration for v in data.videos)
+    
+    # Create schedule document
+    schedule_doc = {
+        "channel_id": data.channel_id,
+        "channel_name": channel.get("name", ""),
+        "channel_thumbnail": channel.get("thumbnail"),
+        "schedule_date": data.date,
+        "videos": [
+            {
+                "video_id": v.video_id,
+                "youtube_id": v.youtube_id,
+                "title": v.title,
+                "duration": v.duration,
+                "start_time": v.start_time,
+                "end_time": v.end_time,
+                "video_url": v.video_url,
+            }
+            for v in data.videos
+        ],
+        "total_duration": total_duration,
+        "unique_video_count": len(set(v.video_id for v in data.videos)),
+        "is_custom": True,  # Mark as manually created
+        "updated_at": datetime.utcnow().isoformat()
+    }
+    
+    # Upsert the schedule (replace if exists for this channel and date)
+    await db.schedules.update_one(
+        {"channel_id": data.channel_id, "schedule_date": data.date},
+        {"$set": schedule_doc},
+        upsert=True
+    )
+    
+    return {"success": True, "message": "Schedule saved", "total_videos": len(data.videos)}
+
+@api_router.get("/schedule/channel/{channel_id}")
+async def get_channel_schedule(channel_id: str, date: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    """Get schedule for a specific channel"""
+    if not current_user.get("is_admin"):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    # Use today's date if not specified
+    if not date:
+        eastern = pytz.timezone('America/New_York')
+        date = datetime.now(eastern).strftime('%Y-%m-%d')
+    
+    # Check for existing schedule
+    schedule = await db.schedules.find_one(
+        {"channel_id": channel_id, "schedule_date": date},
+        {"_id": 0}
+    )
+    
+    if schedule:
+        return {
+            "channel_id": channel_id,
+            "date": date,
+            "videos": schedule.get("videos", []),
+            "is_custom": schedule.get("is_custom", False),
+            "total_duration": schedule.get("total_duration", 0)
+        }
+    
+    # No schedule exists, return empty
+    return {
+        "channel_id": channel_id,
+        "date": date,
+        "videos": [],
+        "is_custom": False,
+        "total_duration": 0
+    }
+
 # Include router and middleware
 app.include_router(api_router)
 
