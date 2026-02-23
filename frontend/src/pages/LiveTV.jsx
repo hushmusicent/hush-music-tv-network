@@ -592,7 +592,6 @@ const LiveTV = () => {
     // Reset proxy state
     setUseProxyPlayer(false);
     setProxyVideoUrl(null);
-    setAgeRestrictedWarning(false);
     
     if (youtubePlayerRef.current) {
       try {
@@ -607,7 +606,6 @@ const LiveTV = () => {
 
     const tryProxyFallback = async () => {
       console.log('Trying proxy fallback for age-restricted video...');
-      setAgeRestrictedWarning(true);
       
       try {
         const proxyUrl = await checkAndGetProxyUrl(currentVideo.youtube_id);
@@ -615,11 +613,9 @@ const LiveTV = () => {
           console.log('Got proxy URL, switching to proxy player');
           setProxyVideoUrl(proxyUrl);
           setUseProxyPlayer(true);
-          setAgeRestrictedWarning(false);
-          toast.success('Playing via proxy (age-restricted content)');
+          toast.success('Playing via proxy');
         } else {
           console.log('Proxy failed, skipping video');
-          toast.error('Age-restricted video - cookies not configured');
           skipToNextVideo();
         }
       } catch (e) {
