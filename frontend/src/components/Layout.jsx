@@ -200,6 +200,20 @@ const Layout = ({ children }) => {
                 <span className="font-medium">{item.label}</span>
               </button>
             ))}
+            
+            {/* Download App Link */}
+            <button
+              onClick={() => handleNavClick('/download')}
+              className={`flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors ${
+                location.pathname === '/download'
+                  ? 'bg-primary text-white'
+                  : 'text-gray-400 hover:bg-white/10 hover:text-white'
+              }`}
+              data-testid="mobile-nav-download"
+            >
+              <Download size={20} />
+              <span className="font-medium">Get App</span>
+            </button>
           </nav>
 
           {isAuthenticated && (
