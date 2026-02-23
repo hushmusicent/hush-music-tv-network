@@ -1885,6 +1885,7 @@ async def get_or_create_schedule(channel: dict, date: str) -> dict:
         existing["channel_thumbnail"] = channel.get("thumbnail")
         existing["channel_name"] = channel.get("name")
         existing["unique_video_count"] = len(channel.get("videos", []))
+        existing["use_schedule"] = channel.get("use_schedule", False)
         return existing
     
     # Generate new schedule for this date
