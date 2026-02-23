@@ -388,7 +388,8 @@ const Dashboard = () => {
         thumbnail: editingChannel.thumbnail,
         is_public: editingChannel.is_public,
         is_24_7: editingChannel.is_24_7,
-        random_play: editingChannel.random_play
+        random_play: editingChannel.random_play,
+        use_schedule: editingChannel.use_schedule
       });
       
       setChannels(prev => prev.map(ch => 
