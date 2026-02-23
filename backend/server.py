@@ -2188,7 +2188,7 @@ async def get_channel_schedule(channel_id: str, date: Optional[str] = None, curr
     
     # Use today's date if not specified
     if not date:
-        eastern = pytz.timezone('America/New_York')
+        eastern = ZoneInfo('America/New_York')
         date = datetime.now(eastern).strftime('%Y-%m-%d')
     
     # Check for existing schedule
