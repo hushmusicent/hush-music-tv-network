@@ -951,7 +951,7 @@ const Dashboard = () => {
                                   </div>
                                 )}
                               </div>
-                              <div className="flex items-center gap-6">
+                              <div className="flex items-center gap-6 flex-wrap">
                                 <label className="flex items-center gap-2 text-sm">
                                   <Switch
                                     checked={editingChannel.is_public}
@@ -971,7 +971,17 @@ const Dashboard = () => {
                                     checked={editingChannel.random_play}
                                     onCheckedChange={(checked) => setEditingChannel({...editingChannel, random_play: checked})}
                                   />
-                                  <span className="text-purple-400">Random Play</span>
+                                  <span className="text-purple-400">Shuffle</span>
+                                </label>
+                                <label className="flex items-center gap-2 text-sm" data-testid="use-schedule-toggle">
+                                  <Switch
+                                    checked={editingChannel.use_schedule}
+                                    onCheckedChange={(checked) => setEditingChannel({...editingChannel, use_schedule: checked})}
+                                  />
+                                  <span className="text-green-400 flex items-center gap-1">
+                                    <Radio size={12} />
+                                    Live Schedule
+                                  </span>
                                 </label>
                               </div>
                             </div>
