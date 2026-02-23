@@ -173,11 +173,15 @@ class TestScheduleEndpoints:
         response = api_client.get(f"{BASE_URL}/api/schedule/live")
         assert response.status_code == 200, f"Failed to get live schedules: {response.text}"
         data = response.json()
-        assert isinstance(data, list), "Live schedules should be a list"
+        
+        # Response is a dict with 'schedules' key
+        assert "schedules" in data, "Response should contain 'schedules' key"
+        schedules = data["schedules"]
+        assert isinstance(schedules, list), "Schedules should be a list"
         
         # Check if test channel is in live schedules
-        test_channel_found = any(s.get("channel_id") == TEST_CHANNEL_ID for s in data)
-        print(f"✓ Live schedules retrieved: {len(data)} channels")
+        test_channel_found = any(s.get("channel_id") == TEST_CHANNEL_ID for s in schedules)
+        print(f"✓ Live schedules retrieved: {len(schedules)} channels")
         if test_channel_found:
             print(f"✓ Test channel found in live schedules")
 
