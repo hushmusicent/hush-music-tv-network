@@ -133,6 +133,13 @@ Build a TV network app like Strimm for Hush Music TV Network with:
 
 ## Recent Changes (Feb 23, 2026)
 
+### Data Migration from Old Build (Completed)
+- **Migration Endpoint**: Created `POST /api/migrate-data` for one-time data sync
+- **Restored "Hush Music Radio"**: 155 videos restored (was 0 due to previous bug)
+- **Total Videos**: 2070 videos across 22 active channels
+- **Drive-Uploaded Videos**: Preserved `video_url` field for uploaded videos
+- **Migration Logic**: Handles whitespace in channel names, merges without duplicates
+
 ### Video Reordering Feature
 - Added `videoReorderMode` state to Dashboard
 - Added `SortableVideoItem` component with drag-and-drop
