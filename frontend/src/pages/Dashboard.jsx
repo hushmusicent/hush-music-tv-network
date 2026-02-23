@@ -130,6 +130,104 @@ const SortableChannelItem = ({ channel, index }) => {
   );
 };
 
+// Sortable Video Item for drag-and-drop reordering within a channel
+const SortableVideoItem = ({ video, index, channelId, onDelete, onEditDuration, editingDuration, formatDuration }) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: video.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`flex items-center gap-3 p-2 bg-black/30 rounded-lg group hover:bg-black/40 transition-colors ${isDragging ? 'ring-2 ring-primary z-50' : ''}`}
+      data-testid={`video-item-${video.id}`}
+    >
+      <div
+        {...attributes}
+        {...listeners}
+        className="cursor-grab active:cursor-grabbing p-1 hover:bg-white/10 rounded"
+      >
+        <GripVertical size={14} className="text-gray-500" />
+      </div>
+      <span className="w-6 text-center text-gray-500 text-sm font-mono">
+        {index + 1}
+      </span>
+      <div className="w-20 h-12 bg-black rounded overflow-hidden flex-shrink-0">
+        {video.youtube_id ? (
+          <img
+            src={video.thumbnail || `https://img.youtube.com/vi/${video.youtube_id}/mqdefault.jpg`}
+            alt={video.title}
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center">
+            <FileVideo size={20} className="text-gray-500" />
+          </div>
+        )}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium truncate">{video.title}</p>
+        <div className="flex items-center gap-2 text-xs text-gray-500">
+          {video.youtube_id ? (
+            <span className="flex items-center gap-1 text-red-400">
+              <Youtube size={10} /> YouTube
+            </span>
+          ) : (
+            <span className="flex items-center gap-1 text-primary">
+              <Upload size={10} /> Uploaded
+            </span>
+          )}
+          <span className="flex items-center gap-1">
+            <Clock size={10} />
+            {editingDuration?.videoId === video.id ? (
+              editingDuration.input
+            ) : (
+              <button
+                onClick={() => onEditDuration(video)}
+                className="hover:text-primary transition-colors"
+                title="Click to edit duration"
+              >
+                {formatDuration(video.duration || 300)}
+              </button>
+            )}
+          </span>
+        </div>
+      </div>
+      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        {video.youtube_id && (
+          <a
+            href={`https://youtube.com/watch?v=${video.youtube_id}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="p-1.5 text-gray-400 hover:text-white rounded transition-colors"
+          >
+            <ExternalLink size={14} />
+          </a>
+        )}
+        <button
+          onClick={() => onDelete(video.id)}
+          className="p-1.5 text-gray-400 hover:text-red-500 rounded transition-colors"
+          data-testid={`remove-video-${video.id}`}
+        >
+          <Trash2 size={14} />
+        </button>
+      </div>
+    </div>
+  );
+};
+
 const Dashboard = () => {
   const { user, isAuthenticated, loading: authLoading } = useAuth();
   const navigate = useNavigate();
