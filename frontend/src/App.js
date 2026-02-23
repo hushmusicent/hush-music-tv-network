@@ -17,6 +17,7 @@ import EmbedPlayer from './pages/EmbedPlayer';
 import EmbedNetwork from './pages/EmbedNetwork';
 import Analytics from './pages/Analytics';
 import Schedule from './pages/Schedule';
+import ScheduleEditor from './pages/ScheduleEditor';
 import BulkThumbnails from './pages/BulkThumbnails';
 import YouTubeSettings from './pages/YouTubeSettings';
 import DownloadApp from './pages/DownloadApp';
@@ -58,6 +59,7 @@ function App() {
                   <Route path="/dashboard" element={<Dashboard />} />
                   <Route path="/analytics" element={<Analytics />} />
                   <Route path="/schedule" element={<Schedule />} />
+                  <Route path="/schedule-editor/:channelId" element={<ScheduleEditor />} />
                   <Route path="/create" element={<ChannelCreator />} />
                   <Route path="/edit/:channelId" element={<ChannelCreator />} />
                   <Route path="/favorites" element={<Favorites />} />
