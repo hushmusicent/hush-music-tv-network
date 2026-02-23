@@ -18,6 +18,9 @@ ADMIN_PASSWORD = "$Stisdd419"
 # Test channel ID with use_schedule=true
 TEST_CHANNEL_ID = "7d4ea480-e7de-4f2d-8745-e83b31e95a4c"
 
+# Channel with videos for reorder testing
+TEST_CHANNEL_WITH_VIDEOS = "4fe5112f-0291-4709-b5b7-8d59a83ed990"  # Rap Battles
+
 class TestAuthentication:
     """Test authentication before main tests"""
     
