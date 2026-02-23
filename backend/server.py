@@ -410,6 +410,34 @@ async def remove_video_from_channel(channel_id: str, video_id: str, user: dict =
     
     return {"message": "Video removed"}
 
+# Video reorder endpoint - MUST come before /videos/{video_id} to avoid route conflict
+@api_router.put("/channels/{channel_id}/videos/reorder")
+async def reorder_videos(request: Request, channel_id: str, user = Depends(require_user)):
+    # Accept raw array of video IDs from request body
+    video_ids = await request.json()
+    if not isinstance(video_ids, list):
+        raise HTTPException(status_code=422, detail="Body must be an array of video IDs")
+    
+    channel = await db.channels.find_one({"id": channel_id}, {"_id": 0})
+    if not channel:
+        raise HTTPException(status_code=404, detail="Channel not found")
+    # Admin can reorder videos in any channel
+    if channel["owner_id"] != user["id"] and not user.get("is_admin", False):
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    videos = channel.get("videos", [])
+    video_map = {v["id"]: v for v in videos}
+    
+    reordered = []
+    for i, vid in enumerate(video_ids):
+        if vid in video_map:
+            video_map[vid]["order"] = i
+            reordered.append(video_map[vid])
+    
+    await db.channels.update_one({"id": channel_id}, {"$set": {"videos": reordered}})
+    
+    return {"message": "Videos reordered"}
+
 class VideoUpdate(BaseModel):
     title: Optional[str] = None
     duration: Optional[int] = None
