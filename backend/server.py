@@ -1442,7 +1442,7 @@ async def quick_check_sample_videos(user: dict = Depends(require_user), sample_s
     return results
 
 @api_router.put("/channels/{channel_id}/videos/reorder")
-async def reorder_videos(channel_id: str, request: Request, user: dict = Depends(require_user)):
+async def reorder_videos(channel_id: str, request: Request, user = Depends(require_user)):
     # Accept raw array of video IDs from request body
     video_ids = await request.json()
     if not isinstance(video_ids, list):
