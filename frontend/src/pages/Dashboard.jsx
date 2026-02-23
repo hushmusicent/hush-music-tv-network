@@ -422,6 +422,50 @@ const Dashboard = () => {
     }
   };
 
+  // Video reorder handlers
+  const toggleVideoReorderMode = (channelId) => {
+    setVideoReorderMode(prev => ({
+      ...prev,
+      [channelId]: !prev[channelId]
+    }));
+  };
+
+  const handleVideoDragEnd = (channelId) => (event) => {
+    const { active, over } = event;
+    
+    if (active.id !== over?.id) {
+      setChannels((prevChannels) => {
+        return prevChannels.map(ch => {
+          if (ch.id === channelId) {
+            const videos = ch.videos || [];
+            const oldIndex = videos.findIndex((v) => v.id === active.id);
+            const newIndex = videos.findIndex((v) => v.id === over.id);
+            const newVideos = arrayMove(videos, oldIndex, newIndex);
+            return { ...ch, videos: newVideos };
+          }
+          return ch;
+        });
+      });
+    }
+  };
+
+  const saveVideoOrder = async (channelId) => {
+    setSavingVideoOrder(channelId);
+    try {
+      const channel = channels.find(c => c.id === channelId);
+      if (!channel) return;
+      
+      const videoIds = channel.videos.map(v => v.id);
+      await channelsAPI.reorderVideos(channelId, videoIds);
+      toast.success('Video order saved!');
+      setVideoReorderMode(prev => ({ ...prev, [channelId]: false }));
+    } catch (error) {
+      toast.error('Failed to save video order');
+    } finally {
+      setSavingVideoOrder(null);
+    }
+  };
+
   const startEditingChannel = (channel) => {
     setEditingChannel({
       id: channel.id,
