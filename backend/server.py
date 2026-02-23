@@ -1441,9 +1441,6 @@ async def quick_check_sample_videos(user: dict = Depends(require_user), sample_s
     
     return results
 
-class VideoOrderUpdate(BaseModel):
-    video_ids: List[str]
-
 @api_router.put("/channels/{channel_id}/videos/reorder")
 async def reorder_videos(channel_id: str, request: Request, user: dict = Depends(require_user)):
     # Accept raw array of video IDs from request body
