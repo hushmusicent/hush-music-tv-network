@@ -191,7 +191,6 @@ const LiveTV = () => {
   const [sessionStartTime, setSessionStartTime] = useState(null); // When user started watching
   const [useProxyPlayer, setUseProxyPlayer] = useState(false); // Whether to use proxy for current video
   const [proxyVideoUrl, setProxyVideoUrl] = useState(null); // Direct video URL from proxy
-  const [ageRestrictedWarning, setAgeRestrictedWarning] = useState(false); // Show warning for age-restricted
   
   const playerRef = useRef(null);
   const videoRef = useRef(null);
