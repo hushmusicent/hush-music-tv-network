@@ -52,6 +52,7 @@ const ChannelCreator = () => {
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadingThumbnail, setUploadingThumbnail] = useState(false);
+  const [existingChannel, setExistingChannel] = useState(null);
   
   const [formData, setFormData] = useState({
     name: '',
