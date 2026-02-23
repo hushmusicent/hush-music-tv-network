@@ -991,6 +991,18 @@ const Dashboard = () => {
                             >
                               <Edit size={16} />
                             </Button>
+                            {channel.use_schedule && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => navigate(`/schedule-editor/${channel.id}`)}
+                                className="text-green-400 hover:text-green-300"
+                                title="Edit Schedule"
+                                data-testid={`edit-schedule-${channel.id}`}
+                              >
+                                <Calendar size={16} />
+                              </Button>
+                            )}
                             <Button
                               size="sm"
                               variant="ghost"
