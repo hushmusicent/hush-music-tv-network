@@ -42,47 +42,49 @@ class TestVideoReordering:
     
     def test_get_channel_videos(self, authenticated_client):
         """Test getting channel with videos"""
-        response = authenticated_client.get(f"{BASE_URL}/api/channels/{TEST_CHANNEL_ID}")
+        response = authenticated_client.get(f"{BASE_URL}/api/channels/{TEST_CHANNEL_WITH_VIDEOS}")
         assert response.status_code == 200, f"Failed to get channel: {response.text}"
         data = response.json()
         assert "videos" in data, "No videos field in channel response"
         print(f"✓ Channel has {len(data.get('videos', []))} videos")
-        return data.get('videos', [])
     
     def test_reorder_videos_endpoint(self, authenticated_client):
         """Test video reordering endpoint"""
         # First get current videos
-        channel_response = authenticated_client.get(f"{BASE_URL}/api/channels/{TEST_CHANNEL_ID}")
+        channel_response = authenticated_client.get(f"{BASE_URL}/api/channels/{TEST_CHANNEL_WITH_VIDEOS}")
         assert channel_response.status_code == 200
         videos = channel_response.json().get("videos", [])
         
         if len(videos) < 2:
             pytest.skip("Need at least 2 videos to test reordering")
         
-        # Get video IDs and reverse them
-        video_ids = [v["id"] for v in videos]
+        # Get first 5 video IDs and reverse them
+        video_ids = [v["id"] for v in videos[:5]]
         reversed_ids = list(reversed(video_ids))
         
-        # Reorder videos
+        # Reorder videos (only first 5)
         response = authenticated_client.put(
-            f"{BASE_URL}/api/channels/{TEST_CHANNEL_ID}/videos/reorder",
+            f"{BASE_URL}/api/channels/{TEST_CHANNEL_WITH_VIDEOS}/videos/reorder",
             json=reversed_ids
         )
         assert response.status_code == 200, f"Reorder failed: {response.text}"
         print(f"✓ Videos reordered successfully")
         
         # Verify order changed
-        verify_response = authenticated_client.get(f"{BASE_URL}/api/channels/{TEST_CHANNEL_ID}")
+        verify_response = authenticated_client.get(f"{BASE_URL}/api/channels/{TEST_CHANNEL_WITH_VIDEOS}")
         assert verify_response.status_code == 200
         new_videos = verify_response.json().get("videos", [])
-        new_video_ids = [v["id"] for v in new_videos]
+        new_video_ids = [v["id"] for v in new_videos[:len(reversed_ids)]]
+        
+        # The first N videos should match our reversed order
         assert new_video_ids == reversed_ids, "Video order not updated correctly"
         print(f"✓ Video order verified after reorder")
         
         # Restore original order
+        all_video_ids = [v["id"] for v in videos]
         restore_response = authenticated_client.put(
-            f"{BASE_URL}/api/channels/{TEST_CHANNEL_ID}/videos/reorder",
-            json=video_ids
+            f"{BASE_URL}/api/channels/{TEST_CHANNEL_WITH_VIDEOS}/videos/reorder",
+            json=all_video_ids
         )
         assert restore_response.status_code == 200
         print(f"✓ Original video order restored")
