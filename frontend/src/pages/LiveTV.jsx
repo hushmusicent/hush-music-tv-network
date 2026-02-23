@@ -291,7 +291,7 @@ const LiveTV = () => {
       setScheduleDate(date);
       
       // Convert to playlist map
-      // Hush Music Radio uses the BACKEND schedule (persistent, synchronized for all viewers)
+      // Channels with use_schedule=true use the BACKEND schedule (persistent, synchronized for all viewers)
       // Other channels get shuffled playlists (random per session)
       const playlistMap = {};
       const scheduleMap = {};
@@ -300,10 +300,9 @@ const LiveTV = () => {
       for (const schedule of scheduleList) {
         const videos = schedule.videos || [];
         const channelName = schedule.channel_name?.trim();
-        const isScheduledChannel = channelName === SCHEDULED_CHANNEL_NAME || 
-                                   channelName?.toLowerCase().includes('hush music');
+        const channelUsesSchedule = schedule.use_schedule === true;
         
-        if (isScheduledChannel) {
+        if (channelUsesSchedule) {
           // Use the BACKEND schedule directly (already has start_time, end_time from server)
           // This ensures all viewers are synchronized to the same schedule
           scheduleMap[schedule.channel_id] = videos; // Backend schedule with time slots
