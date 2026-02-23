@@ -2199,6 +2199,110 @@ async def get_channel_schedule(channel_id: str, date: Optional[str] = None, curr
         "total_duration": 0
     }
 
+# ===================== MIGRATION ENDPOINT =====================
+
+class MigrationResult(BaseModel):
+    total_channels_processed: int
+    channels_updated: List[str]
+    videos_added: int
+    errors: List[str]
+
+@api_router.post("/migrate-data", response_model=MigrationResult)
+async def migrate_data_from_old_build(user: dict = Depends(require_user)):
+    """
+    One-time migration endpoint to sync videos from the old application.
+    This merges video data from the old build while preserving existing data.
+    Admin only.
+    """
+    if not user.get("is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    import json
+    
+    # Load old data from file
+    old_data_path = ROOT_DIR / "old_data.json"
+    if not old_data_path.exists():
+        raise HTTPException(status_code=404, detail="old_data.json not found. Please fetch data first.")
+    
+    with open(old_data_path, 'r') as f:
+        old_channels = json.load(f)
+    
+    results = {
+        "total_channels_processed": 0,
+        "channels_updated": [],
+        "videos_added": 0,
+        "errors": []
+    }
+    
+    for old_channel in old_channels:
+        old_name = old_channel.get("name", "").strip()
+        old_videos = old_channel.get("videos", [])
+        
+        if not old_name:
+            results["errors"].append(f"Channel with no name skipped")
+            continue
+        
+        results["total_channels_processed"] += 1
+        
+        # Find matching channel in current database (by name)
+        current_channel = await db.channels.find_one({"name": old_name}, {"_id": 0})
+        
+        if not current_channel:
+            results["errors"].append(f"Channel '{old_name}' not found in current DB")
+            continue
+        
+        current_videos = current_channel.get("videos", [])
+        current_video_ids = set()
+        
+        # Build set of existing video identifiers (youtube_id or video_url)
+        for cv in current_videos:
+            if cv.get("youtube_id"):
+                current_video_ids.add(cv["youtube_id"])
+            if cv.get("video_url"):
+                current_video_ids.add(cv["video_url"])
+        
+        # Check if channel has 0 videos - full restore needed
+        full_restore = len(current_videos) == 0
+        
+        videos_to_add = []
+        for old_video in old_videos:
+            vid_identifier = old_video.get("youtube_id") or old_video.get("video_url")
+            
+            if not vid_identifier:
+                continue
+            
+            if full_restore or vid_identifier not in current_video_ids:
+                # Create new video entry preserving all fields
+                new_video = {
+                    "id": old_video.get("id") or str(uuid.uuid4()),
+                    "youtube_id": old_video.get("youtube_id"),
+                    "video_url": old_video.get("video_url"),  # Preserve uploaded video URLs
+                    "title": old_video.get("title", "Untitled"),
+                    "thumbnail": old_video.get("thumbnail"),
+                    "duration": old_video.get("duration", 300),
+                    "order": len(current_videos) + len(videos_to_add)
+                }
+                videos_to_add.append(new_video)
+        
+        if videos_to_add:
+            if full_restore:
+                # Complete restore - replace empty videos array
+                await db.channels.update_one(
+                    {"id": current_channel["id"]},
+                    {"$set": {"videos": videos_to_add}}
+                )
+            else:
+                # Merge - add new videos to existing
+                await db.channels.update_one(
+                    {"id": current_channel["id"]},
+                    {"$push": {"videos": {"$each": videos_to_add}}}
+                )
+            
+            results["channels_updated"].append(f"{old_name} (+{len(videos_to_add)} videos)")
+            results["videos_added"] += len(videos_to_add)
+    
+    return results
+
 # Include router and middleware
 app.include_router(api_router)
 
