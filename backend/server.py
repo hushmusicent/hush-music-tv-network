@@ -33,8 +33,24 @@ COOKIES_DIR = ROOT_DIR / "cookies"
 COOKIES_DIR.mkdir(parents=True, exist_ok=True)
 COOKIES_FILE = COOKIES_DIR / "youtube_cookies.txt"
 
-# yt-dlp binary path
-YTDLP_PATH = "/root/.venv/bin/yt-dlp"
+# yt-dlp binary path - check multiple locations for compatibility
+def get_ytdlp_path():
+    """Find yt-dlp binary in various possible locations"""
+    import shutil
+    possible_paths = [
+        os.environ.get('YTDLP_PATH'),  # Environment variable override
+        shutil.which('yt-dlp'),  # System PATH (production)
+        "/root/.venv/bin/yt-dlp",  # Local venv
+        "/usr/local/bin/yt-dlp",  # Common install location
+        "/usr/bin/yt-dlp",  # System install
+    ]
+    for path in possible_paths:
+        if path and os.path.isfile(path):
+            return path
+    # Fallback to 'yt-dlp' and hope it's in PATH
+    return "yt-dlp"
+
+YTDLP_PATH = get_ytdlp_path()
 
 # MongoDB connection
 mongo_url = os.environ['MONGO_URL']
