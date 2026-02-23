@@ -158,8 +158,10 @@ const getVideoFromPlaylist = (playlist, elapsedSeconds, failedVideoIds = new Set
   return { video: playableVideos[0], seekTime: 0, videoIndex: 0 };
 };
 
-// The scheduled channel name
-const SCHEDULED_CHANNEL_NAME = "Hush Music Radio";
+// Check if a channel should use synchronized schedule
+const isScheduledChannel = (channel) => {
+  return channel?.use_schedule === true;
+};
 
 const LiveTV = () => {
   const navigate = useNavigate();
