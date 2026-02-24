@@ -511,6 +511,15 @@ async def update_video_in_channel(
 
 # ===================== VIDEO UPLOAD ROUTES =====================
 
+# Import R2 service
+from r2_service import (
+    upload_to_r2, 
+    delete_from_r2, 
+    is_r2_configured, 
+    get_public_url,
+    test_r2_connection
+)
+
 class UploadedVideoResponse(BaseModel):
     id: str
     filename: str
@@ -520,15 +529,24 @@ class UploadedVideoResponse(BaseModel):
     duration: int = 300  # Default 5 min, can be updated
     thumbnail: Optional[str] = None
     created_at: str
+    storage_type: str = "r2"  # "r2" or "local"
 
 MAX_UPLOAD_SIZE = 2 * 1024 * 1024 * 1024  # 2GB
+
+@api_router.get("/storage/status")
+async def get_storage_status(user: dict = Depends(require_user)):
+    """Check cloud storage status (admin only)"""
+    if not user.get("is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    return test_r2_connection()
 
 @api_router.post("/upload/video", response_model=UploadedVideoResponse)
 async def upload_video(
     file: UploadFile = File(...),
     user: dict = Depends(require_user)
 ):
-    """Upload a video file - MP4 only, max 2GB"""
+    """Upload a video file to cloud storage - MP4 only, max 2GB"""
     # Validate file type - MP4 only
     if file.content_type != "video/mp4":
         raise HTTPException(
@@ -540,17 +558,43 @@ async def upload_video(
     file_ext = Path(file.filename).suffix or ".mp4"
     video_id = str(uuid.uuid4())
     filename = f"{video_id}{file_ext}"
-    file_path = UPLOADS_DIR / filename
     
-    # Save file
+    # Read file content
     try:
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+        file_content = await file.read()
+        file_size = len(file_content)
+        
+        if file_size > MAX_UPLOAD_SIZE:
+            raise HTTPException(
+                status_code=413,
+                detail=f"File too large. Maximum size is 2GB"
+            )
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to save file: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to read file: {str(e)}")
     
-    # Get file size
-    file_size = file_path.stat().st_size
+    # Determine storage method
+    storage_type = "r2" if is_r2_configured() else "local"
+    
+    if storage_type == "r2":
+        # Upload to R2 cloud storage
+        object_key = f"videos/{filename}"
+        result = upload_to_r2(file_content, object_key, "video/mp4")
+        
+        if not result["success"]:
+            raise HTTPException(status_code=500, detail=f"Cloud upload failed: {result.get('error', 'Unknown error')}")
+        
+        video_url = result["url"]
+    else:
+        # Fallback to local storage
+        file_path = UPLOADS_DIR / filename
+        try:
+            with open(file_path, "wb") as buffer:
+                buffer.write(file_content)
+            video_url = f"/api/videos/{filename}"
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to save file: {str(e)}")
     
     # Store in database
     now = datetime.now(timezone.utc).isoformat()
@@ -558,10 +602,12 @@ async def upload_video(
         "id": video_id,
         "filename": filename,
         "original_name": file.filename,
+        "url": video_url,
         "size": file_size,
         "duration": 300,  # Default, can be updated later
         "thumbnail": None,
         "owner_id": user["id"],
+        "storage_type": storage_type,
         "created_at": now
     }
     
@@ -571,11 +617,12 @@ async def upload_video(
         id=video_id,
         filename=filename,
         original_name=file.filename,
-        url=f"/api/videos/{filename}",
+        url=video_url,
         size=file_size,
         duration=300,
         thumbnail=None,
-        created_at=now
+        created_at=now,
+        storage_type=storage_type
     )
 
 @api_router.get("/upload/videos")
