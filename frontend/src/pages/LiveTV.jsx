@@ -1175,6 +1175,17 @@ const LiveTV = () => {
                 muted={isMuted}
                 playsInline
                 onEnded={playNextVideo}
+                onError={(e) => {
+                  console.error('Video error:', e.target.error);
+                  // Skip to next video on error
+                  playNextVideo();
+                }}
+                onLoadedData={() => {
+                  // Video loaded, try to play
+                  if (videoRef.current && !isPaused) {
+                    videoRef.current.play().catch(() => {});
+                  }
+                }}
               />
               <div 
                 className="absolute inset-0 z-10 cursor-pointer"
