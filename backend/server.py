@@ -2192,6 +2192,7 @@ def generate_24h_schedule(channel: dict, date: str, force_random: bool = False) 
             "title": video.get("title", "Untitled"),
             "thumbnail": video.get("thumbnail"),
             "youtube_id": video.get("youtube_id"),
+            "video_url": video.get("video_url"),  # Include video_url for uploaded videos
             "start_time": f"{start_h:02d}:{start_m:02d}:{start_s:02d}",
             "end_time": f"{end_h:02d}:{end_m:02d}:{end_s:02d}",
             "duration": duration
