@@ -2377,6 +2377,8 @@ async def migrate_data_from_old_build(user: dict = Depends(require_user)):
                 "use_schedule": old_channel.get("use_schedule", False),
                 "sort_order": old_channel.get("sort_order", 999),
                 "favorites_count": old_channel.get("favorites_count", 0),
+                "owner_id": old_channel.get("owner_id") or user["id"],
+                "owner_username": old_channel.get("owner_username") or user.get("username", "admin"),
                 "created_at": datetime.now(timezone.utc).isoformat()
             }
             await db.channels.insert_one(new_channel)
