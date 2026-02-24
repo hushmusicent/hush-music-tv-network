@@ -2365,7 +2365,23 @@ async def migrate_data_from_old_build(user: dict = Depends(require_user)):
             )
         
         if not current_channel:
-            results["errors"].append(f"Channel '{old_name}' not found in current DB")
+            # Channel doesn't exist - create it
+            new_channel = {
+                "id": old_channel.get("id") or str(uuid.uuid4()),
+                "name": old_name,
+                "description": old_channel.get("description", ""),
+                "category": old_channel.get("category", "General"),
+                "thumbnail": old_channel.get("thumbnail", ""),
+                "videos": old_videos,
+                "is_public": old_channel.get("is_public", True),
+                "use_schedule": old_channel.get("use_schedule", False),
+                "sort_order": old_channel.get("sort_order", 999),
+                "favorites_count": old_channel.get("favorites_count", 0),
+                "created_at": datetime.now(timezone.utc).isoformat()
+            }
+            await db.channels.insert_one(new_channel)
+            results["channels_updated"].append(f"{old_name} (CREATED with {len(old_videos)} videos)")
+            results["videos_added"] += len(old_videos)
             continue
         
         current_videos = current_channel.get("videos", [])
