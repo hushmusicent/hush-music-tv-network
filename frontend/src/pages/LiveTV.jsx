@@ -779,12 +779,44 @@ const LiveTV = () => {
     };
   }, [currentVideo, seekTime, isMuted, isUploadedVideo, skipToNextVideo, playNextVideo, currentChannel, checkAndGetProxyUrl]);
 
-  // Handle uploaded video
+  // Handle uploaded video playback
   useEffect(() => {
     if (!isUploadedVideo || !currentVideo || !videoRef.current) return;
+    
     const video = videoRef.current;
-    video.currentTime = seekTime;
-    video.play().catch(e => console.log('Autoplay blocked:', e));
+    
+    // Wait for video to be ready before attempting to play
+    const handleCanPlay = () => {
+      video.currentTime = seekTime;
+      // Use a promise chain to avoid interruption errors
+      const playPromise = video.play();
+      if (playPromise !== undefined) {
+        playPromise
+          .then(() => {
+            setIsPaused(false);
+          })
+          .catch(e => {
+            // Only log if it's not an abort error (which happens during normal navigation)
+            if (e.name !== 'AbortError') {
+              console.log('Autoplay blocked:', e);
+            }
+          });
+      }
+    };
+    
+    // If video is already ready, play immediately
+    if (video.readyState >= 3) {
+      handleCanPlay();
+    } else {
+      // Otherwise wait for canplay event
+      video.addEventListener('canplay', handleCanPlay, { once: true });
+      // Also try to load the video
+      video.load();
+    }
+    
+    return () => {
+      video.removeEventListener('canplay', handleCanPlay);
+    };
   }, [currentVideo, seekTime, isUploadedVideo]);
 
   const toggleMute = () => {
