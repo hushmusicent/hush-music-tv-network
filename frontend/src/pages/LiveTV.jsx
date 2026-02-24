@@ -1131,7 +1131,9 @@ const LiveTV = () => {
             <div className="relative w-full h-full">
               <video
                 ref={videoRef}
-                src={`${BACKEND_URL}${currentVideo.video_url || `/api/videos/${currentVideo.youtube_id}`}`}
+                src={currentVideo.video_url?.startsWith('http') 
+                  ? currentVideo.video_url 
+                  : `${BACKEND_URL}${currentVideo.video_url || `/api/videos/${currentVideo.youtube_id}`}`}
                 className="w-full h-full object-contain"
                 autoPlay
                 muted={isMuted}
