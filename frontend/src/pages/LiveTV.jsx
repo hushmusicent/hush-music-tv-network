@@ -1161,6 +1161,7 @@ const LiveTV = () => {
 
           {isUploadedVideo && currentVideo && (
             <div className="relative w-full h-full">
+              {console.log('Rendering uploaded video:', currentVideo?.title, 'URL:', currentVideo?.video_url)}
               <video
                 ref={videoRef}
                 src={
@@ -1176,16 +1177,18 @@ const LiveTV = () => {
                 playsInline
                 onEnded={playNextVideo}
                 onError={(e) => {
-                  console.error('Video error:', e.target.error);
+                  console.error('Video error:', e.target.error, 'src:', e.target.src);
                   // Skip to next video on error
                   playNextVideo();
                 }}
                 onLoadedData={() => {
+                  console.log('Video loaded, attempting play');
                   // Video loaded, try to play
                   if (videoRef.current && !isPaused) {
-                    videoRef.current.play().catch(() => {});
+                    videoRef.current.play().catch((e) => console.log('Play failed:', e));
                   }
                 }}
+                onCanPlay={() => console.log('Video can play')}
               />
               <div 
                 className="absolute inset-0 z-10 cursor-pointer"
