@@ -633,9 +633,11 @@ async def list_uploaded_videos(user: dict = Depends(require_user)):
     
     videos = await db.uploaded_videos.find({}, {"_id": 0}).sort("created_at", -1).to_list(100)
     
-    # Add URLs
+    # URLs are now stored directly in the database
+    # For backwards compatibility, add URL if not present
     for video in videos:
-        video["url"] = f"/api/videos/{video['filename']}"
+        if "url" not in video:
+            video["url"] = f"/api/videos/{video['filename']}"
     
     return videos
 
@@ -649,10 +651,19 @@ async def delete_uploaded_video(video_id: str, user: dict = Depends(require_user
     if not video:
         raise HTTPException(status_code=404, detail="Video not found")
     
-    # Delete file
-    file_path = UPLOADS_DIR / video["filename"]
-    if file_path.exists():
-        file_path.unlink()
+    storage_type = video.get("storage_type", "local")
+    
+    if storage_type == "r2":
+        # Delete from R2
+        object_key = f"videos/{video['filename']}"
+        result = delete_from_r2(object_key)
+        if not result["success"]:
+            logger.warning(f"Failed to delete from R2: {result.get('error')}")
+    else:
+        # Delete local file
+        file_path = UPLOADS_DIR / video["filename"]
+        if file_path.exists():
+            file_path.unlink()
     
     # Delete from database
     await db.uploaded_videos.delete_one({"id": video_id})
