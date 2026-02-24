@@ -1069,6 +1069,7 @@ class UploadedImageResponse(BaseModel):
     url: str
     size: int
     created_at: str
+    storage_type: str = "r2"
 
 MAX_IMAGE_SIZE = 10 * 1024 * 1024  # 10MB
 ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"]
@@ -1078,7 +1079,7 @@ async def upload_image(
     file: UploadFile = File(...),
     user: dict = Depends(require_user)
 ):
-    """Upload an image file - JPEG, PNG, WebP, GIF only, max 10MB"""
+    """Upload an image file to cloud storage - JPEG, PNG, WebP, GIF only, max 10MB"""
     # Validate file type
     if file.content_type not in ALLOWED_IMAGE_TYPES:
         raise HTTPException(
@@ -1090,20 +1091,40 @@ async def upload_image(
     file_ext = Path(file.filename).suffix or ".jpg"
     image_id = str(uuid.uuid4())
     filename = f"{image_id}{file_ext}"
-    file_path = IMAGES_DIR / filename
     
-    # Save file
+    # Read file content
     try:
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+        file_content = await file.read()
+        file_size = len(file_content)
+        
+        if file_size > MAX_IMAGE_SIZE:
+            raise HTTPException(status_code=400, detail="File too large. Maximum size is 10MB")
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to save file: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to read file: {str(e)}")
     
-    # Check file size after saving
-    file_size = file_path.stat().st_size
-    if file_size > MAX_IMAGE_SIZE:
-        file_path.unlink()  # Delete the file
-        raise HTTPException(status_code=400, detail="File too large. Maximum size is 10MB")
+    # Determine storage method
+    storage_type = "r2" if is_r2_configured() else "local"
+    
+    if storage_type == "r2":
+        # Upload to R2 cloud storage
+        object_key = f"images/{filename}"
+        result = upload_to_r2(file_content, object_key, file.content_type)
+        
+        if not result["success"]:
+            raise HTTPException(status_code=500, detail=f"Cloud upload failed: {result.get('error', 'Unknown error')}")
+        
+        image_url = result["url"]
+    else:
+        # Fallback to local storage
+        file_path = IMAGES_DIR / filename
+        try:
+            with open(file_path, "wb") as buffer:
+                buffer.write(file_content)
+            image_url = f"/api/images/{filename}"
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to save file: {str(e)}")
     
     # Store in database
     now = datetime.now(timezone.utc).isoformat()
@@ -1111,8 +1132,10 @@ async def upload_image(
         "id": image_id,
         "filename": filename,
         "original_name": file.filename,
+        "url": image_url,
         "size": file_size,
         "owner_id": user["id"],
+        "storage_type": storage_type,
         "created_at": now
     }
     
@@ -1122,9 +1145,10 @@ async def upload_image(
         id=image_id,
         filename=filename,
         original_name=file.filename,
-        url=f"/api/images/{filename}",
+        url=image_url,
         size=file_size,
-        created_at=now
+        created_at=now,
+        storage_type=storage_type
     )
 
 @api_router.get("/upload/images")
@@ -1134,9 +1158,10 @@ async def list_uploaded_images(user: dict = Depends(require_user)):
     query = {} if user.get("is_admin", False) else {"owner_id": user["id"]}
     images = await db.uploaded_images.find(query, {"_id": 0}).sort("created_at", -1).to_list(100)
     
-    # Add URLs
+    # URLs are now stored directly in the database
     for image in images:
-        image["url"] = f"/api/images/{image['filename']}"
+        if "url" not in image:
+            image["url"] = f"/api/images/{image['filename']}"
     
     return images
 
@@ -1151,10 +1176,19 @@ async def delete_uploaded_image(image_id: str, user: dict = Depends(require_user
     if image["owner_id"] != user["id"] and not user.get("is_admin", False):
         raise HTTPException(status_code=403, detail="Not authorized")
     
-    # Delete file
-    file_path = IMAGES_DIR / image["filename"]
-    if file_path.exists():
-        file_path.unlink()
+    storage_type = image.get("storage_type", "local")
+    
+    if storage_type == "r2":
+        # Delete from R2
+        object_key = f"images/{image['filename']}"
+        result = delete_from_r2(object_key)
+        if not result["success"]:
+            logger.warning(f"Failed to delete image from R2: {result.get('error')}")
+    else:
+        # Delete local file
+        file_path = IMAGES_DIR / image["filename"]
+        if file_path.exists():
+            file_path.unlink()
     
     # Delete from database
     await db.uploaded_images.delete_one({"id": image_id})
