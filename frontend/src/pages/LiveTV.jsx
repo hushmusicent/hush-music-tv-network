@@ -850,16 +850,16 @@ const LiveTV = () => {
     }
     if (proxyVideoRef.current && useProxyPlayer) {
       if (proxyVideoRef.current.paused) {
-        proxyVideoRef.current.play();
+        proxyVideoRef.current.play().catch(() => {});
         setIsPaused(false);
       } else {
         proxyVideoRef.current.pause();
         setIsPaused(true);
       }
     }
-    if (videoRef.current) {
+    if (videoRef.current && isUploadedVideo) {
       if (videoRef.current.paused) {
-        videoRef.current.play();
+        videoRef.current.play().catch(() => {});
         setIsPaused(false);
       } else {
         videoRef.current.pause();
