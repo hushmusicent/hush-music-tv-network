@@ -592,6 +592,21 @@ async def upload_video(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to read file: {str(e)}")
     
+    # Save temporarily to extract duration using ffprobe
+    video_duration = 300  # Default 5 minutes
+    with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as tmp_file:
+        tmp_file.write(file_content)
+        tmp_path = tmp_file.name
+    
+    try:
+        video_duration = get_video_duration(tmp_path)
+        logger.info(f"Extracted video duration: {video_duration}s for {file.filename}")
+    except Exception as e:
+        logger.warning(f"Could not extract duration: {e}")
+    finally:
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+    
     # Determine storage method
     storage_type = "r2" if is_r2_configured() else "local"
     
