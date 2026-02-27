@@ -824,6 +824,10 @@ const LiveTV = () => {
             console.error('YouTube error:', event.data);
             // Error 150 = video unavailable/age-restricted in embed
             // Error 101 = video owner doesn't allow embed
+            if (isLive) {
+              toast.error('Live stream unavailable');
+              return;
+            }
             if (event.data === 150 || event.data === 101) {
               console.log('Age-restricted or embed-blocked, trying proxy...');
               // Show a brief message
