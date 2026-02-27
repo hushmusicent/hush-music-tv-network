@@ -574,6 +574,7 @@ const LiveTV = () => {
   // Skip to next video (for unavailable videos - only deletes from DB if admin)
   const skipToNextVideo = useCallback(async () => {
     if (!currentChannel) return;
+    trackVideoEvent('skip');  // Track video skip
     
     const playlist = playlists[currentChannel.id] || [];
     const schedule = schedules[currentChannel.id];
