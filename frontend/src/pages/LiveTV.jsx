@@ -659,8 +659,15 @@ const LiveTV = () => {
     let errorTimeout = null;
     let playbackCheckTimeout = null;
     let ageRestrictionFallbackTimeout = null;
+    
+    const isLive = currentVideo.is_live === true;
 
     const tryProxyFallback = async () => {
+      // Don't try proxy for live streams
+      if (isLive) {
+        toast.info('Live stream unavailable');
+        return;
+      }
       console.log('Trying proxy fallback for age-restricted video...');
       
       try {
