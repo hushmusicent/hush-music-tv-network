@@ -1339,7 +1339,7 @@ const LiveTV = () => {
               </div>
               <p className="font-medium text-sm">{currentChannel.name}</p>
               <p className="text-xs text-gray-400 truncate mt-1">{currentVideo.title}</p>
-              {currentVideo.duration && (
+              {currentVideo.duration && !isCurrentChannelLiveStream && (
                 <p className="text-xs text-gray-500 mt-1">
                   Duration: {Math.floor(currentVideo.duration / 60)}:{(currentVideo.duration % 60).toString().padStart(2, '0')}
                 </p>
