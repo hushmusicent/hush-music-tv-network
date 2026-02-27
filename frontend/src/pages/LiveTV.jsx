@@ -789,15 +789,16 @@ const LiveTV = () => {
               console.error('Error getting video info:', e);
             }
             
-            playbackCheckTimeout = setTimeout(() => {
-              try {
-                const state = youtubePlayerRef.current?.getPlayerState();
-                if (state === -1 || state === 5) {
-                  console.log('Video not playing after 5s, trying proxy...');
-                  tryProxyFallback();
-                }
-              } catch (e) {}
-            }, 5000);
+              playbackCheckTimeout = setTimeout(() => {
+                try {
+                  const state = youtubePlayerRef.current?.getPlayerState();
+                  if (state === -1 || state === 5) {
+                    console.log('Video not playing after 5s, trying proxy...');
+                    tryProxyFallback();
+                  }
+                } catch (e) {}
+              }, 5000);
+            } // end if (!isLive)
           },
           onStateChange: (event) => {
             if (event.data === window.YT.PlayerState.PLAYING) {
