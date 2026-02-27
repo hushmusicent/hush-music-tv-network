@@ -637,7 +637,7 @@ async def upload_video(
         "original_name": file.filename,
         "url": video_url,
         "size": file_size,
-        "duration": 300,  # Default, can be updated later
+        "duration": video_duration,  # Extracted from video file
         "thumbnail": None,
         "owner_id": user["id"],
         "storage_type": storage_type,
