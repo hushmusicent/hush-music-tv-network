@@ -1,175 +1,79 @@
 # Hush Music TV Network - Product Requirements Document
 
 ## Original Problem Statement
-Build a TV network app like Strimm for Hush Music TV Network with:
-- Admin-only system (single admin user)
-- YouTube videos as content source
-- Local video file uploads (MP4, max 2GB)
-- Custom channels with scheduled programming
-- 24/7 continuous playback with live sync
-- Multiple channels with different themes/genres
-- Guest viewing + admin account for management
-- Dark theme (Netflix-style)
-- TV guide, scheduling, channel categories
-- Embeddable players for channels and full network
-- Random play option for channels (shuffle video order)
-- Dynamic "Live Schedule" mode for any channel
-- Video reordering within channels
-- Advanced calendar scheduling with import/export
-
-## User Personas
-1. **Admin/Content Curator**: The single administrator who manages all channels, uploads videos, and controls content
-2. **Casual Viewer**: Browses and watches channels without an account
+Build a TV network app named "Hush Music TV Network" with admin-only channel/video management, 24-hour video schedules, Live TV experience, YouTube live stream support, analytics, embedding, and PWA capabilities.
 
 ## Core Requirements
+- Admin-only system for managing channels and videos (including reordering)
+- Migrate channels/videos from existing application
+- 24-hour synchronized video schedules ("Go Live" feature)
+- Live TV with channel changer, OSD, play/pause, auto-hiding controls
+- Handle age-restricted YouTube videos via yt-dlp proxy + cookies
+- Admin dashboard: bulk thumbnails, video cleanup, health-check tools
+- Channel/network embedding
+- Installable PWA
+- YouTube Live Stream channel support
+- Analytics page for viewer statistics
 
-### Implemented Features
-
-#### Backend
-- [x] User auth (admin-only login, JWT tokens)
-- [x] Channel management (CRUD, videos, schedule)
-- [x] Categories with counts (10 categories)
-- [x] Favorites system
-- [x] TV Guide API
-- [x] Video upload endpoint (MP4 only, max 2GB)
-- [x] Uploaded videos management (list, delete)
-- [x] Static file serving for uploaded videos
-- [x] Seed data with sample channels
-- [x] Random Play feature - channels can play videos in shuffled order
-- [x] YouTube Proxy System for Age-Restricted Videos
-- [x] Dynamic Use Schedule Flag - Any channel can be switched to synchronized 24-hour schedule mode
-- [x] **Video Reordering API** - PUT /api/channels/{id}/videos/reorder
-- [x] **Custom Schedule Save API** - POST /api/schedule/save
-- [x] **Channel Schedule API** - GET /api/schedule/channel/{id}
-
-#### Frontend
-- [x] Home page with hero section and featured channels
-- [x] Browse page with search and category filters
-- [x] Watch page with YouTube/uploaded video player
-- [x] 24-Hour TV Guide Feature - Classic TV Guide style schedule page
-- [x] Admin Dashboard with full management
-- [x] YouTube Settings Page - Manage cookies for age-restricted content
-- [x] Live TV page with synchronized playback
-- [x] Auto-proxy fallback - Automatically uses proxy for age-restricted videos
-- [x] Progressive Web App (PWA) - Installable app with offline support
-- [x] Embeddable player for single channel
-- [x] Embeddable network player
-- [x] Top navigation bar on all pages
-- [x] Dynamic "Live Schedule" Toggle - Admin can enable/disable synchronized schedule per channel
-- [x] **Video Reordering in Dashboard** - Drag-and-drop to reorder videos within a channel
-- [x] **Schedule Editor Page** - Advanced calendar scheduling with manual time slots
-
-## P2 Features Completed (Feb 23, 2026)
-
-### Video Reordering within Channels
-- **Dashboard Integration**: "Reorder" button in expanded channel video list
-- **Drag-and-Drop UI**: Videos can be dragged using grip handle
-- **Visual Feedback**: Yellow instruction banner, Save Order/Cancel buttons
-- **Backend Validation**: Validates all video IDs before reordering
-- **Safety**: Preserves videos not included in reorder request
-
-### Advanced Calendar Scheduling
-- **New Page**: `/schedule-editor/:channelId`
-- **Schedule Timeline**: Visual list of all scheduled videos with time slots
-- **Manual Time Editing**: Click on time slot to manually adjust start time
-- **Auto-Generate**: Creates 24-hour schedule from channel videos
-- **Drag-and-Drop**: Reorder scheduled items, times auto-recalculate
-- **Import/Export**: 
-  - Export schedule as JSON file
-  - Import schedule from JSON file
-  - Copy JSON template to clipboard
-- **Available Videos Panel**: Shows channel videos with search filter
-- **Save to Backend**: Saves custom schedule to database
+## Tech Stack
+- **Frontend**: React, Tailwind CSS, Shadcn UI, react-youtube, @dnd-kit/core
+- **Backend**: FastAPI, MongoDB (motor), Python
+- **Cloud Storage**: Cloudflare R2 (via boto3)
+- **Video Processing**: yt-dlp (proxy), ffprobe (duration extraction)
+- **3rd Party APIs**: YouTube Data API v3, YouTube IFrame API
 
 ## Architecture
-- **Frontend**: React with Tailwind CSS, Shadcn UI components
-- **Backend**: FastAPI with MongoDB
-- **Authentication**: JWT-based auth (admin-only)
-- **Video Playback**: YouTube iframe embeds + HTML5 video for uploads/proxy
-- **File Storage**: Local uploads directory with static file serving
-- **Age-Restriction Bypass**: yt-dlp with cookie authentication
+```
+/app/
+├── backend/
+│   ├── server.py        # Monolithic FastAPI app (2700+ lines)
+│   ├── r2_service.py    # Cloudflare R2 service
+│   ├── youtube_api.py   # YouTube Data API service
+│   └── .env             # All credentials
+├── frontend/
+│   └── src/
+│       ├── pages/
+│       │   ├── LiveTV.jsx        # Main Live TV experience
+│       │   ├── Dashboard.jsx     # Admin dashboard
+│       │   ├── ScheduleEditor.jsx
+│       │   └── ...
+│       └── lib/api.js
+└── memory/
+    └── PRD.md
+```
 
-## API Endpoints
+## Key DB Schema
+- **channels**: `{ id, name, videos: [video_object], use_schedule: bool, is_live_stream: bool, live_stream_youtube_id: string?, sort_order: int }`
+- **schedules**: `{ channel_id, schedule_date, videos: [{video_id, title, youtube_id, start_time, end_time, duration}] }`
+- **video_object**: `{ id, videoId, title, duration, youtube_id?, video_url?, thumbnail }`
 
-### Schedule (New)
-- POST /api/schedule/save - Save custom schedule (admin)
-- GET /api/schedule/channel/:id - Get channel schedule
+## What's Been Implemented
+- Full channel/video CRUD with admin auth
+- Cloudflare R2 integration for persistent file storage
+- Video duration detection (ffprobe for uploads, YouTube Data API for YT videos)
+- 24-hour synchronized schedules with Eastern timezone
+- Live TV page with channel list, OSD, keyboard controls
+- Age-restricted video handling (proxy + skip mechanism)
+- Schedule Editor with auto-generation and save
+- Data migration from production environment
+- YouTube Live Stream channel support (is_live_stream flag)
+- Schedule time parsing fix (HH:MM:SS string to seconds)
+- PWA support
+- Admin credentials: hushmusicent419@gmail.com / $Stisdd419
 
-### Videos
-- PUT /api/channels/:id/videos/reorder - Reorder videos in channel (admin)
-
-## Admin Credentials
-- Email: hushmusicent419@gmail.com
-- Password: $Stisdd419
+## Completed (Feb 27, 2026)
+- Fixed schedule time parsing bug (backend HH:MM:SS vs frontend numeric seconds)
+- Added YouTube Live Stream channel support (is_live_stream, live_stream_youtube_id fields)
+- Created "Hush Music Live" channel with YouTube live stream yfG9FPgFoLM
+- Confirmed "Movies 4 Everyone" runtime error is resolved (schedule has valid data)
 
 ## Prioritized Backlog
-
-### P0 (Critical) - COMPLETED
-- [x] Dynamic "Use Schedule" Toggle
-
-### P1 (High Priority)
-- [ ] Embedding feature - Allow embedding channels/network on external sites
-- [ ] Analytics Page - Viewer statistics dashboard
-
-### P2 (Medium Priority) - COMPLETED
-- [x] **Video Reordering** - Drag-and-drop to reorder videos within a channel
-- [x] **Advanced Calendar Scheduling** - Manual time slots, auto-generate, import/export
-
-### P3 (Nice to Have)
-- [ ] Chat/comments on channels
-- [ ] Channel subscriptions/notifications
-- [ ] Mobile app version
-
-### Go Live Feature (Feb 23, 2026)
-- **Dashboard**: Added prominent "Go Live" / "LIVE" toggle button on each channel row
-- **One-Click Toggle**: Click "Go Live" to make channel follow TV Guide schedule
-- **Visual Feedback**: 
-  - Green outline "Go Live" = Offline (videos play randomly)
-  - Solid green "LIVE" = Live (videos follow TV Guide schedule)
-- **Toast Notifications**: Confirms when channel goes live or offline
-- **Live TV Behavior**:
-  - LIVE channels show red "LIVE" indicator, follow synchronized schedule
-  - Offline channels show green "PLAYING" indicator, play videos randomly
-
-## Recent Changes (Feb 23, 2026)
-
-### Data Migration from Old Build (Completed)
-- **Migration Endpoint**: Created `POST /api/migrate-data` for one-time data sync
-- **Restored "Hush Music Radio"**: 155 videos restored (was 0 due to previous bug)
-- **Total Videos**: 2070 videos across 22 active channels
-- **Drive-Uploaded Videos**: Preserved `video_url` field for uploaded videos
-- **Migration Logic**: Handles whitespace in channel names, merges without duplicates
-
-### Video Reordering Feature
-- Added `videoReorderMode` state to Dashboard
-- Added `SortableVideoItem` component with drag-and-drop
-- Added "Reorder" button (yellow with arrows icon)
-- Added "Save Order" and "Cancel" buttons in reorder mode
-- Backend validation to prevent accidental video deletion
-
-### Schedule Editor Page
-- Created new `ScheduleEditor.jsx` page
-- Added route `/schedule-editor/:channelId` in App.js
-- Features: timeline view, auto-generate, import/export, manual time editing
-- Added green calendar icon button for channels with `use_schedule=true`
-
-### Backend Fixes
-- Fixed route ordering: `/videos/reorder` before `/videos/{video_id}`
-- Added validation to reject invalid video IDs in reorder
-- Added POST `/api/schedule/save` endpoint
-- Added GET `/api/schedule/channel/:id` endpoint
-
-## Data Stats
-- **24 Channels** total
-- **2070+ Videos** total
-
-## Testing
-- Backend API endpoints verified via pytest
-- Frontend features tested via Playwright automation
-- P2 features: 87.5% backend, 100% frontend success rate
-
-## Files Modified
-- `/app/backend/server.py` - Schedule save/get endpoints, video reorder validation
-- `/app/frontend/src/pages/Dashboard.jsx` - Video reorder UI
-- `/app/frontend/src/pages/ScheduleEditor.jsx` - New schedule editor page
-- `/app/frontend/src/App.js` - Added schedule editor route
+### P1
+- Embedding feature for channels/network
+### P2
+- Analytics page for viewer statistics
+- Video reordering endpoint hardening
+### P3
+- yt-dlp geo-restricted video handling (server location limitation)
+- Refactor server.py into separate routers (2700+ lines)
+- Refactor LiveTV.jsx into smaller components
