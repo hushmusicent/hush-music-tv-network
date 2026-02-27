@@ -708,8 +708,8 @@ const LiveTV = () => {
         host: 'https://www.youtube-nocookie.com',
         playerVars: {
           autoplay: 1,
-          controls: 0,
-          start: Math.floor(seekTime),
+          controls: isLive ? 0 : 0,
+          start: isLive ? undefined : Math.floor(seekTime),
           modestbranding: 1,
           rel: 0,
           fs: 0,
