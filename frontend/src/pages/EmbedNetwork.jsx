@@ -27,7 +27,7 @@ const EmbedNetwork = () => {
     try {
       const params = category ? { category } : {};
       const response = await channelsAPI.getAll(params);
-      const activeChannels = response.data.filter(c => c.videos?.length > 0);
+      const activeChannels = response.data.filter(c => c.videos?.length > 0 || (c.is_live_stream && c.live_stream_youtube_id));
       setChannels(activeChannels);
       if (activeChannels.length > 0) {
         setCurrentChannel(activeChannels[0]);
