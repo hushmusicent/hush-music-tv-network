@@ -164,6 +164,8 @@ class ChannelBase(BaseModel):
     is_24_7: bool = True
     random_play: bool = False  # If True, videos play in random order
     use_schedule: bool = False  # If True, channel uses synchronized 24-hour schedule
+    is_live_stream: bool = False  # If True, channel plays a single YouTube live stream
+    live_stream_youtube_id: Optional[str] = None  # YouTube video ID for live stream
 
 class ChannelCreate(ChannelBase):
     pass
@@ -177,6 +179,8 @@ class ChannelUpdate(BaseModel):
     is_24_7: Optional[bool] = None
     random_play: Optional[bool] = None
     use_schedule: Optional[bool] = None
+    is_live_stream: Optional[bool] = None
+    live_stream_youtube_id: Optional[str] = None
 
 class ChannelResponse(ChannelBase):
     model_config = ConfigDict(extra="ignore")
@@ -190,6 +194,8 @@ class ChannelResponse(ChannelBase):
     created_at: str
     random_play: bool = False
     use_schedule: bool = False
+    is_live_stream: bool = False
+    live_stream_youtube_id: Optional[str] = None
     sort_order: Optional[int] = None
 
 class CategoryResponse(BaseModel):
