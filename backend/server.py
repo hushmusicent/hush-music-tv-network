@@ -752,7 +752,7 @@ async def update_video_duration(
 
 @api_router.post("/channels/{channel_id}/update-durations")
 async def update_channel_video_durations(channel_id: str, user: dict = Depends(require_user)):
-    """Update video durations for all uploaded videos in a channel by downloading and analyzing them"""
+    """Update video durations for all uploaded videos in a channel using ffprobe on R2 URLs"""
     if not user.get("is_admin", False):
         raise HTTPException(status_code=403, detail="Admin access required")
     
@@ -766,31 +766,24 @@ async def update_channel_video_durations(channel_id: str, user: dict = Depends(r
     
     for i, video in enumerate(videos):
         video_url = video.get("video_url")
-        if not video_url or not video_url.startswith("http"):
-            continue  # Skip YouTube videos
+        if not video_url:
+            continue  # Skip YouTube-only videos
+        
+        # Build full URL if relative
+        if not video_url.startswith("http"):
+            continue  # Skip non-HTTP URLs
+        
+        # Only update videos with default duration
+        if video.get("duration", 300) != 300:
+            continue
         
         try:
-            # Download video to temp file
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                response = await client.get(video_url)
-                if response.status_code != 200:
-                    errors.append(f"{video.get('title')}: Failed to download")
-                    continue
-                
-                with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as tmp_file:
-                    tmp_file.write(response.content)
-                    tmp_path = tmp_file.name
-                
-                try:
-                    duration = get_video_duration(tmp_path)
-                    if duration > 0 and duration != 300:
-                        videos[i]["duration"] = duration
-                        updated_count += 1
-                        logger.info(f"Updated duration for {video.get('title')}: {duration}s")
-                finally:
-                    if os.path.exists(tmp_path):
-                        os.unlink(tmp_path)
-                        
+            # Use ffprobe directly on the R2 URL (only reads header, very fast)
+            duration = get_video_duration(video_url)
+            if duration > 0 and duration != 300:
+                videos[i]["duration"] = duration
+                updated_count += 1
+                logger.info(f"Updated duration for {video.get('title')}: {duration}s")
         except Exception as e:
             errors.append(f"{video.get('title')}: {str(e)}")
     
@@ -804,7 +797,7 @@ async def update_channel_video_durations(channel_id: str, user: dict = Depends(r
     return {
         "updated": updated_count,
         "total_videos": len(videos),
-        "errors": errors[:10]  # Limit error messages
+        "errors": errors[:10]
     }
 
 @api_router.put("/channels/{channel_id}/videos/{video_index}/duration")
