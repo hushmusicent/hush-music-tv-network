@@ -842,10 +842,12 @@ const LiveTV = () => {
         }
       });
 
-      errorTimeout = setTimeout(() => {
-        console.log('Video timeout - trying proxy fallback');
-        tryProxyFallback();
-      }, 10000);
+      if (!isLive) {
+        errorTimeout = setTimeout(() => {
+          console.log('Video timeout - trying proxy fallback');
+          tryProxyFallback();
+        }, 10000);
+      }
     };
 
     initPlayer();
