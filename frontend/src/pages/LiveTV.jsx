@@ -620,11 +620,13 @@ const LiveTV = () => {
           setUseProxyPlayer(true);
           toast.success('Playing via proxy');
         } else {
-          console.log('Proxy failed, skipping video');
+          console.log('Proxy unavailable, skipping to next video');
+          toast.info(`Skipping: ${currentVideo?.title?.substring(0, 25)}...`, { duration: 2000 });
           skipToNextVideo();
         }
       } catch (e) {
         console.error('Proxy fallback failed:', e);
+        toast.info(`Skipping unavailable video`, { duration: 2000 });
         skipToNextVideo();
       }
     };
