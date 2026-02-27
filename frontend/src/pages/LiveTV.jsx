@@ -812,9 +812,12 @@ const LiveTV = () => {
             } else if (event.data === window.YT.PlayerState.PAUSED) {
               setIsPaused(true);
             } else if (event.data === window.YT.PlayerState.ENDED) {
-              console.log('Video ended naturally');
-              setIsPaused(false);
-              playNextVideo();
+              // Live streams shouldn't trigger "ended" normally, but handle gracefully
+              if (!isLive) {
+                console.log('Video ended naturally');
+                setIsPaused(false);
+                playNextVideo();
+              }
             }
           },
           onError: (event) => {
