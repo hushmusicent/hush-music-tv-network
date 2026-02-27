@@ -806,44 +806,66 @@ async def update_all_uploaded_durations(user: dict = Depends(require_user)):
     if not user.get("is_admin", False):
         raise HTTPException(status_code=403, detail="Admin access required")
     
-    channels = await db.channels.find({}, {"_id": 0}).to_list(None)
-    total_updated = 0
-    total_errors = 0
-    channel_results = []
+    import asyncio
+    from concurrent.futures import ThreadPoolExecutor
     
-    for channel in channels:
+    channels = await db.channels.find({}, {"_id": 0}).to_list(None)
+    
+    # Collect all videos that need duration updates
+    video_tasks = []  # (channel_idx, video_idx, video_url, title)
+    for ci, channel in enumerate(channels):
         videos = channel.get("videos", [])
-        updated_count = 0
-        
-        for i, video in enumerate(videos):
+        for vi, video in enumerate(videos):
             video_url = video.get("video_url")
             if not video_url or not video_url.startswith("http"):
                 continue
-            
-            # Only update videos with default duration
             if video.get("duration", 300) != 300:
                 continue
-            
+            video_tasks.append((ci, vi, video_url, video.get("title", "Unknown")))
+    
+    if not video_tasks:
+        return {"total_updated": 0, "total_errors": 0, "channels": [], "message": "No uploaded videos need duration updates"}
+    
+    # Run ffprobe in parallel using thread pool (10 workers)
+    loop = asyncio.get_event_loop()
+    results = {}
+    
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        futures = {
+            loop.run_in_executor(executor, get_video_duration, url): (ci, vi, title)
+            for ci, vi, url, title in video_tasks
+        }
+        for future in asyncio.as_completed(futures):
+            ci, vi, title = futures[future]
             try:
-                duration = get_video_duration(video_url)
+                duration = await future
                 if duration > 0 and duration != 300:
-                    videos[i]["duration"] = duration
-                    updated_count += 1
+                    results[(ci, vi)] = duration
             except Exception as e:
-                total_errors += 1
-                logger.warning(f"Failed to get duration for {video.get('title')}: {e}")
-        
-        if updated_count > 0:
-            await db.channels.update_one(
-                {"id": channel["id"]},
-                {"$set": {"videos": videos}}
-            )
-            channel_results.append({"channel": channel.get("name"), "updated": updated_count})
-            total_updated += updated_count
+                logger.warning(f"Failed duration for {title}: {e}")
+    
+    # Apply updates to channels and save
+    total_updated = 0
+    channel_results = []
+    updated_channels = set()
+    
+    for (ci, vi), duration in results.items():
+        channels[ci]["videos"][vi]["duration"] = duration
+        updated_channels.add(ci)
+        total_updated += 1
+    
+    for ci in updated_channels:
+        channel = channels[ci]
+        await db.channels.update_one(
+            {"id": channel["id"]},
+            {"$set": {"videos": channel["videos"]}}
+        )
+        count = sum(1 for (c, _) in results if c == ci)
+        channel_results.append({"channel": channel.get("name"), "updated": count})
     
     return {
         "total_updated": total_updated,
-        "total_errors": total_errors,
+        "total_errors": len(video_tasks) - total_updated,
         "channels": channel_results
     }
 
