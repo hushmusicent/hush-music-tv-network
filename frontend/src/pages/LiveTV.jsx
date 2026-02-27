@@ -578,6 +578,11 @@ const LiveTV = () => {
       if (response.data.success) {
         return response.data.url;
       }
+      // If cookies not available, don't wait - just skip
+      if (response.data.cookies_available === false) {
+        console.log('No cookies available for proxy, skipping immediately');
+        return null;
+      }
       return null;
     } catch (e) {
       console.error('Error checking proxy:', e);
