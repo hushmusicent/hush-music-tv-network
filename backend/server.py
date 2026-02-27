@@ -1944,6 +1944,159 @@ async def quick_check_sample_videos(user: dict = Depends(require_user), sample_s
     
     return results
 
+@api_router.post("/youtube/health-check")
+async def health_check_videos(user: dict = Depends(require_user), channel_id: Optional[str] = None):
+    """
+    Fast health check using YouTube oEmbed API + yt-dlp for detailed categorization.
+    Categorizes videos as: embeddable, geo_restricted, age_restricted, unavailable, deleted.
+    Uses oEmbed (fast, no yt-dlp) for initial check, then yt-dlp for detailed error info.
+    """
+    if not user.get("is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    import asyncio
+    from concurrent.futures import ThreadPoolExecutor
+    
+    query = {"id": channel_id} if channel_id else {}
+    channels = await db.channels.find(query, {"_id": 0}).to_list(None)
+    
+    # Collect all YouTube video IDs
+    video_map = {}  # youtube_id -> {title, channel_name, channel_id}
+    for channel in channels:
+        for video in channel.get("videos", []):
+            yt_id = video.get("youtube_id")
+            if yt_id and yt_id not in video_map:
+                video_map[yt_id] = {
+                    "title": video.get("title", "Unknown"),
+                    "channel_name": channel.get("name"),
+                    "channel_id": channel.get("id"),
+                }
+    
+    if not video_map:
+        return {"total": 0, "categories": {}, "videos": []}
+    
+    # Fast check using oEmbed API (parallelized)
+    def check_oembed(youtube_id):
+        """Check if video is embeddable via oEmbed API - very fast"""
+        import urllib.request
+        try:
+            url = f"https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v={youtube_id}&format=json"
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = json.loads(resp.read())
+                return {"status": "embeddable", "title": data.get("title", "")}
+        except urllib.error.HTTPError as e:
+            if e.code == 401:
+                return {"status": "age_restricted"}
+            elif e.code == 403:
+                return {"status": "embed_blocked"}
+            elif e.code == 404:
+                return {"status": "deleted"}
+            return {"status": "unavailable", "error": f"HTTP {e.code}"}
+        except Exception as e:
+            return {"status": "error", "error": str(e)}
+    
+    def check_ytdlp_detail(youtube_id):
+        """Get detailed error info from yt-dlp for failed videos"""
+        cmd = [
+            YTDLP_PATH, "--dump-json", "--no-download", "--no-warnings",
+            "--xff", "US", "-f", "best[height<=720]/best",
+            f"https://www.youtube.com/watch?v={youtube_id}"
+        ]
+        if is_cookies_file_valid():
+            cmd.extend(["--cookies", str(COOKIES_FILE)])
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
+            if result.returncode == 0:
+                return {"status": "playable_via_proxy"}
+            stderr = result.stderr.lower()
+            if "not available in your country" in stderr:
+                return {"status": "geo_restricted", "detail": result.stderr.strip().split('\n')[0]}
+            elif "age" in stderr or "sign in" in stderr:
+                return {"status": "age_restricted", "detail": result.stderr.strip().split('\n')[0]}
+            elif "private" in stderr:
+                return {"status": "private"}
+            elif "removed" in stderr or "deleted" in stderr or "does not exist" in stderr:
+                return {"status": "deleted"}
+            return {"status": "unavailable", "detail": result.stderr.strip().split('\n')[0]}
+        except Exception as e:
+            return {"status": "error", "detail": str(e)}
+    
+    loop = asyncio.get_event_loop()
+    
+    # Phase 1: Fast oEmbed check for all videos (parallel, 20 workers)
+    oembed_results = {}
+    with ThreadPoolExecutor(max_workers=20) as executor:
+        futures = {
+            loop.run_in_executor(executor, check_oembed, yt_id): yt_id
+            for yt_id in video_map
+        }
+        for future in asyncio.as_completed(futures):
+            yt_id = futures[future]
+            try:
+                oembed_results[yt_id] = await future
+            except Exception:
+                oembed_results[yt_id] = {"status": "error"}
+    
+    # Phase 2: For non-embeddable videos, get detailed status via yt-dlp (parallel, 5 workers)
+    failed_ids = [yt_id for yt_id, r in oembed_results.items() if r["status"] != "embeddable"]
+    ytdlp_results = {}
+    
+    if failed_ids:
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            futures = {
+                loop.run_in_executor(executor, check_ytdlp_detail, yt_id): yt_id
+                for yt_id in failed_ids[:50]  # Limit to 50 for speed
+            }
+            for future in asyncio.as_completed(futures):
+                yt_id = futures[future]
+                try:
+                    ytdlp_results[yt_id] = await future
+                except Exception:
+                    ytdlp_results[yt_id] = {"status": "error"}
+    
+    # Compile results
+    categories = {
+        "embeddable": 0, "playable_via_proxy": 0, "geo_restricted": 0,
+        "age_restricted": 0, "embed_blocked": 0, "deleted": 0, "unavailable": 0, "error": 0
+    }
+    problem_videos = []
+    
+    for yt_id, info in video_map.items():
+        oembed = oembed_results.get(yt_id, {})
+        ytdlp = ytdlp_results.get(yt_id, {})
+        
+        # Use yt-dlp result if available (more detailed), otherwise use oEmbed
+        if oembed.get("status") == "embeddable":
+            final_status = "embeddable"
+        elif ytdlp.get("status") == "playable_via_proxy":
+            final_status = "playable_via_proxy"
+        elif ytdlp.get("status"):
+            final_status = ytdlp["status"]
+        else:
+            final_status = oembed.get("status", "unknown")
+        
+        categories[final_status] = categories.get(final_status, 0) + 1
+        
+        if final_status != "embeddable":
+            problem_videos.append({
+                "youtube_id": yt_id,
+                "title": info["title"],
+                "channel_name": info["channel_name"],
+                "channel_id": info["channel_id"],
+                "status": final_status,
+                "detail": ytdlp.get("detail", oembed.get("error", "")),
+                "url": f"https://www.youtube.com/watch?v={yt_id}",
+            })
+    
+    return {
+        "total": len(video_map),
+        "categories": categories,
+        "problem_videos": sorted(problem_videos, key=lambda x: x["status"]),
+        "cookies_configured": is_cookies_file_valid(),
+    }
+
+
 # ===================== SCHEDULE ROUTES =====================
 
 @api_router.post("/channels/{channel_id}/schedule", response_model=ChannelResponse)
