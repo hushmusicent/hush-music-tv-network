@@ -66,6 +66,10 @@ Build a TV network app named "Hush Music TV Network" with admin-only channel/vid
 - Added YouTube Live Stream channel support (is_live_stream, live_stream_youtube_id fields)
 - Created "Hush Music Live" channel with YouTube live stream yfG9FPgFoLM
 - Confirmed "Movies 4 Everyone" runtime error is resolved (schedule has valid data)
+- Fixed uploaded video durations: all 127 drive-uploaded videos now have real durations (was defaulting to 5min)
+- Added parallel ffprobe-based duration detection endpoint (POST /api/channels/update-all-uploaded-durations)
+- Added "Uploaded Durations" button in admin dashboard
+- Regenerated all 30 channel schedules with correct durations
 
 ## Prioritized Backlog
 ### P1
