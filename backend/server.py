@@ -30,8 +30,27 @@ IMAGES_DIR.mkdir(parents=True, exist_ok=True)
 
 # YouTube cookies directory
 COOKIES_DIR = ROOT_DIR / "cookies"
-COOKIES_DIR.mkdir(parents=True, exist_ok=True)
+try:
+    COOKIES_DIR.mkdir(parents=True, exist_ok=True)
+except Exception as e:
+    logger.warning(f"Could not create cookies directory: {e}")
 COOKIES_FILE = COOKIES_DIR / "youtube_cookies.txt"
+
+def is_cookies_file_valid():
+    """Check if cookies file exists and is valid"""
+    try:
+        if not COOKIES_FILE.exists():
+            return False
+        # Check file is readable and not empty
+        if COOKIES_FILE.stat().st_size == 0:
+            return False
+        # Try to read first line
+        with open(COOKIES_FILE, 'r', encoding='utf-8', errors='ignore') as f:
+            first_line = f.readline()
+            return bool(first_line)
+    except Exception as e:
+        logger.warning(f"Error checking cookies file: {e}")
+        return False
 
 # yt-dlp binary path - check multiple locations for compatibility
 def get_ytdlp_path():
