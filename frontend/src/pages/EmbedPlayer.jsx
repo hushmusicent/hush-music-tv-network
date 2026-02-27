@@ -188,16 +188,28 @@ const EmbedPlayer = () => {
       onMouseLeave={() => setShowControls(false)}
       data-testid="embed-player"
     >
-      {/* YouTube Embed */}
-      <iframe
-        key={`${currentVideo.youtube_id}-${isPlaying}-${isMuted}-${currentIndex}`}
-        src={embedUrl}
-        title={currentVideo.title}
-        className="absolute inset-0 w-full h-full"
-        style={{ border: 'none' }}
-        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-        allowFullScreen
-      />
+      {/* Video Player */}
+      {isUploadedVideo ? (
+        <video
+          key={`${currentVideo.video_id || currentIndex}`}
+          src={currentVideo.video_url}
+          className="absolute inset-0 w-full h-full object-contain bg-black"
+          autoPlay={isPlaying}
+          muted={isMuted}
+          onEnded={nextVideo}
+          playsInline
+        />
+      ) : youtubeEmbedUrl ? (
+        <iframe
+          key={`${currentVideo.youtube_id}-${isPlaying}-${isMuted}-${currentIndex}`}
+          src={youtubeEmbedUrl}
+          title={currentVideo.title}
+          className="absolute inset-0 w-full h-full"
+          style={{ border: 'none' }}
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          allowFullScreen
+        />
+      ) : null}
 
       {/* Branding Watermark */}
       {showBranding && (
