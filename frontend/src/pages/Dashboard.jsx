@@ -1727,7 +1727,78 @@ const Dashboard = () => {
                 <Trash2 size={16} className="mr-2" />
                 View Deleted Log
               </Button>
+              
+              <Button
+                onClick={runHealthCheck}
+                disabled={healthLoading}
+                className="bg-amber-600 hover:bg-amber-700"
+                data-testid="health-check-btn"
+              >
+                {healthLoading ? (
+                  <Loader2 size={16} className="mr-2 animate-spin" />
+                ) : (
+                  <AlertTriangle size={16} className="mr-2" />
+                )}
+                Health Check
+              </Button>
             </div>
+            
+            {/* Health Check Results */}
+            {healthResults && (
+              <div className="bg-black/30 rounded-lg p-4 mb-4" data-testid="health-results">
+                <h4 className="font-medium mb-3">Health Check Results</h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm mb-3">
+                  <div className="bg-green-500/10 rounded p-2">
+                    <span className="text-green-400 block text-xs">Embeddable</span>
+                    <span className="font-bold text-lg">{healthResults.categories?.embeddable || 0}</span>
+                  </div>
+                  <div className="bg-blue-500/10 rounded p-2">
+                    <span className="text-blue-400 block text-xs">Proxy Playable</span>
+                    <span className="font-bold text-lg">{healthResults.categories?.playable_via_proxy || 0}</span>
+                  </div>
+                  <div className="bg-yellow-500/10 rounded p-2">
+                    <span className="text-yellow-400 block text-xs">Geo-Restricted</span>
+                    <span className="font-bold text-lg">{healthResults.categories?.geo_restricted || 0}</span>
+                  </div>
+                  <div className="bg-red-500/10 rounded p-2">
+                    <span className="text-red-400 block text-xs">Age/Blocked/Deleted</span>
+                    <span className="font-bold text-lg">
+                      {(healthResults.categories?.age_restricted || 0) + 
+                       (healthResults.categories?.embed_blocked || 0) + 
+                       (healthResults.categories?.deleted || 0) +
+                       (healthResults.categories?.unavailable || 0)}
+                    </span>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-400 mb-2">
+                  Cookies: {healthResults.cookies_configured ? 'Configured' : 'Not configured'}
+                  {' | '}Total unique videos: {healthResults.total}
+                </p>
+                {healthResults.problem_videos?.length > 0 && (
+                  <div className="mt-2">
+                    <p className="text-xs text-gray-400 mb-1">Problem videos ({healthResults.problem_videos.length}):</p>
+                    <div className="max-h-60 overflow-y-auto space-y-1">
+                      {healthResults.problem_videos.map((v, i) => (
+                        <div key={i} className="flex items-center gap-2 text-xs bg-black/20 rounded px-2 py-1">
+                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                            v.status === 'geo_restricted' ? 'bg-yellow-500/20 text-yellow-400' :
+                            v.status === 'age_restricted' ? 'bg-orange-500/20 text-orange-400' :
+                            v.status === 'deleted' ? 'bg-red-500/20 text-red-400' :
+                            v.status === 'playable_via_proxy' ? 'bg-blue-500/20 text-blue-400' :
+                            'bg-gray-500/20 text-gray-400'
+                          }`}>{v.status.replace('_', ' ')}</span>
+                          <span className="truncate flex-1">{v.title}</span>
+                          <span className="text-gray-500">{v.channel_name}</span>
+                          <a href={v.url} target="_blank" rel="noreferrer" className="text-blue-400 hover:text-blue-300">
+                            <ExternalLink size={12} />
+                          </a>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
             
             {/* Cleanup Status Results */}
             {cleanupStatus && (
