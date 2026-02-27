@@ -70,14 +70,17 @@ Build a TV network app named "Hush Music TV Network" with admin-only channel/vid
 - Added parallel ffprobe-based duration detection endpoint (POST /api/channels/update-all-uploaded-durations)
 - Added "Uploaded Durations" button in admin dashboard
 - Regenerated all 30 channel schedules with correct durations
+- Implemented yt-dlp geo-restricted video handling (3 strategies):
+  - Strategy 1: Smarter embed retry (youtube-nocookie.com -> youtube.com -> proxy)
+  - Strategy 2: Multi-strategy yt-dlp proxy (default, --xff US, android client, geo-bypass)
+  - Strategy 3: Admin health check tool (fast oEmbed + yt-dlp categorization)
+- Fixed embed player to support uploaded R2 videos and live stream channels
+- Fixed EmbedNetwork to include live stream channels
+- Hardened video reorder endpoint (ignores invalid IDs instead of rejecting entire request)
+- Verified Analytics page works with real data (119 views, 22 channels tracked)
 
 ## Prioritized Backlog
-### P1
-- Embedding feature for channels/network
-### P2
-- Analytics page for viewer statistics
-- Video reordering endpoint hardening
 ### P3
-- yt-dlp geo-restricted video handling (server location limitation)
-- Refactor server.py into separate routers (2700+ lines)
+- yt-dlp: True geo-restrictions from datacenter IPs need residential proxy (paid service)
+- Refactor server.py into separate routers (2900+ lines)
 - Refactor LiveTV.jsx into smaller components
