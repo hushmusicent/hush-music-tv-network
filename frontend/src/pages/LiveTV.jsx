@@ -738,27 +738,27 @@ const LiveTV = () => {
             // Get actual video info from YouTube player (skip for live streams)
             if (!isLive) {
               try {
-              const actualDuration = Math.floor(event.target.getDuration());
-              const videoData = event.target.getVideoData();
-              const actualTitle = videoData?.title;
-              
-              // Update local state with actual title if it's different and not generic
-              if (actualTitle && currentVideo && actualTitle !== currentVideo.title) {
-                // Check if current title is generic (like "Video 123")
-                const isGenericTitle = /^Video \d+$/i.test(currentVideo.title);
+                const actualDuration = Math.floor(event.target.getDuration());
+                const videoData = event.target.getVideoData();
+                const actualTitle = videoData?.title;
                 
-                if (isGenericTitle) {
-                  console.log(`Updating video title: "${currentVideo.title}" -> "${actualTitle}"`);
+                // Update local state with actual title if it's different and not generic
+                if (actualTitle && currentVideo && actualTitle !== currentVideo.title) {
+                  // Check if current title is generic (like "Video 123")
+                  const isGenericTitle = /^Video \d+$/i.test(currentVideo.title);
                   
-                  // Update local state immediately for display
-                  setCurrentVideo(prev => prev ? { ...prev, title: actualTitle } : prev);
-                  
-                  // Update in playlists state too
-                  setPlaylists(prev => {
-                    const updated = { ...prev };
-                    if (currentChannel && updated[currentChannel.id]) {
-                      updated[currentChannel.id] = updated[currentChannel.id].map(v => 
-                        v.youtube_id === currentVideo.youtube_id ? { ...v, title: actualTitle } : v
+                  if (isGenericTitle) {
+                    console.log(`Updating video title: "${currentVideo.title}" -> "${actualTitle}"`);
+                    
+                    // Update local state immediately for display
+                    setCurrentVideo(prev => prev ? { ...prev, title: actualTitle } : prev);
+                    
+                    // Update in playlists state too
+                    setPlaylists(prev => {
+                      const updated = { ...prev };
+                      if (currentChannel && updated[currentChannel.id]) {
+                        updated[currentChannel.id] = updated[currentChannel.id].map(v => 
+                          v.youtube_id === currentVideo.youtube_id ? { ...v, title: actualTitle } : v
                       );
                     }
                     return updated;
