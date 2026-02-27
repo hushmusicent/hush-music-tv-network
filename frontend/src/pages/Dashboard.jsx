@@ -1664,7 +1664,21 @@ const Dashboard = () => {
                 ) : (
                   <Clock size={16} className="mr-2" />
                 )}
-                Fetch Durations
+                YouTube Durations
+              </Button>
+              
+              <Button
+                onClick={updateUploadedDurations}
+                disabled={cleanupLoading}
+                className="bg-emerald-600 hover:bg-emerald-700"
+                data-testid="update-uploaded-durations-btn"
+              >
+                {cleanupLoading ? (
+                  <Loader2 size={16} className="mr-2 animate-spin" />
+                ) : (
+                  <Clock size={16} className="mr-2" />
+                )}
+                Uploaded Durations
               </Button>
               
               <Button
