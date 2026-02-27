@@ -2479,6 +2479,111 @@ async def get_analytics(user: dict = Depends(require_user)):
         "channel_stats": channel_stats
     }
 
+
+@api_router.get("/analytics/channel/{channel_id}")
+async def get_channel_analytics(channel_id: str, user: dict = Depends(require_user)):
+    """Get detailed per-channel analytics"""
+    if not user.get("is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    channel = await db.channels.find_one({"id": channel_id}, {"_id": 0, "id": 1, "name": 1, "videos": 1})
+    if not channel:
+        raise HTTPException(status_code=404, detail="Channel not found")
+    
+    now = datetime.now(timezone.utc)
+    last_7d = now - timedelta(days=7)
+    last_24h = now - timedelta(hours=24)
+    
+    all_views = await db.views.find(
+        {"channel_id": channel_id},
+        {"_id": 0}
+    ).to_list(50000)
+    
+    # Parse timestamps and filter
+    views_7d = []
+    views_24h = []
+    for view in all_views:
+        try:
+            vt = datetime.fromisoformat(view["timestamp"].replace("Z", "+00:00"))
+            if vt.tzinfo is None:
+                vt = vt.replace(tzinfo=timezone.utc)
+            view["_parsed_time"] = vt
+            if vt >= last_7d:
+                views_7d.append(view)
+            if vt >= last_24h:
+                views_24h.append(view)
+        except Exception:
+            continue
+    
+    # Peak hours (0-23) from last 7 days
+    peak_hours = [0] * 24
+    for v in views_7d:
+        h = v.get("hour", v["_parsed_time"].hour)
+        peak_hours[h] += 1
+    
+    # Daily views for last 7 days
+    daily_views = {}
+    for v in views_7d:
+        day = v["_parsed_time"].strftime("%Y-%m-%d")
+        daily_views[day] = daily_views.get(day, 0) + 1
+    
+    # Fill missing days
+    daily_timeline = []
+    for i in range(7):
+        d = (now - timedelta(days=6 - i)).strftime("%Y-%m-%d")
+        daily_timeline.append({"date": d, "views": daily_views.get(d, 0)})
+    
+    # Video performance (from 7-day data)
+    video_stats = {}  # video_title -> {views, skips, completes}
+    for v in views_7d:
+        title = v.get("video_title") or "Unknown"
+        vid = v.get("video_id") or title
+        if vid not in video_stats:
+            video_stats[vid] = {"title": title, "views": 0, "skips": 0, "completes": 0}
+        evt = v.get("event_type", "view")
+        if evt == "skip":
+            video_stats[vid]["skips"] += 1
+        elif evt == "complete":
+            video_stats[vid]["completes"] += 1
+        else:
+            video_stats[vid]["views"] += 1
+    
+    # Sort videos by most skipped
+    most_skipped = sorted(
+        [vs for vs in video_stats.values() if vs["skips"] > 0],
+        key=lambda x: x["skips"], reverse=True
+    )[:10]
+    
+    # Sort videos by most viewed
+    most_viewed = sorted(
+        video_stats.values(),
+        key=lambda x: x["views"], reverse=True
+    )[:10]
+    
+    # Unique vs returning viewers (7d)
+    viewer_counts = {}
+    for v in views_7d:
+        vid = v.get("viewer_id", "")
+        viewer_counts[vid] = viewer_counts.get(vid, 0) + 1
+    
+    new_viewers = sum(1 for c in viewer_counts.values() if c == 1)
+    returning_viewers = sum(1 for c in viewer_counts.values() if c > 1)
+    
+    return {
+        "channel_id": channel_id,
+        "channel_name": channel.get("name", "Unknown"),
+        "total_videos": len(channel.get("videos", [])),
+        "total_views_7d": len(views_7d),
+        "total_views_24h": len(views_24h),
+        "unique_viewers_7d": len(viewer_counts),
+        "new_viewers": new_viewers,
+        "returning_viewers": returning_viewers,
+        "peak_hours": peak_hours,
+        "daily_timeline": daily_timeline,
+        "most_viewed": most_viewed,
+        "most_skipped": most_skipped,
+    }
+
 # ===================== 24-HOUR SCHEDULE =====================
 
 import random
