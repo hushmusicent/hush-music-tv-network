@@ -824,17 +824,27 @@ const LiveTV = () => {
             }
           },
           onError: (event) => {
-            console.error('YouTube error:', event.data);
+            console.error('YouTube error:', event.data, `(attempt ${retryAttempt + 1})`);
             // Error 150 = video unavailable/age-restricted in embed
             // Error 101 = video owner doesn't allow embed
             if (isLive) {
               toast.error('Live stream unavailable');
               return;
             }
-            if (event.data === 150 || event.data === 101) {
-              console.log('Age-restricted or embed-blocked, trying proxy...');
-              // Show a brief message
-              toast.info(`Skipping unavailable video: ${currentVideo?.title?.substring(0, 30)}...`);
+            if ((event.data === 150 || event.data === 101) && retryAttempt === 0) {
+              // Strategy 1: Retry with regular youtube.com host (some videos work there but not on nocookie)
+              console.log('Retrying embed with youtube.com host...');
+              retryAttempt = 1;
+              if (youtubePlayerRef.current) {
+                try { youtubePlayerRef.current.destroy(); } catch (e) {}
+                youtubePlayerRef.current = null;
+              }
+              if (errorTimeout) { clearTimeout(errorTimeout); errorTimeout = null; }
+              createPlayer('https://www.youtube.com');
+            } else if (event.data === 150 || event.data === 101) {
+              // Both embed hosts failed, try yt-dlp proxy
+              console.log('Both embed hosts failed, trying proxy fallback...');
+              toast.info(`Trying proxy: ${currentVideo?.title?.substring(0, 30)}...`);
               tryProxyFallback();
             } else {
               skipToNextVideo();
