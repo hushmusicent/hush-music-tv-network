@@ -1511,68 +1511,89 @@ async def delete_uploaded_image(image_id: str, user: dict = Depends(require_user
 # ===================== YOUTUBE PROXY ROUTES (Age-Restricted Videos) =====================
 
 def get_video_info_with_ytdlp(youtube_id: str, use_cookies: bool = True) -> dict:
-    """Get video info using yt-dlp, optionally with cookies for age-restricted content"""
-    cmd = [
-        YTDLP_PATH,
-        "--dump-json",
-        "--no-download",
-        "--no-warnings",
-        "-f", "best[height<=720]/best",  # Limit quality for streaming
-        f"https://www.youtube.com/watch?v={youtube_id}"
+    """Get video info using yt-dlp with multiple strategies"""
+    strategies = [
+        # Strategy 1: Default with cookies
+        {"cookies": use_cookies, "extra_args": []},
+        # Strategy 2: XFF US header
+        {"cookies": use_cookies, "extra_args": ["--xff", "US"]},
+        # Strategy 3: Android client
+        {"cookies": use_cookies, "extra_args": ["--extractor-args", "youtube:player_client=android"]},
+        # Strategy 4: Geo-bypass + XFF
+        {"cookies": use_cookies, "extra_args": ["--geo-bypass", "--geo-bypass-country", "US", "--xff", "US"]},
     ]
     
-    # Add cookies if available, valid, and requested
-    if use_cookies and is_cookies_file_valid():
+    for i, strategy in enumerate(strategies):
+        cmd = [
+            YTDLP_PATH,
+            "--dump-json",
+            "--no-download",
+            "--no-warnings",
+            "-f", "best[height<=720]/best",
+            *strategy["extra_args"],
+            f"https://www.youtube.com/watch?v={youtube_id}"
+        ]
+        
+        if strategy["cookies"] and is_cookies_file_valid():
+            try:
+                cmd.extend(["--cookies", str(COOKIES_FILE)])
+            except Exception:
+                pass
+        
         try:
-            cmd.extend(["--cookies", str(COOKIES_FILE)])
-        except Exception as e:
-            logger.warning(f"Error adding cookies to command: {e}")
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            if result.returncode == 0 and result.stdout.strip():
+                return json.loads(result.stdout)
+        except (subprocess.TimeoutExpired, json.JSONDecodeError, Exception) as e:
+            logger.debug(f"yt-dlp strategy {i+1} failed for {youtube_id}: {e}")
+            continue
     
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
-        if result.returncode == 0 and result.stdout.strip():
-            return json.loads(result.stdout)
-        else:
-            logger.error(f"yt-dlp error for {youtube_id}: {result.stderr}")
-            return None
-    except subprocess.TimeoutExpired:
-        logger.error(f"yt-dlp timeout for {youtube_id}")
-        return None
-    except json.JSONDecodeError as e:
-        logger.error(f"yt-dlp JSON decode error for {youtube_id}: {e}")
-        return None
-    except Exception as e:
-        logger.error(f"yt-dlp exception for {youtube_id}: {e}")
-        return None
+    logger.error(f"All yt-dlp strategies failed for {youtube_id}")
+    return None
+
 
 def get_direct_video_url(youtube_id: str, use_cookies: bool = True) -> Optional[str]:
-    """Get direct video URL using yt-dlp"""
-    cmd = [
-        YTDLP_PATH,
-        "--get-url",
-        "--no-warnings",
-        "-f", "best[height<=720][ext=mp4]/best[height<=720]/best",
-        f"https://www.youtube.com/watch?v={youtube_id}"
+    """Get direct video URL using yt-dlp with multiple strategies"""
+    strategies = [
+        # Strategy 1: Default with cookies
+        {"cookies": use_cookies, "extra_args": []},
+        # Strategy 2: XFF US header  
+        {"cookies": use_cookies, "extra_args": ["--xff", "US"]},
+        # Strategy 3: Android client (often bypasses geo-blocks)
+        {"cookies": use_cookies, "extra_args": ["--extractor-args", "youtube:player_client=android"]},
+        # Strategy 4: Combined geo-bypass
+        {"cookies": use_cookies, "extra_args": ["--geo-bypass", "--geo-bypass-country", "US", "--xff", "US"]},
     ]
     
-    # Add cookies if available, valid, and requested
-    if use_cookies and is_cookies_file_valid():
+    for i, strategy in enumerate(strategies):
+        cmd = [
+            YTDLP_PATH,
+            "--get-url",
+            "--no-warnings",
+            "-f", "best[height<=720][ext=mp4]/best[height<=720]/best",
+            *strategy["extra_args"],
+            f"https://www.youtube.com/watch?v={youtube_id}"
+        ]
+        
+        if strategy["cookies"] and is_cookies_file_valid():
+            try:
+                cmd.extend(["--cookies", str(COOKIES_FILE)])
+            except Exception:
+                pass
+        
         try:
-            cmd.extend(["--cookies", str(COOKIES_FILE)])
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            if result.returncode == 0 and result.stdout.strip():
+                urls = result.stdout.strip().split('\n')
+                if urls and urls[0]:
+                    logger.info(f"yt-dlp strategy {i+1} succeeded for {youtube_id}")
+                    return urls[0]
         except Exception as e:
-            logger.warning(f"Error adding cookies to command: {e}")
+            logger.debug(f"yt-dlp url strategy {i+1} failed for {youtube_id}: {e}")
+            continue
     
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
-        if result.returncode == 0 and result.stdout.strip():
-            urls = result.stdout.strip().split('\n')
-            return urls[0] if urls else None
-        else:
-            logger.error(f"yt-dlp get-url error for {youtube_id}: {result.stderr}")
-            return None
-    except Exception as e:
-        logger.error(f"yt-dlp get-url exception for {youtube_id}: {e}")
-        return None
+    logger.error(f"All yt-dlp url strategies failed for {youtube_id}")
+    return None
 
 @api_router.get("/youtube/check/{youtube_id}")
 async def check_youtube_video(youtube_id: str):
