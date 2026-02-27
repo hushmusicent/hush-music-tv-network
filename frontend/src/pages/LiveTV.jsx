@@ -435,6 +435,19 @@ const LiveTV = () => {
     showOSD();
   }, [playlists, schedules, sessionStartTime]);
 
+  // Track video events for analytics
+  const trackVideoEvent = useCallback((eventType) => {
+    if (!currentChannel || !currentVideo) return;
+    try {
+      analyticsAPI.recordView(
+        currentChannel.id, getViewerId(),
+        currentVideo.video_id || currentVideo.youtube_id || '',
+        currentVideo.title || '',
+        eventType
+      );
+    } catch (e) {}
+  }, [currentChannel, currentVideo]);
+
   const showOSD = () => {
     setShowChannelOSD(true);
     if (osdTimeoutRef.current) clearTimeout(osdTimeoutRef.current);
