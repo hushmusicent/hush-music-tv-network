@@ -314,6 +314,21 @@ const LiveTV = () => {
         const videos = schedule.videos || [];
         const channelName = schedule.channel_name?.trim();
         const channelUsesSchedule = schedule.use_schedule === true;
+        const channelIsLiveStream = schedule.is_live_stream === true;
+        
+        if (channelIsLiveStream) {
+          // Live stream channels don't need playlists or schedules
+          channelList.push({
+            id: schedule.channel_id,
+            name: channelName,
+            thumbnail: schedule.channel_thumbnail,
+            videoCount: 1,
+            use_schedule: false,
+            is_live_stream: true,
+            live_stream_youtube_id: schedule.live_stream_youtube_id,
+          });
+          continue;
+        }
         
         if (channelUsesSchedule) {
           // Use the BACKEND schedule directly (already has start_time, end_time from server)
