@@ -496,12 +496,24 @@ const ScheduleEditor = () => {
 
   // Save schedule to backend
   const saveSchedule = async () => {
+    if (!schedule.length) {
+      toast.error('No videos in schedule');
+      return;
+    }
+    
+    // Ensure we have a valid date
+    const scheduleDate = currentDate || getEasternDate();
+    if (!scheduleDate) {
+      toast.error('Invalid date');
+      return;
+    }
+    
     setSaving(true);
     try {
       // Convert schedule to backend format
       const scheduleData = {
         channel_id: channelId,
-        date: currentDate,
+        date: scheduleDate,
         videos: schedule.map(s => ({
           video_id: s.video_id,
           youtube_id: s.youtube_id,
