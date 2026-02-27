@@ -724,7 +724,9 @@ const LiveTV = () => {
         events: {
           onReady: (event) => {
             if (isMuted) event.target.mute();
-            event.target.seekTo(seekTime, true);
+            if (!isLive) {
+              event.target.seekTo(seekTime, true);
+            }
             event.target.playVideo();
             setIsPaused(false);
             
