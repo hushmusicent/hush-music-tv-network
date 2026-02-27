@@ -129,8 +129,10 @@ export const uploadAPI = {
 
 // Analytics API
 export const analyticsAPI = {
-  recordView: (channelId, viewerId) => api.post('/analytics/view', { channel_id: channelId, viewer_id: viewerId }),
+  recordView: (channelId, viewerId, videoId, videoTitle, eventType = 'view') => 
+    api.post('/analytics/view', { channel_id: channelId, viewer_id: viewerId, video_id: videoId, video_title: videoTitle, event_type: eventType }),
   getStats: () => api.get('/analytics/stats'),
+  getChannelStats: (channelId) => api.get(`/analytics/channel/${channelId}`),
 };
 
 // Video Cleanup API
