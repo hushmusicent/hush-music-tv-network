@@ -257,6 +257,8 @@ const Dashboard = () => {
   const [cleanupStatus, setCleanupStatus] = useState(null);
   const [deletedVideos, setDeletedVideos] = useState([]);
   const [showDeletedVideos, setShowDeletedVideos] = useState(false);
+  const [healthResults, setHealthResults] = useState(null);
+  const [healthLoading, setHealthLoading] = useState(false);
 
   // DnD sensors
   const sensors = useSensors(
