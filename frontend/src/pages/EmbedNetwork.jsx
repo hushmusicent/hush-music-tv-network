@@ -88,7 +88,26 @@ const EmbedNetwork = () => {
       <div className={`flex-1 flex flex-col ${showSidebar ? '' : 'w-full'}`}>
         {/* Video */}
         <div className="flex-1 relative bg-black">
-          {currentVideo ? (
+          {isLiveStreamChannel ? (
+            <iframe
+              key={`live-${currentChannel.id}`}
+              src={liveStreamUrl}
+              title={currentChannel.name}
+              className="absolute inset-0 w-full h-full"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+            />
+          ) : currentVideo?.video_url && !currentVideo?.youtube_id ? (
+            <video
+              key={`r2-${currentVideo.video_id || currentIndex}`}
+              src={currentVideo.video_url}
+              className="absolute inset-0 w-full h-full object-contain bg-black"
+              autoPlay={isPlaying}
+              muted={isMuted}
+              onEnded={nextVideo}
+              playsInline
+            />
+          ) : currentVideo ? (
             <iframe
               key={`${currentVideo.youtube_id}-${isPlaying}-${isMuted}`}
               src={embedUrl}
