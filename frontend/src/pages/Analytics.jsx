@@ -10,7 +10,13 @@ import {
   TrendingUp,
   RefreshCw,
   ArrowLeft,
-  Radio
+  Radio,
+  Clock,
+  SkipForward,
+  ChevronRight,
+  X,
+  UserPlus,
+  UserCheck
 } from 'lucide-react';
 
 const Analytics = () => {
@@ -19,6 +25,9 @@ const Analytics = () => {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedChannel, setSelectedChannel] = useState(null);
+  const [channelDetail, setChannelDetail] = useState(null);
+  const [detailLoading, setDetailLoading] = useState(false);
 
   useEffect(() => {
     // Wait for auth to finish loading before checking permissions
