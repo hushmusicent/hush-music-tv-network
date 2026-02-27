@@ -1635,24 +1635,36 @@ async def get_cookies_status(user: dict = Depends(require_user)):
     if not user.get("is_admin", False):
         raise HTTPException(status_code=403, detail="Admin access required")
     
-    if not COOKIES_FILE.exists():
+    try:
+        if not COOKIES_FILE.exists():
+            return {
+                "configured": False,
+                "message": "No cookies file uploaded"
+            }
+        
+        # Get file info
+        stat = COOKIES_FILE.stat()
+        
+        # Test cookies (with error handling)
+        test_result = None
+        try:
+            test_result = get_video_info_with_ytdlp("dQw4w9WgXcQ", use_cookies=True)
+        except Exception as e:
+            logger.warning(f"Error testing cookies: {e}")
+        
+        return {
+            "configured": True,
+            "file_size": stat.st_size,
+            "last_modified": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(),
+            "working": test_result is not None
+        }
+    except Exception as e:
+        logger.error(f"Error checking cookies status: {e}")
         return {
             "configured": False,
-            "message": "No cookies file uploaded"
+            "error": str(e),
+            "message": "Error checking cookies status"
         }
-    
-    # Get file info
-    stat = COOKIES_FILE.stat()
-    
-    # Test cookies
-    test_result = get_video_info_with_ytdlp("dQw4w9WgXcQ", use_cookies=True)
-    
-    return {
-        "configured": True,
-        "file_size": stat.st_size,
-        "last_modified": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(),
-        "working": test_result is not None
-    }
 
 @api_router.delete("/youtube/cookies")
 async def delete_youtube_cookies(user: dict = Depends(require_user)):
