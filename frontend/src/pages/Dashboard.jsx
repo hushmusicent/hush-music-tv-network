@@ -417,6 +417,27 @@ const Dashboard = () => {
     }
   };
 
+  const runHealthCheck = async () => {
+    setHealthLoading(true);
+    setHealthResults(null);
+    toast.info('Running video health check... This may take a minute.');
+    try {
+      const response = await videoCleanupAPI.healthCheck();
+      setHealthResults(response.data);
+      const cats = response.data.categories || {};
+      const problems = (response.data.problem_videos || []).length;
+      if (problems === 0) {
+        toast.success(`All ${response.data.total} videos are embeddable!`);
+      } else {
+        toast.warning(`Found ${problems} problem videos out of ${response.data.total}`);
+      }
+    } catch (error) {
+      toast.error('Health check failed');
+    } finally {
+      setHealthLoading(false);
+    }
+  };
+
   const toggleChannelExpanded = (channelId) => {
     setExpandedChannels(prev => ({
       ...prev,
