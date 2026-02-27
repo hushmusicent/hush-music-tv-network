@@ -705,7 +705,7 @@ const LiveTV = () => {
 
       youtubePlayerRef.current = new window.YT.Player('yt-player-instance', {
         videoId: currentVideo.youtube_id,
-        host: 'https://www.youtube-nocookie.com',
+        host: isLive ? 'https://www.youtube.com' : 'https://www.youtube-nocookie.com',
         playerVars: {
           autoplay: 1,
           controls: isLive ? 0 : 0,
@@ -714,7 +714,7 @@ const LiveTV = () => {
           rel: 0,
           fs: 0,
           playsinline: 1,
-          disablekb: 1,
+          disablekb: isLive ? 0 : 1,
           iv_load_policy: 3,
           showinfo: 0,
           cc_load_policy: 0,
