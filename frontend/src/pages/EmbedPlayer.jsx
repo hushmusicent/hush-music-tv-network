@@ -98,6 +98,8 @@ const EmbedPlayer = () => {
   }, [liveSync, channel, currentIndex]);
 
   const currentVideo = channel?.videos?.[currentIndex];
+  const isLiveStreamChannel = channel?.is_live_stream && channel?.live_stream_youtube_id;
+  const isUploadedVideo = currentVideo && (currentVideo.video_url && !currentVideo.youtube_id);
 
   const nextVideo = useCallback(() => {
     if (channel?.videos?.length > 1) {
@@ -140,6 +142,32 @@ const EmbedPlayer = () => {
     );
   }
 
+  // Live stream channels
+  if (isLiveStreamChannel) {
+    const liveEmbedUrl = `https://www.youtube.com/embed/${channel.live_stream_youtube_id}?autoplay=1&mute=${isMuted ? 1 : 0}&rel=0&modestbranding=1&playsinline=1`;
+    return (
+      <div className="embed-container" onMouseMove={handleMouseMove} onMouseLeave={() => setShowControls(false)} data-testid="embed-player">
+        <iframe
+          src={liveEmbedUrl}
+          title={channel.name}
+          className="absolute inset-0 w-full h-full"
+          style={{ border: 'none' }}
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowFullScreen
+        />
+        {showBranding && (
+          <div className="absolute top-3 left-3 flex items-center gap-2 bg-black/60 backdrop-blur-sm px-2 py-1 rounded z-10">
+            <span className="text-[10px] font-bold text-white tracking-wider">HUSH MUSIC TV</span>
+          </div>
+        )}
+        <div className="absolute top-3 right-3 flex items-center gap-1.5 bg-red-600 px-2 py-1 rounded-sm z-10">
+          <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
+          <span className="text-[10px] font-bold text-white">LIVE</span>
+        </div>
+      </div>
+    );
+  }
+
   if (!currentVideo) {
     return (
       <div className="w-full h-full bg-black flex items-center justify-center">
@@ -148,7 +176,10 @@ const EmbedPlayer = () => {
     );
   }
 
-  const embedUrl = `https://www.youtube.com/embed/${currentVideo.youtube_id}?autoplay=${isPlaying ? 1 : 0}&mute=${isMuted ? 1 : 0}&start=${liveSync ? Math.floor(seekTime) : 0}&rel=0&modestbranding=1&playsinline=1`;
+  // Determine player source
+  const youtubeEmbedUrl = currentVideo.youtube_id
+    ? `https://www.youtube.com/embed/${currentVideo.youtube_id}?autoplay=${isPlaying ? 1 : 0}&mute=${isMuted ? 1 : 0}&start=${liveSync ? Math.floor(seekTime) : 0}&rel=0&modestbranding=1&playsinline=1`
+    : null;
 
   return (
     <div 
