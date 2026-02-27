@@ -78,6 +78,12 @@ Build a TV network app named "Hush Music TV Network" with admin-only channel/vid
 - Fixed EmbedNetwork to include live stream channels
 - Hardened video reorder endpoint (ignores invalid IDs instead of rejecting entire request)
 - Verified Analytics page works with real data (119 views, 22 channels tracked)
+- **NEW: Per-Channel Analytics** - Click any channel in analytics to see detailed view:
+  - 7-day views, unique/new/returning viewers breakdown
+  - Peak hours heatmap (24h bar chart with tooltips)
+  - Daily views timeline (7-day trend)
+  - Most watched videos and most skipped videos tables
+  - Enhanced event tracking in LiveTV (video start/skip/complete events with video info)
 
 ## Prioritized Backlog
 ### P3
