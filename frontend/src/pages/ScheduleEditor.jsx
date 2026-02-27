@@ -55,9 +55,24 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Get current date in Eastern timezone
+// Get current date in Eastern timezone (YYYY-MM-DD format)
 const getEasternDate = () => {
-  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+  try {
+    const date = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+    // Validate format YYYY-MM-DD
+    if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return date;
+    }
+  } catch (e) {
+    console.error('Error getting Eastern date:', e);
+  }
+  // Fallback: manually construct date
+  const now = new Date();
+  const eastern = new Date(now.toLocaleString("en-US", { timeZone: "America/New_York" }));
+  const year = eastern.getFullYear();
+  const month = String(eastern.getMonth() + 1).padStart(2, '0');
+  const day = String(eastern.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 };
 
 // Get current time in Eastern timezone
