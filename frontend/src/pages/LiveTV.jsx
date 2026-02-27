@@ -88,6 +88,16 @@ const getEasternTimeSeconds = () => {
   return eastern.getHours() * 3600 + eastern.getMinutes() * 60 + eastern.getSeconds();
 };
 
+// Parse HH:MM:SS time string to seconds
+const parseTimeToSeconds = (timeStr) => {
+  if (typeof timeStr === 'number') return timeStr;
+  if (!timeStr || typeof timeStr !== 'string') return 0;
+  const parts = timeStr.split(':').map(Number);
+  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  if (parts.length === 2) return parts[0] * 60 + parts[1];
+  return Number(timeStr) || 0;
+};
+
 // Get current video from 24-hour schedule based on ACTUAL Eastern time (synchronized for all viewers)
 const getVideoFromSchedule = (schedule, failedVideoIds = new Set()) => {
   if (!schedule || schedule.length === 0) {
@@ -102,8 +112,11 @@ const getVideoFromSchedule = (schedule, failedVideoIds = new Set()) => {
     const slot = schedule[i];
     if (failedVideoIds.has(slot.youtube_id)) continue;
     
-    if (currentSeconds >= slot.start_time && currentSeconds < slot.end_time) {
-      const seekTime = currentSeconds - slot.start_time;
+    const slotStart = parseTimeToSeconds(slot.start_time);
+    const slotEnd = parseTimeToSeconds(slot.end_time);
+    
+    if (currentSeconds >= slotStart && currentSeconds < slotEnd) {
+      const seekTime = currentSeconds - slotStart;
       return { video: slot, seekTime, videoIndex: i };
     }
   }
