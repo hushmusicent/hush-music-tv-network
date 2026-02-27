@@ -723,6 +723,90 @@ async def update_video_duration(
     
     return {"message": "Duration updated"}
 
+@api_router.post("/channels/{channel_id}/update-durations")
+async def update_channel_video_durations(channel_id: str, user: dict = Depends(require_user)):
+    """Update video durations for all uploaded videos in a channel by downloading and analyzing them"""
+    if not user.get("is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    channel = await db.channels.find_one({"id": channel_id}, {"_id": 0})
+    if not channel:
+        raise HTTPException(status_code=404, detail="Channel not found")
+    
+    videos = channel.get("videos", [])
+    updated_count = 0
+    errors = []
+    
+    for i, video in enumerate(videos):
+        video_url = video.get("video_url")
+        if not video_url or not video_url.startswith("http"):
+            continue  # Skip YouTube videos
+        
+        try:
+            # Download video to temp file
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.get(video_url)
+                if response.status_code != 200:
+                    errors.append(f"{video.get('title')}: Failed to download")
+                    continue
+                
+                with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as tmp_file:
+                    tmp_file.write(response.content)
+                    tmp_path = tmp_file.name
+                
+                try:
+                    duration = get_video_duration(tmp_path)
+                    if duration > 0 and duration != 300:
+                        videos[i]["duration"] = duration
+                        updated_count += 1
+                        logger.info(f"Updated duration for {video.get('title')}: {duration}s")
+                finally:
+                    if os.path.exists(tmp_path):
+                        os.unlink(tmp_path)
+                        
+        except Exception as e:
+            errors.append(f"{video.get('title')}: {str(e)}")
+    
+    # Save updated videos back to channel
+    if updated_count > 0:
+        await db.channels.update_one(
+            {"id": channel_id},
+            {"$set": {"videos": videos}}
+        )
+    
+    return {
+        "updated": updated_count,
+        "total_videos": len(videos),
+        "errors": errors[:10]  # Limit error messages
+    }
+
+@api_router.put("/channels/{channel_id}/videos/{video_index}/duration")
+async def update_single_video_duration(
+    channel_id: str, 
+    video_index: int,
+    duration: int,
+    user: dict = Depends(require_user)
+):
+    """Update duration for a single video in a channel"""
+    if not user.get("is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    channel = await db.channels.find_one({"id": channel_id}, {"_id": 0})
+    if not channel:
+        raise HTTPException(status_code=404, detail="Channel not found")
+    
+    videos = channel.get("videos", [])
+    if video_index < 0 or video_index >= len(videos):
+        raise HTTPException(status_code=404, detail="Video index out of range")
+    
+    # Update the video duration
+    await db.channels.update_one(
+        {"id": channel_id},
+        {"$set": {f"videos.{video_index}.duration": duration}}
+    )
+    
+    return {"message": f"Updated duration for video {video_index} to {duration}s"}
+
 # ===================== VIDEO CLEANUP ROUTES =====================
 import httpx
 
