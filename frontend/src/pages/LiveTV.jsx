@@ -659,6 +659,7 @@ const LiveTV = () => {
     let errorTimeout = null;
     let playbackCheckTimeout = null;
     let ageRestrictionFallbackTimeout = null;
+    let retryAttempt = 0; // Track retry attempts for embed
     
     const isLive = currentVideo.is_live === true;
 
@@ -688,10 +689,10 @@ const LiveTV = () => {
         skipToNextVideo();
       }
     };
-
-    const initPlayer = () => {
+    
+    const createPlayer = (host) => {
       if (!window.YT || !window.YT.Player) {
-        setTimeout(initPlayer, 100);
+        setTimeout(() => createPlayer(host), 100);
         return;
       }
 
@@ -705,10 +706,10 @@ const LiveTV = () => {
 
       youtubePlayerRef.current = new window.YT.Player('yt-player-instance', {
         videoId: currentVideo.youtube_id,
-        host: isLive ? 'https://www.youtube.com' : 'https://www.youtube-nocookie.com',
+        host: host,
         playerVars: {
           autoplay: 1,
-          controls: isLive ? 0 : 0,
+          controls: 0,
           start: isLive ? undefined : Math.floor(seekTime),
           modestbranding: 1,
           rel: 0,
