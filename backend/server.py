@@ -2337,6 +2337,7 @@ class ScheduleVideoInput(BaseModel):
     start_time: str
     end_time: str
     video_url: Optional[str] = None
+    thumbnail: Optional[str] = None
 
 class SaveScheduleInput(BaseModel):
     channel_id: str
