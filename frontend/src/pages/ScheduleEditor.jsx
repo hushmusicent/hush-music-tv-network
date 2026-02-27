@@ -494,10 +494,12 @@ const ScheduleEditor = () => {
           duration: s.duration,
           start_time: s.start_time,
           end_time: s.end_time,
-          video_url: s.video_url,
+          video_url: s.video_url || null,
+          thumbnail: s.thumbnail || null,
         })),
       };
       
+      console.log('Saving schedule:', scheduleData);
       await api.post('/api/schedule/save', scheduleData);
       setHasChanges(false);
       toast.success('Schedule saved successfully!');
