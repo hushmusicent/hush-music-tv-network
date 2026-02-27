@@ -163,6 +163,9 @@ export const videoCleanupAPI = {
   
   // Update durations for all uploaded (R2) videos using ffprobe
   updateUploadedDurations: () => api.post('/channels/update-all-uploaded-durations'),
+  
+  // Health check - fast categorization of all video playability
+  healthCheck: (channelId) => api.post(`/youtube/health-check${channelId ? `?channel_id=${channelId}` : ''}`, null, { timeout: 300000 }),
 };
 
 // YouTube Proxy API (for age-restricted videos)
