@@ -73,8 +73,14 @@ const EmbedNetwork = () => {
   }
 
   const embedUrl = currentVideo 
-    ? `https://www.youtube.com/embed/${currentVideo.youtube_id}?autoplay=${isPlaying ? 1 : 0}&mute=${isMuted ? 1 : 0}&rel=0&modestbranding=1&controls=0`
+    ? currentVideo.youtube_id 
+      ? `https://www.youtube.com/embed/${currentVideo.youtube_id}?autoplay=${isPlaying ? 1 : 0}&mute=${isMuted ? 1 : 0}&rel=0&modestbranding=1&controls=0`
+      : null
     : '';
+  const isLiveStreamChannel = currentChannel?.is_live_stream && currentChannel?.live_stream_youtube_id;
+  const liveStreamUrl = isLiveStreamChannel
+    ? `https://www.youtube.com/embed/${currentChannel.live_stream_youtube_id}?autoplay=1&mute=${isMuted ? 1 : 0}&rel=0&modestbranding=1`
+    : null;
 
   return (
     <div className="embed-container flex" data-testid="embed-network">
