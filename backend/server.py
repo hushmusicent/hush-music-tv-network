@@ -2369,6 +2369,7 @@ async def save_schedule(data: SaveScheduleInput, current_user: dict = Depends(ge
                 "video_id": v.video_id,
                 "youtube_id": v.youtube_id,
                 "title": v.title,
+                "thumbnail": v.thumbnail,
                 "duration": v.duration,
                 "start_time": v.start_time,
                 "end_time": v.end_time,
