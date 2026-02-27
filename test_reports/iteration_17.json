@@ -1,0 +1,78 @@
+{
+  "summary": "Tested Live TV features including live stream channel support, schedule API, and admin login. Backend API tests all pass (12/12). Frontend tests mostly pass with one issue - the Hush Music Live stream shows 'No playable videos' error after initial load.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Hush Music Live stream playback",
+        "issue": "Live stream channel (yfG9FPgFoLM - ABC News Live) shows 'No playable videos on this channel!' error after YouTube error 150. The is_live flag protection in error handler works, but subsequent proxy fallback still triggers skipToNextVideo for live streams.",
+        "affected_selectors": ["button:has-text(\"Hush Music Live\")"],
+        "notes": "The YouTube video ID is valid and embeddable (verified via oEmbed). The error may be intermittent or related to browser restrictions. The LIVE STREAM label and detection work correctly."
+      }
+    ],
+    "design_issues": []
+  },
+  "test_results": {
+    "backend_api": {
+      "schedule_live_returns_200": "PASS",
+      "schedule_live_returns_30_channels": "PASS",
+      "hush_music_live_channel_exists": "PASS",
+      "hush_music_live_has_is_live_stream_flag": "PASS",
+      "hush_music_live_has_correct_youtube_id": "PASS (yfG9FPgFoLM)",
+      "regular_channels_have_videos": "PASS",
+      "admin_login_success": "PASS",
+      "admin_token_valid": "PASS",
+      "movies_4_everyone_exists": "PASS",
+      "hush_music_radio_exists": "PASS",
+      "all_channels_have_required_fields": "PASS",
+      "live_stream_channels_flagged_correctly": "PASS"
+    },
+    "frontend": {
+      "live_tv_page_loads": "PASS - 30 channels visible in sidebar",
+      "hush_music_live_in_channel_list": "PASS - Channel at position 30",
+      "live_stream_label_visible": "PASS - 'LIVE STREAM' label shows on Hush Music Live button",
+      "clicking_live_stream_channel": "PARTIAL - Channel loads but video fails with error 150, shows 'No playable videos'",
+      "live_stream_status_in_overlay": "PASS - 'LIVE STREAM' status shows in info overlay when selected",
+      "no_up_next_bar_for_live_stream": "PASS - Up Next bar hidden for live stream channels",
+      "movies_4_everyone_channel": "PASS - Loads with LIVE status, but many videos are age-restricted",
+      "regular_channel_playback": "PASS - Hush Music Radio plays videos normally (auto-skips age-restricted)",
+      "channel_switching": "PASS - Clicking channels in sidebar switches correctly",
+      "channel_up_down_buttons": "PASS - Found in UI",
+      "admin_login": "PASS - Dashboard shows 30 channels, 2230 total videos"
+    }
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_live_tv.py",
+    "/app/test_reports/pytest/live_tv_results.xml"
+  ],
+  "action_items": [
+    "INVESTIGATE: Hush Music Live channel shows 'No playable videos' after YouTube error 150. The live stream video ID (yfG9FPgFoLM) is valid ABC News Live. May need to handle proxy fallback differently for live stream channels or try alternative live stream URL.",
+    "NOTE: Many videos across channels are age-restricted (error 150) and being auto-skipped. This is expected behavior but reduces playable content."
+  ],
+  "critical_code_review_comments": [
+    "The is_live_stream and live_stream_youtube_id fields are correctly implemented in backend",
+    "Frontend correctly identifies live stream channels and sets is_live: true flag",
+    "POTENTIAL BUG: In LiveTV.jsx tryProxyFallback(), when proxy fails for any video, it calls skipToNextVideo(). For live streams, this results in 'No playable videos' since there's no next video. The isLive check at line 667 should prevent this, but console shows skipToNextVideo was called.",
+    "Schedule time parsing fix (parseTimeToSeconds) is implemented correctly - handles HH:MM:SS strings from backend"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_live_tv.py"
+  ],
+  "success_rate": {
+    "backend": "100% (12/12 tests passed)",
+    "frontend": "90% (9/10 core features working, 1 live stream playback issue)"
+  },
+  "test_credentials": {
+    "admin_email": "hushmusicent419@gmail.com",
+    "admin_password": "$Stisdd419"
+  },
+  "seed_data_creation": "None - used existing data",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Live stream channel 'Hush Music Live' (sort_order 30) is correctly configured with is_live_stream=true and live_stream_youtube_id='yfG9FPgFoLM' (ABC News Live). The backend API returns correct data. Frontend shows 'No playable videos' error after YouTube error 150. Need to investigate why the live stream is hitting error handler and being treated as unplayable. The error handler in LiveTV.jsx has isLive protection but may not be working correctly in all code paths.",
+  "rca_of_the_issue": "The Hush Music Live channel correctly has is_live_stream: true in database and API. The LiveTV.jsx selectChannel() correctly sets currentVideo.is_live: true. The YouTube player initialization includes isLive checks. However, when YouTube returns error 150 (embed blocked), the onError handler checks isLive and shows toast, but subsequent proxy fallback may still be triggering skipToNextVideo. Since live streams have no next video, this results in 'No playable videos' message. Root cause may be: 1) Race condition between multiple error handlers, 2) The specific ABC News live stream URL may have embed restrictions, 3) Browser/environment specific issue with YouTube IFrame API."
+}
