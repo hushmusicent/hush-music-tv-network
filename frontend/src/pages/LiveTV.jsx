@@ -489,6 +489,9 @@ const LiveTV = () => {
   
   // Check if current channel is using synchronized schedule mode (via use_schedule flag)
   const isCurrentChannelScheduled = currentChannel?.use_schedule === true;
+  
+  // Check if current channel is a live stream
+  const isCurrentChannelLiveStream = currentChannel?.is_live_stream === true;
 
   // Play next video in playlist (called when current video ends)
   const playNextVideo = useCallback(() => {
