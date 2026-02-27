@@ -800,6 +800,54 @@ async def update_channel_video_durations(channel_id: str, user: dict = Depends(r
         "errors": errors[:10]
     }
 
+@api_router.post("/channels/update-all-uploaded-durations")
+async def update_all_uploaded_durations(user: dict = Depends(require_user)):
+    """Update video durations for ALL uploaded videos across ALL channels using ffprobe on R2 URLs"""
+    if not user.get("is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    channels = await db.channels.find({}, {"_id": 0}).to_list(None)
+    total_updated = 0
+    total_errors = 0
+    channel_results = []
+    
+    for channel in channels:
+        videos = channel.get("videos", [])
+        updated_count = 0
+        
+        for i, video in enumerate(videos):
+            video_url = video.get("video_url")
+            if not video_url or not video_url.startswith("http"):
+                continue
+            
+            # Only update videos with default duration
+            if video.get("duration", 300) != 300:
+                continue
+            
+            try:
+                duration = get_video_duration(video_url)
+                if duration > 0 and duration != 300:
+                    videos[i]["duration"] = duration
+                    updated_count += 1
+            except Exception as e:
+                total_errors += 1
+                logger.warning(f"Failed to get duration for {video.get('title')}: {e}")
+        
+        if updated_count > 0:
+            await db.channels.update_one(
+                {"id": channel["id"]},
+                {"$set": {"videos": videos}}
+            )
+            channel_results.append({"channel": channel.get("name"), "updated": updated_count})
+            total_updated += updated_count
+    
+    return {
+        "total_updated": total_updated,
+        "total_errors": total_errors,
+        "channels": channel_results
+    }
+
+
 @api_router.put("/channels/{channel_id}/videos/{video_index}/duration")
 async def update_single_video_duration(
     channel_id: str, 
