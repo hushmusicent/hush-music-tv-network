@@ -861,7 +861,8 @@ const LiveTV = () => {
       }
     };
 
-    initPlayer();
+    // Start with nocookie host for regular videos, regular host for live streams
+    createPlayer(isLive ? 'https://www.youtube.com' : 'https://www.youtube-nocookie.com');
 
     return () => {
       if (errorTimeout) clearTimeout(errorTimeout);
