@@ -2027,14 +2027,13 @@ async def health_check_videos(user: dict = Depends(require_user), channel_id: Op
     # Phase 1: Fast oEmbed check for all videos (parallel, 20 workers)
     oembed_results = {}
     with ThreadPoolExecutor(max_workers=20) as executor:
-        futures = {
-            loop.run_in_executor(executor, check_oembed, yt_id): yt_id
-            for yt_id in video_map
-        }
-        for future in asyncio.as_completed(futures):
-            yt_id = futures[future]
+        future_map = {}
+        for yt_id in video_map:
+            f = loop.run_in_executor(executor, check_oembed, yt_id)
+            future_map[yt_id] = f
+        for yt_id, f in future_map.items():
             try:
-                oembed_results[yt_id] = await future
+                oembed_results[yt_id] = await f
             except Exception:
                 oembed_results[yt_id] = {"status": "error"}
     
@@ -2044,14 +2043,13 @@ async def health_check_videos(user: dict = Depends(require_user), channel_id: Op
     
     if failed_ids:
         with ThreadPoolExecutor(max_workers=5) as executor:
-            futures = {
-                loop.run_in_executor(executor, check_ytdlp_detail, yt_id): yt_id
-                for yt_id in failed_ids[:50]  # Limit to 50 for speed
-            }
-            for future in asyncio.as_completed(futures):
-                yt_id = futures[future]
+            future_map = {}
+            for yt_id in failed_ids[:50]:  # Limit to 50 for speed
+                f = loop.run_in_executor(executor, check_ytdlp_detail, yt_id)
+                future_map[yt_id] = f
+            for yt_id, f in future_map.items():
                 try:
-                    ytdlp_results[yt_id] = await future
+                    ytdlp_results[yt_id] = await f
                 except Exception:
                     ytdlp_results[yt_id] = {"status": "error"}
     
