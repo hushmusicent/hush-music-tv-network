@@ -378,6 +378,26 @@ const LiveTV = () => {
     setCurrentChannel(channel);
     setFailedVideoIds(new Set());
     
+    // Live stream channels - set a special video object
+    if (channel.is_live_stream && channel.live_stream_youtube_id) {
+      setCurrentVideo({
+        video_id: 'live-stream',
+        youtube_id: channel.live_stream_youtube_id,
+        title: `${channel.name} - LIVE`,
+        duration: 0,
+        is_live: true,
+      });
+      setCurrentVideoIndex(0);
+      setSeekTime(0);
+      setUseProxyPlayer(false);
+      setProxyVideoUrl(null);
+      showOSD();
+      try {
+        analyticsAPI.recordView(channel.id, getViewerId());
+      } catch (e) {}
+      return;
+    }
+    
     const elapsed = startTime ? Math.floor((Date.now() - startTime) / 1000) : 0;
     
     // Check if this is a scheduled channel (Hush Music Radio)
