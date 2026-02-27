@@ -807,9 +807,12 @@ async def update_single_video_duration(
     
     return {"message": f"Updated duration for video {video_index} to {duration}s"}
 
+# Import YouTube API service
+from youtube_api import get_videos_info_batch, is_youtube_api_configured
+
 @api_router.post("/channels/{channel_id}/update-youtube-durations")
 async def update_youtube_video_durations(channel_id: str, user: dict = Depends(require_user)):
-    """Update video durations for all YouTube videos in a channel using yt-dlp"""
+    """Update video durations for all YouTube videos in a channel using YouTube Data API"""
     if not user.get("is_admin", False):
         raise HTTPException(status_code=403, detail="Admin access required")
     
@@ -818,51 +821,79 @@ async def update_youtube_video_durations(channel_id: str, user: dict = Depends(r
         raise HTTPException(status_code=404, detail="Channel not found")
     
     videos = channel.get("videos", [])
-    updated_count = 0
-    errors = []
+    
+    # Collect YouTube video IDs that need duration update
+    youtube_ids = []
+    id_to_index = {}
     
     for i, video in enumerate(videos):
         youtube_id = video.get("youtube_id")
-        if not youtube_id:
-            continue  # Skip uploaded videos
+        if youtube_id:
+            # Only update if still has default duration
+            if video.get("duration", 300) == 300:
+                youtube_ids.append(youtube_id)
+                id_to_index[youtube_id] = i
+    
+    if not youtube_ids:
+        return {"updated": 0, "total_videos": len(videos), "message": "No videos need duration update"}
+    
+    # Use YouTube API if available, otherwise fall back to yt-dlp
+    updated_count = 0
+    errors = []
+    
+    if is_youtube_api_configured():
+        # Fast batch update using YouTube API
+        logger.info(f"Updating {len(youtube_ids)} videos using YouTube API")
+        video_info = await get_videos_info_batch(youtube_ids)
         
-        # Skip if already has a non-default duration
-        current_duration = video.get("duration", 300)
-        if current_duration != 300:
-            continue
-        
-        try:
-            # Use yt-dlp to get video info
-            cmd = [
-                YTDLP_PATH,
-                "--dump-json",
-                "--no-warnings",
-                f"https://www.youtube.com/watch?v={youtube_id}"
-            ]
-            
-            # Add cookies if available
-            cookies_file = ROOT_DIR / "cookies.txt"
-            if cookies_file.exists():
-                cmd.extend(["--cookies", str(cookies_file)])
-            
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-            
-            if result.returncode == 0 and result.stdout:
-                info = json.loads(result.stdout)
-                duration = int(info.get("duration", 300))
+        for youtube_id, info in video_info.items():
+            if youtube_id in id_to_index:
+                idx = id_to_index[youtube_id]
+                duration = info.get("duration", 0)
                 if duration > 0:
-                    videos[i]["duration"] = duration
+                    videos[idx]["duration"] = duration
+                    # Also update title and thumbnail if available
+                    if info.get("title"):
+                        videos[idx]["title"] = info["title"]
+                    if info.get("thumbnail"):
+                        videos[idx]["thumbnail"] = info["thumbnail"]
                     updated_count += 1
-                    logger.info(f"Updated duration for {video.get('title')}: {duration}s")
-            else:
-                errors.append(f"{video.get('title', youtube_id)}: yt-dlp failed")
+                    logger.info(f"Updated {info.get('title', youtube_id)}: {duration}s")
+        
+        # Check for videos not found in API response
+        for youtube_id in youtube_ids:
+            if youtube_id not in video_info:
+                errors.append(f"Video {youtube_id}: Not found or unavailable")
+    else:
+        # Fallback to yt-dlp (slower)
+        logger.info(f"YouTube API not configured, using yt-dlp for {len(youtube_ids)} videos")
+        for youtube_id in youtube_ids:
+            idx = id_to_index[youtube_id]
+            try:
+                cmd = [
+                    YTDLP_PATH,
+                    "--dump-json",
+                    "--no-warnings",
+                    f"https://www.youtube.com/watch?v={youtube_id}"
+                ]
                 
-        except subprocess.TimeoutExpired:
-            errors.append(f"{video.get('title', youtube_id)}: Timeout")
-        except json.JSONDecodeError:
-            errors.append(f"{video.get('title', youtube_id)}: Invalid response")
-        except Exception as e:
-            errors.append(f"{video.get('title', youtube_id)}: {str(e)}")
+                cookies_file = ROOT_DIR / "cookies.txt"
+                if cookies_file.exists():
+                    cmd.extend(["--cookies", str(cookies_file)])
+                
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+                
+                if result.returncode == 0 and result.stdout:
+                    info = json.loads(result.stdout)
+                    duration = int(info.get("duration", 300))
+                    if duration > 0:
+                        videos[idx]["duration"] = duration
+                        updated_count += 1
+                else:
+                    errors.append(f"Video {youtube_id}: yt-dlp failed")
+                    
+            except Exception as e:
+                errors.append(f"Video {youtube_id}: {str(e)}")
     
     # Save updated videos back to channel
     if updated_count > 0:
@@ -874,7 +905,9 @@ async def update_youtube_video_durations(channel_id: str, user: dict = Depends(r
     return {
         "updated": updated_count,
         "total_videos": len(videos),
-        "errors": errors[:10]  # Limit error messages
+        "needs_update": len(youtube_ids),
+        "method": "youtube_api" if is_youtube_api_configured() else "yt-dlp",
+        "errors": errors[:10]
     }
 
 # ===================== VIDEO CLEANUP ROUTES =====================
