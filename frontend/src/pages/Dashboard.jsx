@@ -372,6 +372,33 @@ const Dashboard = () => {
     }
   };
 
+  const updateUploadedDurations = async () => {
+    if (!window.confirm('This will detect actual durations for all uploaded videos from your drive using ffprobe. This may take a few minutes. Continue?')) {
+      return;
+    }
+    
+    setCleanupLoading(true);
+    toast.info('Detecting uploaded video durations via ffprobe...');
+    try {
+      const response = await videoCleanupAPI.updateUploadedDurations();
+      const { total_updated, total_errors, channels } = response.data;
+      if (total_updated > 0) {
+        const details = channels.map(c => `${c.channel}: ${c.updated}`).join(', ');
+        toast.success(`Updated ${total_updated} uploaded video durations! (${details})`);
+      } else {
+        toast.info('No uploaded videos need duration updates.');
+      }
+      if (total_errors > 0) {
+        toast.warning(`${total_errors} videos had errors.`);
+      }
+      loadData();
+    } catch (error) {
+      toast.error('Failed to update uploaded durations');
+    } finally {
+      setCleanupLoading(false);
+    }
+  };
+
   const regenerateSchedules = async () => {
     if (!window.confirm('This will regenerate schedules for all channels using current video durations. Continue?')) {
       return;
