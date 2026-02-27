@@ -807,6 +807,76 @@ async def update_single_video_duration(
     
     return {"message": f"Updated duration for video {video_index} to {duration}s"}
 
+@api_router.post("/channels/{channel_id}/update-youtube-durations")
+async def update_youtube_video_durations(channel_id: str, user: dict = Depends(require_user)):
+    """Update video durations for all YouTube videos in a channel using yt-dlp"""
+    if not user.get("is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    channel = await db.channels.find_one({"id": channel_id}, {"_id": 0})
+    if not channel:
+        raise HTTPException(status_code=404, detail="Channel not found")
+    
+    videos = channel.get("videos", [])
+    updated_count = 0
+    errors = []
+    
+    for i, video in enumerate(videos):
+        youtube_id = video.get("youtube_id")
+        if not youtube_id:
+            continue  # Skip uploaded videos
+        
+        # Skip if already has a non-default duration
+        current_duration = video.get("duration", 300)
+        if current_duration != 300:
+            continue
+        
+        try:
+            # Use yt-dlp to get video info
+            cmd = [
+                YTDLP_PATH,
+                "--dump-json",
+                "--no-warnings",
+                f"https://www.youtube.com/watch?v={youtube_id}"
+            ]
+            
+            # Add cookies if available
+            cookies_file = ROOT_DIR / "cookies.txt"
+            if cookies_file.exists():
+                cmd.extend(["--cookies", str(cookies_file)])
+            
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            
+            if result.returncode == 0 and result.stdout:
+                info = json.loads(result.stdout)
+                duration = int(info.get("duration", 300))
+                if duration > 0:
+                    videos[i]["duration"] = duration
+                    updated_count += 1
+                    logger.info(f"Updated duration for {video.get('title')}: {duration}s")
+            else:
+                errors.append(f"{video.get('title', youtube_id)}: yt-dlp failed")
+                
+        except subprocess.TimeoutExpired:
+            errors.append(f"{video.get('title', youtube_id)}: Timeout")
+        except json.JSONDecodeError:
+            errors.append(f"{video.get('title', youtube_id)}: Invalid response")
+        except Exception as e:
+            errors.append(f"{video.get('title', youtube_id)}: {str(e)}")
+    
+    # Save updated videos back to channel
+    if updated_count > 0:
+        await db.channels.update_one(
+            {"id": channel_id},
+            {"$set": {"videos": videos}}
+        )
+    
+    return {
+        "updated": updated_count,
+        "total_videos": len(videos),
+        "errors": errors[:10]  # Limit error messages
+    }
+
 # ===================== VIDEO CLEANUP ROUTES =====================
 import httpx
 
