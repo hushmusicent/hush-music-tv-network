@@ -2391,16 +2391,23 @@ async def health():
 class ViewEvent(BaseModel):
     channel_id: str
     viewer_id: str  # Anonymous viewer ID (from frontend)
+    video_id: Optional[str] = None  # Video being watched
+    video_title: Optional[str] = None
+    event_type: str = "view"  # view, skip, complete
 
 @api_router.post("/analytics/view")
 async def record_view(event: ViewEvent):
-    """Record a channel view event"""
+    """Record a channel view/skip/complete event"""
     now = datetime.now(timezone.utc)
     view_doc = {
         "id": str(uuid.uuid4()),
         "channel_id": event.channel_id,
         "viewer_id": event.viewer_id,
-        "timestamp": now.isoformat()
+        "video_id": event.video_id,
+        "video_title": event.video_title,
+        "event_type": event.event_type,
+        "timestamp": now.isoformat(),
+        "hour": now.hour,
     }
     await db.views.insert_one(view_doc)
     return {"status": "recorded"}
