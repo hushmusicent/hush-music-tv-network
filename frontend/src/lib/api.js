@@ -160,6 +160,9 @@ export const videoCleanupAPI = {
   
   // Regenerate all schedules (use after updating durations)
   regenerateSchedules: () => api.post('/schedules/regenerate-all'),
+  
+  // Update durations for all uploaded (R2) videos using ffprobe
+  updateUploadedDurations: () => api.post('/channels/update-all-uploaded-durations'),
 };
 
 // YouTube Proxy API (for age-restricted videos)
