@@ -509,6 +509,7 @@ const LiveTV = () => {
   // Play next video in playlist (called when current video ends)
   const playNextVideo = useCallback(() => {
     if (!currentChannel) return;
+    trackVideoEvent('complete');  // Track video completion
     
     // For scheduled channels, find next slot in schedule
     if (schedules[currentChannel.id]) {
