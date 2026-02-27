@@ -1447,9 +1447,12 @@ def get_video_info_with_ytdlp(youtube_id: str, use_cookies: bool = True) -> dict
         f"https://www.youtube.com/watch?v={youtube_id}"
     ]
     
-    # Add cookies if available and requested
-    if use_cookies and COOKIES_FILE.exists():
-        cmd.extend(["--cookies", str(COOKIES_FILE)])
+    # Add cookies if available, valid, and requested
+    if use_cookies and is_cookies_file_valid():
+        try:
+            cmd.extend(["--cookies", str(COOKIES_FILE)])
+        except Exception as e:
+            logger.warning(f"Error adding cookies to command: {e}")
     
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
