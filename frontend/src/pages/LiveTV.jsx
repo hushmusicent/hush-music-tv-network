@@ -1451,7 +1451,7 @@ const LiveTV = () => {
           </div>
         </div>
 
-        {currentChannel && upcomingVideos.length > 0 && (
+        {currentChannel && upcomingVideos.length > 0 && !isCurrentChannelLiveStream && (
           <div className="bg-[#0a0a0f] border-t border-white/10 p-3">
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2 text-xs text-gray-400 shrink-0">
