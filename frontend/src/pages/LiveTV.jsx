@@ -756,6 +756,8 @@ const LiveTV = () => {
             // Error 101 = video owner doesn't allow embed
             if (event.data === 150 || event.data === 101) {
               console.log('Age-restricted or embed-blocked, trying proxy...');
+              // Show a brief message
+              toast.info(`Skipping unavailable video: ${currentVideo?.title?.substring(0, 30)}...`);
               tryProxyFallback();
             } else {
               skipToNextVideo();
