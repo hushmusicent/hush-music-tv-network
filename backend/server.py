@@ -898,7 +898,10 @@ async def update_youtube_video_durations(channel_id: str, user: dict = Depends(r
                 
                 cookies_file = ROOT_DIR / "cookies.txt"
                 if cookies_file.exists():
-                    cmd.extend(["--cookies", str(cookies_file)])
+                    try:
+                        cmd.extend(["--cookies", str(cookies_file)])
+                    except Exception as e:
+                        logger.warning(f"Error adding cookies: {e}")
                 
                 result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
                 
