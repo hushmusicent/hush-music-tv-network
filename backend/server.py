@@ -2342,6 +2342,22 @@ async def get_live_schedules():
     
     schedules = []
     for channel in channels:
+        # Live stream channels don't need videos/schedules
+        if channel.get("is_live_stream") and channel.get("live_stream_youtube_id"):
+            schedules.append({
+                "channel_id": channel.get("id", ""),
+                "channel_name": channel.get("name", ""),
+                "channel_thumbnail": channel.get("thumbnail"),
+                "schedule_date": today,
+                "videos": [],
+                "total_duration": 0,
+                "unique_video_count": 0,
+                "use_schedule": False,
+                "is_live_stream": True,
+                "live_stream_youtube_id": channel.get("live_stream_youtube_id"),
+            })
+            continue
+        
         if not channel.get("videos"):
             continue
         
