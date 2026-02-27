@@ -551,7 +551,7 @@ import subprocess
 import tempfile
 
 def get_video_duration(file_path: str) -> int:
-    """Extract video duration using ffprobe"""
+    """Extract video duration using ffprobe - supports both local files and URLs"""
     try:
         result = subprocess.run(
             ['ffprobe', '-v', 'error', '-show_entries', 'format=duration', 
