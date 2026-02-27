@@ -831,14 +831,13 @@ async def update_all_uploaded_durations(user: dict = Depends(require_user)):
     results = {}
     
     with ThreadPoolExecutor(max_workers=10) as executor:
-        futures = {
-            loop.run_in_executor(executor, get_video_duration, url): (ci, vi, title)
-            for ci, vi, url, title in video_tasks
-        }
-        for future in asyncio.as_completed(futures):
-            ci, vi, title = futures[future]
+        future_map = {}
+        for ci, vi, url, title in video_tasks:
+            f = loop.run_in_executor(executor, get_video_duration, url)
+            future_map[(ci, vi, title)] = f
+        for (ci, vi, title), f in future_map.items():
             try:
-                duration = await future
+                duration = await f
                 if duration > 0 and duration != 300:
                     results[(ci, vi)] = duration
             except Exception as e:
