@@ -520,6 +520,24 @@ from r2_service import (
     test_r2_connection
 )
 
+import subprocess
+import tempfile
+
+def get_video_duration(file_path: str) -> int:
+    """Extract video duration using ffprobe"""
+    try:
+        result = subprocess.run(
+            ['ffprobe', '-v', 'error', '-show_entries', 'format=duration', 
+             '-of', 'default=noprint_wrappers=1:nokey=1', file_path],
+            capture_output=True, text=True, timeout=30
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            duration = float(result.stdout.strip())
+            return int(duration)
+    except Exception as e:
+        logger.warning(f"Failed to get video duration: {e}")
+    return 300  # Default 5 minutes
+
 class UploadedVideoResponse(BaseModel):
     id: str
     filename: str
