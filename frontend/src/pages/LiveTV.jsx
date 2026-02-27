@@ -1138,7 +1138,11 @@ const LiveTV = () => {
                   <div className="flex-1 text-left min-w-0">
                     <p className="font-medium text-sm truncate">{channel.name}</p>
                     <p className="text-xs text-gray-500">
-                      {channel.videoCount} videos
+                      {channel.is_live_stream ? (
+                        <span className="text-red-400 font-medium">LIVE STREAM</span>
+                      ) : (
+                        `${channel.videoCount} videos`
+                      )}
                     </p>
                   </div>
                   <span className="text-xs text-gray-600">{index + 1}</span>
