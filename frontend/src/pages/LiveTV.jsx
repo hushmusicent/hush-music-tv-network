@@ -735,8 +735,9 @@ const LiveTV = () => {
               errorTimeout = null;
             }
             
-            // Get actual video info from YouTube player
-            try {
+            // Get actual video info from YouTube player (skip for live streams)
+            if (!isLive) {
+              try {
               const actualDuration = Math.floor(event.target.getDuration());
               const videoData = event.target.getVideoData();
               const actualTitle = videoData?.title;
