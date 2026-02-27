@@ -65,6 +65,19 @@ const Analytics = () => {
     }
   };
 
+  const loadChannelDetail = async (channelId, channelName) => {
+    setSelectedChannel({ id: channelId, name: channelName });
+    setDetailLoading(true);
+    try {
+      const response = await analyticsAPI.getChannelStats(channelId);
+      setChannelDetail(response.data);
+    } catch (error) {
+      console.error('Failed to load channel analytics:', error);
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
   // Show loading while auth is being checked or user data is loading
   if (authLoading || !user || loading) {
     return (
