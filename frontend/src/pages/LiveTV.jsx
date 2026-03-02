@@ -213,6 +213,8 @@ const LiveTV = () => {
   const channelInputTimeoutRef = useRef(null);
   const osdTimeoutRef = useRef(null);
   const playPauseOsdTimeoutRef = useRef(null);
+  const seekTimeRef = useRef(0);
+  const isMutedRef = useRef(false);
 
   // Auto-hide controls after inactivity
   const CONTROLS_HIDE_DELAY = 3000;
@@ -224,6 +226,10 @@ const LiveTV = () => {
       setControlsVisible(true);
     }
   }, [isPaused]);
+
+  // Keep refs in sync with state - these run before player effects
+  useEffect(() => { seekTimeRef.current = seekTime; }, [seekTime]);
+  useEffect(() => { isMutedRef.current = isMuted; }, [isMuted]);
 
   useEffect(() => {
     let hideTimeout = null;
@@ -740,7 +746,7 @@ const LiveTV = () => {
         playerVars: {
           autoplay: 1,
           controls: 0,
-          start: isLive ? undefined : Math.floor(seekTime),
+          start: isLive ? undefined : Math.floor(seekTimeRef.current),
           modestbranding: 1,
           rel: 0,
           fs: 0,
@@ -754,9 +760,9 @@ const LiveTV = () => {
         },
         events: {
           onReady: (event) => {
-            if (isMuted) event.target.mute();
+            if (isMutedRef.current) event.target.mute();
             if (!isLive) {
-              event.target.seekTo(seekTime, true);
+              event.target.seekTo(seekTimeRef.current, true);
             }
             event.target.playVideo();
             setIsPaused(false);
@@ -866,7 +872,7 @@ const LiveTV = () => {
       if (ageRestrictionFallbackTimeout) clearTimeout(ageRestrictionFallbackTimeout);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentVideo?.youtube_id, currentVideo?.video_id, seekTime, isMuted, isUploadedVideo]);
+  }, [currentVideo?.youtube_id, currentVideo?.video_id, isUploadedVideo]);
 
   // Handle uploaded video playback
   useEffect(() => {
@@ -876,7 +882,7 @@ const LiveTV = () => {
     
     // Wait for video to be ready before attempting to play
     const handleCanPlay = () => {
-      video.currentTime = seekTime;
+      video.currentTime = seekTimeRef.current;
       const playPromise = video.play();
       if (playPromise !== undefined) {
         playPromise
@@ -903,7 +909,7 @@ const LiveTV = () => {
       video.removeEventListener('canplay', handleCanPlay);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentVideo?.video_id, currentVideo?.video_url, seekTime, isUploadedVideo]);
+  }, [currentVideo?.video_id, currentVideo?.video_url, isUploadedVideo]);
 
   const toggleMute = () => {
     setIsMuted(!isMuted);
