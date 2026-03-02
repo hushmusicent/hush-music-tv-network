@@ -57,7 +57,7 @@ Build a TV network app named "Hush Music TV Network" with admin-only channel/vid
 - Schedule Editor with auto-generation and save
 - Data migration from production environment
 - YouTube Live Stream channel support (is_live_stream flag)
-- Schedule time parsing fix (HH:MM:SS string to seconds)
+- Schedule time parsing fix (backend HH:MM:SS vs frontend numeric seconds)
 - PWA support
 - Admin credentials: hushmusicent419@gmail.com / $Stisdd419
 
@@ -78,15 +78,22 @@ Build a TV network app named "Hush Music TV Network" with admin-only channel/vid
 - Fixed EmbedNetwork to include live stream channels
 - Hardened video reorder endpoint (ignores invalid IDs instead of rejecting entire request)
 - Verified Analytics page works with real data (119 views, 22 channels tracked)
-- **NEW: Per-Channel Analytics** - Click any channel in analytics to see detailed view:
+- **Per-Channel Analytics** - Click any channel in analytics to see detailed view:
   - 7-day views, unique/new/returning viewers breakdown
   - Peak hours heatmap (24h bar chart with tooltips)
   - Daily views timeline (7-day trend)
   - Most watched videos and most skipped videos tables
   - Enhanced event tracking in LiveTV (video start/skip/complete events with video info)
 
+## Completed (Mar 2, 2026)
+- **FIXED P0 Critical Playback Bug**: Videos were restarting every 5 seconds due to React re-render loop
+  - Root cause: `seekTime` and `isMuted` state variables in useEffect dependency arrays caused YouTube player to be destroyed/recreated on every state change
+  - Fix: Replaced with refs (`seekTimeRef`, `isMutedRef`) so player effects only re-run when actual video changes (`youtube_id`/`video_id`)
+  - Verified: Mute toggle no longer restarts video, 10-15 second stability tests pass, all channel types working
+
 ## Prioritized Backlog
 ### P3
 - yt-dlp: True geo-restrictions from datacenter IPs need residential proxy (paid service)
 - Refactor server.py into separate routers (2900+ lines)
-- Refactor LiveTV.jsx into smaller components
+- Refactor LiveTV.jsx into smaller components/hooks
+- Clean up missing R2 videos from database (some uploaded videos return 404)
