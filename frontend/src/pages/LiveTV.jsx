@@ -270,7 +270,11 @@ const LiveTV = () => {
   }, []);
 
   // Load channels and playlists on mount, set session start time
+  const hasInitialized = useRef(false);
   useEffect(() => {
+    if (hasInitialized.current) return;
+    hasInitialized.current = true;
+    
     const startTime = Date.now();
     setSessionStartTime(startTime);
     loadChannelsAndPlaylists();
@@ -656,9 +660,20 @@ const LiveTV = () => {
     }
   }, []);
 
+  // Store callbacks in refs to avoid triggering useEffect
+  const skipToNextVideoRef = useRef(skipToNextVideo);
+  const playNextVideoRef = useRef(playNextVideo);
+  const checkAndGetProxyUrlRef = useRef(checkAndGetProxyUrl);
+  const trackVideoEventRef = useRef(trackVideoEvent);
+  useEffect(() => { skipToNextVideoRef.current = skipToNextVideo; }, [skipToNextVideo]);
+  useEffect(() => { playNextVideoRef.current = playNextVideo; }, [playNextVideo]);
+  useEffect(() => { checkAndGetProxyUrlRef.current = checkAndGetProxyUrl; }, [checkAndGetProxyUrl]);
+  useEffect(() => { trackVideoEventRef.current = trackVideoEvent; }, [trackVideoEvent]);
+
   // Initialize YouTube player when video changes
   useEffect(() => {
-    if (!currentVideo?.youtube_id || isUploadedVideo) return;
+    const videoId = currentVideo?.youtube_id;
+    if (!videoId || isUploadedVideo) return;
     
     // Reset proxy state
     setUseProxyPlayer(false);
@@ -687,7 +702,7 @@ const LiveTV = () => {
       console.log('Trying proxy fallback for age-restricted video...');
       
       try {
-        const proxyUrl = await checkAndGetProxyUrl(currentVideo.youtube_id);
+        const proxyUrl = await checkAndGetProxyUrlRef.current(currentVideo.youtube_id);
         if (proxyUrl) {
           console.log('Got proxy URL, switching to proxy player');
           setProxyVideoUrl(proxyUrl);
@@ -696,12 +711,12 @@ const LiveTV = () => {
         } else {
           console.log('Proxy unavailable, skipping to next video');
           toast.info(`Skipping: ${currentVideo?.title?.substring(0, 25)}...`, { duration: 2000 });
-          skipToNextVideo();
+          skipToNextVideoRef.current();
         }
       } catch (e) {
         console.error('Proxy fallback failed:', e);
         toast.info(`Skipping unavailable video`, { duration: 2000 });
-        skipToNextVideo();
+        skipToNextVideoRef.current();
       }
     };
     
@@ -755,52 +770,15 @@ const LiveTV = () => {
             if (!isLive) {
               try {
                 const actualDuration = Math.floor(event.target.getDuration());
-                const videoData = event.target.getVideoData();
-                const actualTitle = videoData?.title;
                 
-                // Update local state with actual title if it's different and not generic
-                if (actualTitle && currentVideo && actualTitle !== currentVideo.title) {
-                  // Check if current title is generic (like "Video 123")
-                  const isGenericTitle = /^Video \d+$/i.test(currentVideo.title);
-                  
-                  if (isGenericTitle) {
-                    console.log(`Updating video title: "${currentVideo.title}" -> "${actualTitle}"`);
-                    
-                    // Update local state immediately for display
-                    setCurrentVideo(prev => prev ? { ...prev, title: actualTitle } : prev);
-                    
-                    // Update in playlists state too
-                    setPlaylists(prev => {
-                      const updated = { ...prev };
-                      if (currentChannel && updated[currentChannel.id]) {
-                        updated[currentChannel.id] = updated[currentChannel.id].map(v => 
-                          v.youtube_id === currentVideo.youtube_id ? { ...v, title: actualTitle } : v
-                      );
-                    }
-                    return updated;
-                  });
-                  
-                  // Save to backend if admin
-                  if (isAdmin && currentChannel && currentVideo?.video_id) {
-                    channelsAPI.updateVideo(currentChannel.id, currentVideo.video_id, { title: actualTitle })
-                      .then(() => console.log('Saved video title to database'))
-                      .catch(() => {});
-                  }
+                // Report actual duration to backend for self-healing (doesn't trigger re-render)
+                if (actualDuration > 0 && currentVideo?.youtube_id) {
+                  videoCleanupAPI.updateSingleDuration(
+                    currentChannel?.id, 
+                    currentVideo.youtube_id, 
+                    actualDuration
+                  ).catch(() => {});
                 }
-              }
-              
-              // Report actual duration to backend for self-healing
-              if (actualDuration > 0 && currentChannel && currentVideo?.youtube_id) {
-                videoCleanupAPI.updateSingleDuration(
-                  currentChannel.id, 
-                  currentVideo.youtube_id, 
-                  actualDuration
-                ).then(res => {
-                  if (res.data.updated) {
-                    console.log(`Updated video duration: ${actualDuration}s`);
-                  }
-                }).catch(() => {});
-              }
             } catch (e) {
               console.error('Error getting video info:', e);
             }
@@ -834,7 +812,7 @@ const LiveTV = () => {
               if (!isLive) {
                 console.log('Video ended naturally');
                 setIsPaused(false);
-                playNextVideo();
+                playNextVideoRef.current();
               }
             }
           },
@@ -850,11 +828,14 @@ const LiveTV = () => {
               // Strategy 1: Retry with regular youtube.com host (some videos work there but not on nocookie)
               console.log('Retrying embed with youtube.com host...');
               retryAttempt = 1;
+              // Clear ALL timeouts before retry
+              if (errorTimeout) { clearTimeout(errorTimeout); errorTimeout = null; }
+              if (playbackCheckTimeout) { clearTimeout(playbackCheckTimeout); playbackCheckTimeout = null; }
+              if (ageRestrictionFallbackTimeout) { clearTimeout(ageRestrictionFallbackTimeout); ageRestrictionFallbackTimeout = null; }
               if (youtubePlayerRef.current) {
                 try { youtubePlayerRef.current.destroy(); } catch (e) {}
                 youtubePlayerRef.current = null;
               }
-              if (errorTimeout) { clearTimeout(errorTimeout); errorTimeout = null; }
               createPlayer('https://www.youtube.com');
             } else if (event.data === 150 || event.data === 101) {
               // Both embed hosts failed, try yt-dlp proxy
@@ -862,7 +843,7 @@ const LiveTV = () => {
               toast.info(`Trying proxy: ${currentVideo?.title?.substring(0, 30)}...`);
               tryProxyFallback();
             } else {
-              skipToNextVideo();
+              skipToNextVideoRef.current();
             }
           }
         }
@@ -884,7 +865,8 @@ const LiveTV = () => {
       if (playbackCheckTimeout) clearTimeout(playbackCheckTimeout);
       if (ageRestrictionFallbackTimeout) clearTimeout(ageRestrictionFallbackTimeout);
     };
-  }, [currentVideo, seekTime, isMuted, isUploadedVideo, skipToNextVideo, playNextVideo, currentChannel, checkAndGetProxyUrl]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentVideo?.youtube_id, currentVideo?.video_id, seekTime, isMuted, isUploadedVideo]);
 
   // Handle uploaded video playback
   useEffect(() => {
@@ -895,7 +877,6 @@ const LiveTV = () => {
     // Wait for video to be ready before attempting to play
     const handleCanPlay = () => {
       video.currentTime = seekTime;
-      // Use a promise chain to avoid interruption errors
       const playPromise = video.play();
       if (playPromise !== undefined) {
         playPromise
@@ -903,7 +884,6 @@ const LiveTV = () => {
             setIsPaused(false);
           })
           .catch(e => {
-            // Only log if it's not an abort error (which happens during normal navigation)
             if (e.name !== 'AbortError') {
               console.log('Autoplay blocked:', e);
             }
@@ -915,16 +895,15 @@ const LiveTV = () => {
     if (video.readyState >= 3) {
       handleCanPlay();
     } else {
-      // Otherwise wait for canplay event
       video.addEventListener('canplay', handleCanPlay, { once: true });
-      // Also try to load the video
       video.load();
     }
     
     return () => {
       video.removeEventListener('canplay', handleCanPlay);
     };
-  }, [currentVideo, seekTime, isUploadedVideo]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentVideo?.video_id, currentVideo?.video_url, seekTime, isUploadedVideo]);
 
   const toggleMute = () => {
     setIsMuted(!isMuted);
@@ -1272,7 +1251,6 @@ const LiveTV = () => {
 
           {isUploadedVideo && currentVideo && (
             <div className="relative w-full h-full">
-              {console.log('Rendering uploaded video:', currentVideo?.title, 'URL:', currentVideo?.video_url)}
               <video
                 ref={videoRef}
                 src={
