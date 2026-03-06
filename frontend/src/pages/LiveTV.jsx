@@ -702,10 +702,10 @@ const LiveTV = () => {
     const tryProxyFallback = async () => {
       // Don't try proxy for live streams
       if (isLive) {
-        toast.info('Live stream unavailable');
+        skipToNextVideoRef.current();
         return;
       }
-      console.log('Trying proxy fallback for age-restricted video...');
+      console.log('Trying proxy fallback...');
       
       try {
         const proxyUrl = await checkAndGetProxyUrlRef.current(currentVideo.youtube_id);
@@ -713,15 +713,12 @@ const LiveTV = () => {
           console.log('Got proxy URL, switching to proxy player');
           setProxyVideoUrl(proxyUrl);
           setUseProxyPlayer(true);
-          toast.success('Playing via proxy');
         } else {
-          console.log('Proxy unavailable, skipping to next video');
-          toast.info(`Skipping: ${currentVideo?.title?.substring(0, 25)}...`, { duration: 2000 });
+          console.log('Proxy unavailable, skipping');
           skipToNextVideoRef.current();
         }
       } catch (e) {
         console.error('Proxy fallback failed:', e);
-        toast.info(`Skipping unavailable video`, { duration: 2000 });
         skipToNextVideoRef.current();
       }
     };
@@ -793,11 +790,11 @@ const LiveTV = () => {
                 try {
                   const state = youtubePlayerRef.current?.getPlayerState();
                   if (state === -1 || state === 5) {
-                    console.log('Video not playing after 5s, trying proxy...');
+                    console.log('Video not playing after 12s, trying proxy...');
                     tryProxyFallback();
                   }
                 } catch (e) {}
-              }, 5000);
+              }, 12000);
             } // end if (!isLive)
           },
           onStateChange: (event) => {
@@ -827,7 +824,7 @@ const LiveTV = () => {
             // Error 150 = video unavailable/age-restricted in embed
             // Error 101 = video owner doesn't allow embed
             if (isLive) {
-              toast.error('Live stream unavailable');
+              skipToNextVideoRef.current();
               return;
             }
             if ((event.data === 150 || event.data === 101) && retryAttempt === 0) {
@@ -844,9 +841,8 @@ const LiveTV = () => {
               }
               createPlayer('https://www.youtube.com');
             } else if (event.data === 150 || event.data === 101) {
-              // Both embed hosts failed, try yt-dlp proxy
+              // Both embed hosts failed, try yt-dlp proxy silently
               console.log('Both embed hosts failed, trying proxy fallback...');
-              toast.info(`Trying proxy: ${currentVideo?.title?.substring(0, 30)}...`);
               tryProxyFallback();
             } else {
               skipToNextVideoRef.current();
@@ -1224,7 +1220,6 @@ const LiveTV = () => {
                 onEnded={playNextVideo}
                 onError={() => {
                   console.error('Proxy video error');
-                  toast.error('Failed to play via proxy');
                   skipToNextVideo();
                 }}
                 onPlay={() => setIsPaused(false)}
