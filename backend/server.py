@@ -1001,6 +1001,157 @@ async def update_youtube_video_durations(channel_id: str, user: dict = Depends(r
         "errors": errors[:10]
     }
 
+@api_router.post("/admin/fix-all-video-metadata")
+async def fix_all_video_metadata(user: dict = Depends(require_user)):
+    """
+    Fix titles and durations for ALL videos across ALL channels.
+    - YouTube videos: fetch real title + duration from YouTube Data API
+    - Uploaded R2 videos: fetch real duration via ffprobe
+    Targets videos with default duration (300s) OR generic titles (e.g. 'Video 1')
+    """
+    if not user.get("is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    import asyncio
+    import re
+    from concurrent.futures import ThreadPoolExecutor
+    
+    channels = await db.channels.find({}, {"_id": 0}).to_list(None)
+    
+    def is_generic_title(title):
+        """Check if title is a generic placeholder like 'Video 1', 'Video 102'"""
+        if not title:
+            return True
+        return bool(re.match(r'^Video \d+$', title.strip()))
+    
+    # Phase 1: Collect all YouTube videos needing updates
+    yt_needs_update = {}  # youtube_id -> [(channel_idx, video_idx)]
+    for ci, channel in enumerate(channels):
+        for vi, video in enumerate(channel.get("videos", [])):
+            yt_id = video.get("youtube_id")
+            if not yt_id:
+                continue
+            needs_dur = video.get("duration", 300) == 300
+            needs_title = is_generic_title(video.get("title", ""))
+            if needs_dur or needs_title:
+                if yt_id not in yt_needs_update:
+                    yt_needs_update[yt_id] = []
+                yt_needs_update[yt_id].append((ci, vi))
+    
+    # Phase 2: Collect all uploaded videos needing duration fix
+    uploaded_tasks = []  # (channel_idx, video_idx, video_url)
+    for ci, channel in enumerate(channels):
+        for vi, video in enumerate(channel.get("videos", [])):
+            video_url = video.get("video_url")
+            if not video_url or not video_url.startswith("http"):
+                continue
+            if video.get("duration", 300) == 300:
+                uploaded_tasks.append((ci, vi, video_url))
+    
+    logger.info(f"Fix metadata: {len(yt_needs_update)} unique YT videos, {len(uploaded_tasks)} uploaded videos")
+    
+    yt_updated = 0
+    yt_title_updated = 0
+    yt_dur_updated = 0
+    uploaded_updated = 0
+    errors = []
+    
+    # Phase 3: Fetch YouTube video info in batches
+    if yt_needs_update and is_youtube_api_configured():
+        all_yt_ids = list(yt_needs_update.keys())
+        logger.info(f"Fetching info for {len(all_yt_ids)} YouTube videos via API")
+        
+        video_info = await get_videos_info_batch(all_yt_ids)
+        
+        for yt_id, info in video_info.items():
+            if yt_id not in yt_needs_update:
+                continue
+            for ci, vi in yt_needs_update[yt_id]:
+                video = channels[ci]["videos"][vi]
+                changed = False
+                
+                # Update duration if it was default
+                duration = info.get("duration", 0)
+                if duration > 0 and video.get("duration", 300) == 300:
+                    channels[ci]["videos"][vi]["duration"] = duration
+                    yt_dur_updated += 1
+                    changed = True
+                
+                # Update title if it was generic
+                title = info.get("title", "")
+                if title and is_generic_title(video.get("title", "")):
+                    channels[ci]["videos"][vi]["title"] = title
+                    yt_title_updated += 1
+                    changed = True
+                
+                # Update thumbnail if available
+                thumbnail = info.get("thumbnail", "")
+                if thumbnail and not video.get("thumbnail"):
+                    channels[ci]["videos"][vi]["thumbnail"] = thumbnail
+                    changed = True
+                
+                if changed:
+                    yt_updated += 1
+        
+        not_found = [yt_id for yt_id in all_yt_ids if yt_id not in video_info]
+        if not_found:
+            errors.append(f"{len(not_found)} YouTube videos not found/unavailable")
+    elif yt_needs_update:
+        errors.append("YouTube API key not configured")
+    
+    # Phase 4: Fetch uploaded video durations via ffprobe (parallel)
+    if uploaded_tasks:
+        logger.info(f"Fetching durations for {len(uploaded_tasks)} uploaded videos via ffprobe")
+        loop = asyncio.get_event_loop()
+        
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            future_map = {}
+            for ci, vi, url in uploaded_tasks:
+                f = loop.run_in_executor(executor, get_video_duration, url)
+                future_map[(ci, vi)] = f
+            for (ci, vi), f in future_map.items():
+                try:
+                    duration = await f
+                    if duration > 0 and duration != 300:
+                        channels[ci]["videos"][vi]["duration"] = duration
+                        uploaded_updated += 1
+                except Exception as e:
+                    title = channels[ci]["videos"][vi].get("title", "Unknown")
+                    errors.append(f"ffprobe failed: {title}")
+    
+    # Phase 5: Save all updated channels
+    updated_channel_ids = set()
+    for ci, vi in [(ci, vi) for yt_id, locs in yt_needs_update.items() for ci, vi in locs]:
+        updated_channel_ids.add(ci)
+    for ci, vi, _ in uploaded_tasks:
+        updated_channel_ids.add(ci)
+    
+    saved = 0
+    for ci in updated_channel_ids:
+        channel = channels[ci]
+        await db.channels.update_one(
+            {"id": channel["id"]},
+            {"$set": {"videos": channel["videos"]}}
+        )
+        saved += 1
+    
+    total_updated = yt_updated + uploaded_updated
+    
+    return {
+        "total_updated": total_updated,
+        "youtube": {
+            "titles_updated": yt_title_updated,
+            "durations_updated": yt_dur_updated,
+            "total_fixed": yt_updated,
+        },
+        "uploaded": {
+            "durations_updated": uploaded_updated,
+        },
+        "channels_saved": saved,
+        "errors": errors[:20],
+    }
+
+
 # ===================== VIDEO CLEANUP ROUTES =====================
 import httpx
 

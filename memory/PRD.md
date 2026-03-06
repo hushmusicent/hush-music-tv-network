@@ -26,15 +26,15 @@ Build a TV network app named "Hush Music TV Network" with admin-only channel/vid
 ```
 /app/
 ├── backend/
-│   ├── server.py        # Monolithic FastAPI app (2700+ lines)
+│   ├── server.py        # Monolithic FastAPI app
 │   ├── r2_service.py    # Cloudflare R2 service
 │   ├── youtube_api.py   # YouTube Data API service
-│   └── .env             # All credentials
+│   └── .env
 ├── frontend/
 │   └── src/
 │       ├── pages/
-│       │   ├── LiveTV.jsx        # Main Live TV experience
-│       │   ├── Dashboard.jsx     # Admin dashboard
+│       │   ├── LiveTV.jsx
+│       │   ├── Dashboard.jsx
 │       │   ├── ScheduleEditor.jsx
 │       │   └── ...
 │       └── lib/api.js
@@ -48,27 +48,34 @@ Build a TV network app named "Hush Music TV Network" with admin-only channel/vid
 - **video_object**: `{ id, videoId, title, duration, youtube_id?, video_url?, thumbnail }`
 - Admin credentials: hushmusicent419@gmail.com / $Stisdd419
 
+## Key API Endpoints
+- `POST /api/admin/fix-all-video-metadata` - Fix titles & durations for ALL videos (YT API + ffprobe)
+- `POST /api/schedules/regenerate-all` - Regenerate all 24h schedules
+- `POST /api/admin/health-check/{channel_id}` - Check video playability
+- `POST /api/channels/update-all-uploaded-durations` - Fix uploaded video durations
+
 ## Completed (Feb 27, 2026)
-- Fixed schedule time parsing bug (backend HH:MM:SS vs frontend numeric seconds)
+- Fixed schedule time parsing bug
 - Added YouTube Live Stream channel support
 - Fixed uploaded video durations (127 drive-uploaded videos)
 - Implemented yt-dlp geo-restricted video handling (3 strategies)
-- Fixed embed player for R2 videos and live stream channels
-- Per-Channel Analytics with peak hours, daily views, most-watched videos
+- Per-Channel Analytics
 
 ## Completed (Mar 2, 2026)
-- **FIXED P0 Critical Playback Bug**: Videos restarting every 5 seconds due to React re-render loop
-  - Root cause: `seekTime` and `isMuted` state in useEffect dependency arrays
-  - Fix: Replaced with refs (`seekTimeRef`, `isMutedRef`)
+- FIXED P0 Critical Playback Bug (React re-render loop)
 
 ## Completed (Mar 6, 2026)
-- **Full Data Migration**: Synced 43 channels and 2,535 videos (273 uploaded) from production (broadcaster.emergent.host)
-- **Silent Video Skipping**: Removed all alarming proxy/error toast messages - videos now skip silently when unavailable
-- **Increased Playback Check Timeout**: From 5s to 12s to reduce false proxy attempts
+- Full Data Migration: 43 channels, 2,535 videos (273 uploaded) from production
+- Silent Video Skipping: Removed all alarming proxy/error toast messages
+- Increased Playback Check Timeout from 5s to 12s
+- **Fixed ALL video metadata**: 824 YouTube titles updated (from generic "Video 1" to real titles), 391+1 YouTube durations fixed, 86 uploaded video durations fixed via ffprobe
+- New endpoint: `POST /api/admin/fix-all-video-metadata` for bulk metadata repair
+- Regenerated all 43 schedules with corrected durations
+- Final status: 2,535 videos, only 14 with default duration (11 are 24/7 live streams = expected)
 
 ## Prioritized Backlog
 ### P3
-- yt-dlp: True geo-restrictions from datacenter IPs need residential proxy (paid service)
-- Refactor server.py into separate routers (2900+ lines)
+- Refactor server.py into separate routers
 - Refactor LiveTV.jsx into smaller components/hooks
-- Clean up missing R2 videos from database (some uploaded videos return 404)
+- Clean up missing R2 videos from database
+- yt-dlp residential proxy for true geo-restrictions
