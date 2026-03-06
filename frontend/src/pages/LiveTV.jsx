@@ -200,6 +200,7 @@ const LiveTV = () => {
   const [showPlayPauseOSD, setShowPlayPauseOSD] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
+  const [isBuffering, setIsBuffering] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
   const [failedVideoIds, setFailedVideoIds] = useState(new Set());
   const [sessionStartTime, setSessionStartTime] = useState(null); // When user started watching
@@ -876,9 +877,18 @@ const LiveTV = () => {
     
     const video = videoRef.current;
     
-    // Wait for video to be ready before attempting to play
+    // Wait for video metadata to be ready before seeking
+    const handleMetadataLoaded = () => {
+      const seek = seekTimeRef.current;
+      // For uploaded videos, only seek if very close to the start
+      // Large seeks on fragmented MP4 files are slow - better to start from beginning
+      if (seek > 0 && seek < 30) {
+        video.currentTime = seek;
+      }
+      // For larger seek values, just start from beginning for instant playback
+    };
+    
     const handleCanPlay = () => {
-      video.currentTime = seekTimeRef.current;
       const playPromise = video.play();
       if (playPromise !== undefined) {
         playPromise
@@ -893,15 +903,21 @@ const LiveTV = () => {
       }
     };
     
-    // If video is already ready, play immediately
+    // If video is already loaded enough, play immediately
+    if (video.readyState >= 2) {
+      handleMetadataLoaded();
+    } else {
+      video.addEventListener('loadedmetadata', handleMetadataLoaded, { once: true });
+    }
+    
     if (video.readyState >= 3) {
       handleCanPlay();
     } else {
       video.addEventListener('canplay', handleCanPlay, { once: true });
-      video.load();
     }
     
     return () => {
+      video.removeEventListener('loadedmetadata', handleMetadataLoaded);
       video.removeEventListener('canplay', handleCanPlay);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1262,6 +1278,7 @@ const LiveTV = () => {
                       : null
                 }
                 className="w-full h-full object-contain"
+                preload="auto"
                 autoPlay
                 muted={isMuted}
                 playsInline
@@ -1279,7 +1296,14 @@ const LiveTV = () => {
                   }
                 }}
                 onCanPlay={() => console.log('Video can play')}
+                onWaiting={() => setIsBuffering(true)}
+                onPlaying={() => setIsBuffering(false)}
               />
+              {isBuffering && (
+                <div className="absolute inset-0 flex items-center justify-center z-5 pointer-events-none">
+                  <div className="w-12 h-12 border-4 border-white/30 border-t-white rounded-full animate-spin" />
+                </div>
+              )}
               <div 
                 className="absolute inset-0 z-10 cursor-pointer"
                 onClick={(e) => {
