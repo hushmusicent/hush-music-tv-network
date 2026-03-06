@@ -1152,6 +1152,121 @@ async def fix_all_video_metadata(user: dict = Depends(require_user)):
     }
 
 
+@api_router.post("/admin/remux-uploaded-videos")
+async def remux_uploaded_videos(user: dict = Depends(require_user)):
+    """
+    Re-mux all uploaded R2 videos from fragmented MP4 to regular MP4.
+    Fragmented MP4 (from yt-dlp) causes slow browser playback.
+    Re-muxing with ffmpeg -c copy creates a non-fragmented MP4 that plays instantly.
+    This is a long-running operation - runs in background.
+    """
+    if not user.get("is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    from r2_service import get_r2_client, R2_BUCKET_NAME, R2_PUBLIC_URL, is_r2_configured
+    import tempfile
+    
+    if not is_r2_configured():
+        raise HTTPException(status_code=500, detail="R2 not configured")
+    
+    # Collect all uploaded video URLs
+    channels = await db.channels.find({}, {"_id": 0}).to_list(None)
+    video_urls = []
+    for ch in channels:
+        for v in ch.get("videos", []):
+            url = v.get("video_url")
+            if url and url.startswith("http") and url.endswith(".mp4"):
+                # Extract the R2 object key from the URL
+                # URL format: https://pub-xxx.r2.dev/videos/uuid.mp4
+                key = "/".join(url.split("/")[-2:])  # "videos/uuid.mp4"
+                video_urls.append({"url": url, "key": key, "title": v.get("title", "")})
+    
+    # Deduplicate by key
+    seen = set()
+    unique_videos = []
+    for v in video_urls:
+        if v["key"] not in seen:
+            seen.add(v["key"])
+            unique_videos.append(v)
+    
+    logger.info(f"Re-muxing {len(unique_videos)} unique uploaded videos")
+    
+    r2_client = get_r2_client()
+    fixed = 0
+    skipped = 0
+    errors = []
+    
+    for i, video in enumerate(unique_videos):
+        try:
+            with tempfile.NamedTemporaryFile(suffix=".mp4", delete=True) as tmp_in, \
+                 tempfile.NamedTemporaryFile(suffix=".mp4", delete=True) as tmp_out:
+                
+                # Download from R2
+                result = subprocess.run(
+                    ["curl", "-s", "--max-time", "60", "-o", tmp_in.name, video["url"]],
+                    capture_output=True, timeout=90
+                )
+                if result.returncode != 0:
+                    errors.append(f"Download failed: {video['title'][:30]}")
+                    continue
+                
+                in_size = os.path.getsize(tmp_in.name)
+                if in_size < 1000:
+                    errors.append(f"Too small/404: {video['title'][:30]}")
+                    continue
+                
+                # Check if already non-fragmented
+                check = subprocess.run(
+                    ["ffprobe", "-v", "trace", tmp_in.name],
+                    capture_output=True, text=True, timeout=30
+                )
+                moof_count = check.stderr.count("type:'moof'")
+                if moof_count == 0:
+                    skipped += 1
+                    continue
+                
+                # Re-mux to non-fragmented MP4
+                remux = subprocess.run(
+                    ["ffmpeg", "-y", "-i", tmp_in.name, "-c", "copy", 
+                     "-movflags", "+faststart", tmp_out.name],
+                    capture_output=True, timeout=120
+                )
+                if remux.returncode != 0:
+                    errors.append(f"Remux failed: {video['title'][:30]}")
+                    continue
+                
+                out_size = os.path.getsize(tmp_out.name)
+                if out_size < 1000:
+                    errors.append(f"Remux empty: {video['title'][:30]}")
+                    continue
+                
+                # Upload back to R2 (overwrite the original)
+                with open(tmp_out.name, "rb") as f:
+                    r2_client.upload_fileobj(
+                        f, R2_BUCKET_NAME, video["key"],
+                        ExtraArgs={"ContentType": "video/mp4"}
+                    )
+                
+                fixed += 1
+                if (i + 1) % 10 == 0:
+                    logger.info(f"Re-mux progress: {i+1}/{len(unique_videos)} ({fixed} fixed, {skipped} skipped)")
+                    
+        except subprocess.TimeoutExpired:
+            errors.append(f"Timeout: {video['title'][:30]}")
+        except Exception as e:
+            errors.append(f"Error: {video['title'][:30]} - {str(e)[:50]}")
+    
+    logger.info(f"Re-mux complete: {fixed} fixed, {skipped} already OK, {len(errors)} errors")
+    
+    return {
+        "total_videos": len(unique_videos),
+        "fixed": fixed,
+        "already_ok": skipped,
+        "errors_count": len(errors),
+        "errors": errors[:20],
+    }
+
+
 # ===================== VIDEO CLEANUP ROUTES =====================
 import httpx
 

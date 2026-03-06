@@ -880,12 +880,9 @@ const LiveTV = () => {
     // Wait for video metadata to be ready before seeking
     const handleMetadataLoaded = () => {
       const seek = seekTimeRef.current;
-      // For uploaded videos, only seek if very close to the start
-      // Large seeks on fragmented MP4 files are slow - better to start from beginning
-      if (seek > 0 && seek < 30) {
+      if (seek > 0 && Math.abs(video.currentTime - seek) > 2) {
         video.currentTime = seek;
       }
-      // For larger seek values, just start from beginning for instant playback
     };
     
     const handleCanPlay = () => {
