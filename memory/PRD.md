@@ -46,50 +46,25 @@ Build a TV network app named "Hush Music TV Network" with admin-only channel/vid
 - **channels**: `{ id, name, videos: [video_object], use_schedule: bool, is_live_stream: bool, live_stream_youtube_id: string?, sort_order: int }`
 - **schedules**: `{ channel_id, schedule_date, videos: [{video_id, title, youtube_id, start_time, end_time, duration}] }`
 - **video_object**: `{ id, videoId, title, duration, youtube_id?, video_url?, thumbnail }`
-
-## What's Been Implemented
-- Full channel/video CRUD with admin auth
-- Cloudflare R2 integration for persistent file storage
-- Video duration detection (ffprobe for uploads, YouTube Data API for YT videos)
-- 24-hour synchronized schedules with Eastern timezone
-- Live TV page with channel list, OSD, keyboard controls
-- Age-restricted video handling (proxy + skip mechanism)
-- Schedule Editor with auto-generation and save
-- Data migration from production environment
-- YouTube Live Stream channel support (is_live_stream flag)
-- Schedule time parsing fix (backend HH:MM:SS vs frontend numeric seconds)
-- PWA support
 - Admin credentials: hushmusicent419@gmail.com / $Stisdd419
 
 ## Completed (Feb 27, 2026)
 - Fixed schedule time parsing bug (backend HH:MM:SS vs frontend numeric seconds)
-- Added YouTube Live Stream channel support (is_live_stream, live_stream_youtube_id fields)
-- Created "Hush Music Live" channel with YouTube live stream yfG9FPgFoLM
-- Confirmed "Movies 4 Everyone" runtime error is resolved (schedule has valid data)
-- Fixed uploaded video durations: all 127 drive-uploaded videos now have real durations (was defaulting to 5min)
-- Added parallel ffprobe-based duration detection endpoint (POST /api/channels/update-all-uploaded-durations)
-- Added "Uploaded Durations" button in admin dashboard
-- Regenerated all 30 channel schedules with correct durations
-- Implemented yt-dlp geo-restricted video handling (3 strategies):
-  - Strategy 1: Smarter embed retry (youtube-nocookie.com -> youtube.com -> proxy)
-  - Strategy 2: Multi-strategy yt-dlp proxy (default, --xff US, android client, geo-bypass)
-  - Strategy 3: Admin health check tool (fast oEmbed + yt-dlp categorization)
-- Fixed embed player to support uploaded R2 videos and live stream channels
-- Fixed EmbedNetwork to include live stream channels
-- Hardened video reorder endpoint (ignores invalid IDs instead of rejecting entire request)
-- Verified Analytics page works with real data (119 views, 22 channels tracked)
-- **Per-Channel Analytics** - Click any channel in analytics to see detailed view:
-  - 7-day views, unique/new/returning viewers breakdown
-  - Peak hours heatmap (24h bar chart with tooltips)
-  - Daily views timeline (7-day trend)
-  - Most watched videos and most skipped videos tables
-  - Enhanced event tracking in LiveTV (video start/skip/complete events with video info)
+- Added YouTube Live Stream channel support
+- Fixed uploaded video durations (127 drive-uploaded videos)
+- Implemented yt-dlp geo-restricted video handling (3 strategies)
+- Fixed embed player for R2 videos and live stream channels
+- Per-Channel Analytics with peak hours, daily views, most-watched videos
 
 ## Completed (Mar 2, 2026)
-- **FIXED P0 Critical Playback Bug**: Videos were restarting every 5 seconds due to React re-render loop
-  - Root cause: `seekTime` and `isMuted` state variables in useEffect dependency arrays caused YouTube player to be destroyed/recreated on every state change
-  - Fix: Replaced with refs (`seekTimeRef`, `isMutedRef`) so player effects only re-run when actual video changes (`youtube_id`/`video_id`)
-  - Verified: Mute toggle no longer restarts video, 10-15 second stability tests pass, all channel types working
+- **FIXED P0 Critical Playback Bug**: Videos restarting every 5 seconds due to React re-render loop
+  - Root cause: `seekTime` and `isMuted` state in useEffect dependency arrays
+  - Fix: Replaced with refs (`seekTimeRef`, `isMutedRef`)
+
+## Completed (Mar 6, 2026)
+- **Full Data Migration**: Synced 43 channels and 2,535 videos (273 uploaded) from production (broadcaster.emergent.host)
+- **Silent Video Skipping**: Removed all alarming proxy/error toast messages - videos now skip silently when unavailable
+- **Increased Playback Check Timeout**: From 5s to 12s to reduce false proxy attempts
 
 ## Prioritized Backlog
 ### P3
