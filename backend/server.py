@@ -549,8 +549,48 @@ from r2_service import (
 import subprocess
 import tempfile
 
+def get_video_duration_from_url(url: str) -> int:
+    """Extract MP4 duration by parsing the moov/mvhd atom from HTTP Range request.
+    Works without ffprobe. Falls back to 0 on failure."""
+    import struct
+    try:
+        import requests
+        # Download first 100KB - enough to find moov/mvhd in most files
+        resp = requests.get(url, headers={"Range": "bytes=0-102400"}, timeout=15)
+        data = resp.content
+        offset = 0
+        while offset < len(data) - 8:
+            size = struct.unpack(">I", data[offset:offset+4])[0]
+            box_type = data[offset+4:offset+8]
+            if size < 8:
+                break
+            if box_type == b'moov':
+                # Search inside moov for mvhd
+                inner = offset + 8
+                while inner < offset + size and inner < len(data) - 8:
+                    isize = struct.unpack(">I", data[inner:inner+4])[0]
+                    itype = data[inner+4:inner+8]
+                    if isize < 8:
+                        break
+                    if itype == b'mvhd':
+                        version = data[inner+8]
+                        if version == 0:
+                            timescale = struct.unpack(">I", data[inner+20:inner+24])[0]
+                            duration = struct.unpack(">I", data[inner+24:inner+28])[0]
+                        else:
+                            timescale = struct.unpack(">I", data[inner+28:inner+32])[0]
+                            duration = struct.unpack(">Q", data[inner+32:inner+40])[0]
+                        if timescale > 0:
+                            return int(duration / timescale)
+                    inner += isize
+            offset += size
+    except Exception as e:
+        logger.warning(f"Python MP4 parse failed for {url}: {e}")
+    return 0
+
 def get_video_duration(file_path: str) -> int:
-    """Extract video duration using ffprobe - supports both local files and URLs"""
+    """Extract video duration using ffprobe, with Python fallback for URLs"""
+    # Try ffprobe first
     try:
         result = subprocess.run(
             ['ffprobe', '-v', 'error', '-show_entries', 'format=duration', 
@@ -560,8 +600,21 @@ def get_video_duration(file_path: str) -> int:
         if result.returncode == 0 and result.stdout.strip():
             duration = float(result.stdout.strip())
             return int(duration)
+    except FileNotFoundError:
+        # ffprobe not installed - use Python fallback for URLs
+        if file_path.startswith('http'):
+            dur = get_video_duration_from_url(file_path)
+            if dur > 0:
+                return dur
     except Exception as e:
         logger.warning(f"Failed to get video duration: {e}")
+    
+    # Last resort: try Python parser for URLs
+    if file_path.startswith('http'):
+        dur = get_video_duration_from_url(file_path)
+        if dur > 0:
+            return dur
+    
     return 300  # Default 5 minutes
 
 class UploadedVideoResponse(BaseModel):
@@ -1512,79 +1565,115 @@ async def fetch_youtube_duration(youtube_id: str) -> int:
     return 0
 
 @api_router.post("/videos/update-durations")
-async def update_video_durations(user: dict = Depends(require_user), limit: int = 50):
-    """Fetch and update durations for videos from YouTube (admin only). 
-    Processes videos in batches - call multiple times to update all videos."""
+async def update_video_durations(user: dict = Depends(require_user), limit: int = 200):
+    """Fetch and update durations + titles for YouTube videos using batch API (admin only)."""
     if not user.get("is_admin", False):
         raise HTTPException(status_code=403, detail="Admin access required")
     
-    updated_count = 0
-    failed_count = 0
-    skipped_count = 0
-    results = []
+    import re
     
     channels = await db.channels.find({}, {"_id": 0}).to_list(None)
     
-    processed = 0
-    for channel in channels:
-        if processed >= limit:
-            break
-            
-        videos = channel.get("videos", [])
-        channel_updated = False
+    # Collect YouTube videos needing updates
+    yt_ids_to_fix = {}  # youtube_id -> [(channel_idx, video_idx)]
+    for ci, channel in enumerate(channels):
+        for vi, video in enumerate(channel.get("videos", [])):
+            yt_id = video.get("youtube_id")
+            if not yt_id:
+                continue
+            needs_dur = video.get("duration", 300) in [300, 180, 0]
+            needs_title = bool(re.match(r'^Video \d+$', video.get("title", "").strip()))
+            if needs_dur or needs_title:
+                if yt_id not in yt_ids_to_fix:
+                    yt_ids_to_fix[yt_id] = []
+                yt_ids_to_fix[yt_id].append((ci, vi))
+    
+    all_ids = list(yt_ids_to_fix.keys())[:limit]
+    
+    if not all_ids:
+        remaining = 0
+        for ch in channels:
+            for v in ch.get("videos", []):
+                if v.get("youtube_id") and v.get("duration", 300) in [300, 180, 0]:
+                    remaining += 1
+        return {"updated": 0, "failed": 0, "skipped": 0, "remaining": remaining, "results": []}
+    
+    # Use batch YouTube API for speed
+    updated_count = 0
+    failed_count = 0
+    results = []
+    
+    if is_youtube_api_configured():
+        video_info = await get_videos_info_batch(all_ids)
         
-        for i, video in enumerate(videos):
-            if processed >= limit:
-                break
+        updated_channel_idxs = set()
+        for yt_id in all_ids:
+            info = video_info.get(yt_id)
+            if not info:
+                failed_count += 1
+                continue
+            
+            for ci, vi in yt_ids_to_fix.get(yt_id, []):
+                video = channels[ci]["videos"][vi]
+                old_dur = video.get("duration", 300)
+                old_title = video.get("title", "")
+                changed = False
                 
-            youtube_id = video.get("youtube_id")
-            current_duration = video.get("duration", 300)
-            
-            # Skip if already has a non-default duration (not 300 or 180)
-            if current_duration not in [300, 180, 0]:
-                skipped_count += 1
-                continue
-            
-            if not youtube_id:
-                continue
-            
-            processed += 1
-            
-            # Fetch duration from YouTube
-            duration = await fetch_youtube_duration(youtube_id)
-            
+                if info.get("duration", 0) > 0 and old_dur in [300, 180, 0]:
+                    channels[ci]["videos"][vi]["duration"] = info["duration"]
+                    changed = True
+                
+                if info.get("title") and re.match(r'^Video \d+$', old_title.strip()):
+                    channels[ci]["videos"][vi]["title"] = info["title"]
+                    changed = True
+                
+                if info.get("thumbnail") and not video.get("thumbnail"):
+                    channels[ci]["videos"][vi]["thumbnail"] = info["thumbnail"]
+                
+                if changed:
+                    updated_count += 1
+                    updated_channel_idxs.add(ci)
+                    results.append({
+                        "title": info.get("title", old_title),
+                        "youtube_id": yt_id,
+                        "old_duration": old_dur,
+                        "new_duration": info.get("duration", old_dur)
+                    })
+        
+        for ci in updated_channel_idxs:
+            await db.channels.update_one(
+                {"id": channels[ci]["id"]},
+                {"$set": {"videos": channels[ci]["videos"]}}
+            )
+    else:
+        # Fallback to individual fetch
+        for yt_id in all_ids:
+            duration = await fetch_youtube_duration(yt_id)
             if duration > 0:
-                videos[i]["duration"] = duration
-                channel_updated = True
-                updated_count += 1
-                results.append({
-                    "title": video.get("title", "Unknown"),
-                    "youtube_id": youtube_id,
-                    "old_duration": current_duration,
-                    "new_duration": duration
-                })
+                for ci, vi in yt_ids_to_fix.get(yt_id, []):
+                    old_dur = channels[ci]["videos"][vi].get("duration", 300)
+                    channels[ci]["videos"][vi]["duration"] = duration
+                    updated_count += 1
+                    results.append({"youtube_id": yt_id, "old_duration": old_dur, "new_duration": duration})
+                    await db.channels.update_one(
+                        {"id": channels[ci]["id"]},
+                        {"$set": {"videos": channels[ci]["videos"]}}
+                    )
             else:
                 failed_count += 1
-        
-        # Update channel in database if any videos were updated
-        if channel_updated:
-            await db.channels.update_one(
-                {"id": channel["id"]},
-                {"$set": {"videos": videos}}
-            )
     
-    # Count remaining videos with default duration
+    # Count remaining
     remaining = 0
-    for channel in channels:
-        for video in channel.get("videos", []):
-            if video.get("duration", 300) in [300, 180, 0]:
+    for ch in channels:
+        for v in ch.get("videos", []):
+            if v.get("youtube_id") and v.get("duration", 300) in [300, 180, 0]:
                 remaining += 1
     
     return {
         "updated": updated_count,
         "failed": failed_count,
-        "skipped": skipped_count,
-        "remaining": remaining - updated_count - failed_count,
+        "skipped": 0,
+        "remaining": remaining - updated_count,
         "results": results
     }
 

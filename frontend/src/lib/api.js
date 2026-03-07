@@ -154,7 +154,7 @@ export const videoCleanupAPI = {
   runCleanup: () => api.post('/videos/cleanup'),
   
   // Update video durations from YouTube (batch)
-  updateDurations: () => api.post('/videos/update-durations'),
+  updateDurations: () => api.post('/videos/update-durations', null, { timeout: 300000 }),
   
   // Update a single video's duration (from frontend when video plays)
   updateSingleDuration: (channelId, youtubeId, duration) => 
@@ -164,7 +164,7 @@ export const videoCleanupAPI = {
   regenerateSchedules: () => api.post('/schedules/regenerate-all'),
   
   // Update durations for all uploaded (R2) videos using ffprobe
-  updateUploadedDurations: () => api.post('/channels/update-all-uploaded-durations'),
+  updateUploadedDurations: () => api.post('/channels/update-all-uploaded-durations', null, { timeout: 300000 }),
   
   // Health check - fast categorization of all video playability
   healthCheck: (channelId) => api.post(`/youtube/health-check${channelId ? `?channel_id=${channelId}` : ''}`, null, { timeout: 300000 }),
