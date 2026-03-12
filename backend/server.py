@@ -639,8 +639,8 @@ async def get_storage_status(user: dict = Depends(require_user)):
     return test_r2_connection()
 
 
-# Chunked upload storage
-CHUNK_UPLOADS_DIR = ROOT_DIR / "uploads" / "chunks"
+# Chunked upload storage - use /tmp for compatibility across environments
+CHUNK_UPLOADS_DIR = Path("/tmp/video_chunks")
 CHUNK_UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
 CHUNK_SIZE = 5 * 1024 * 1024  # 5MB chunks
