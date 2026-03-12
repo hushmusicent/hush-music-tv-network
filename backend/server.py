@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, UploadFile, File, Body, Request
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, UploadFile, File, Body, Request, Query, Form
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import StreamingResponse, RedirectResponse
@@ -637,6 +637,149 @@ async def get_storage_status(user: dict = Depends(require_user)):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     return test_r2_connection()
+
+
+# Chunked upload storage
+CHUNK_UPLOADS_DIR = ROOT_DIR / "uploads" / "chunks"
+CHUNK_UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+
+CHUNK_SIZE = 5 * 1024 * 1024  # 5MB chunks
+
+@api_router.post("/upload/video/init-chunked")
+async def init_chunked_upload(
+    filename: str = Query(...),
+    total_size: int = Query(...),
+    total_chunks: int = Query(...),
+    user: dict = Depends(require_user)
+):
+    """Initialize a chunked upload session"""
+    if not user.get("is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    if total_size > MAX_UPLOAD_SIZE:
+        raise HTTPException(status_code=413, detail="File too large. Maximum 2GB")
+    
+    if not filename.lower().endswith('.mp4'):
+        raise HTTPException(status_code=400, detail="Only MP4 files are allowed")
+    
+    upload_id = str(uuid.uuid4())
+    chunk_dir = CHUNK_UPLOADS_DIR / upload_id
+    chunk_dir.mkdir(parents=True, exist_ok=True)
+    
+    return {
+        "upload_id": upload_id,
+        "chunk_size": CHUNK_SIZE,
+        "total_chunks": total_chunks,
+    }
+
+@api_router.post("/upload/video/chunk")
+async def upload_chunk(
+    upload_id: str = Form(...),
+    chunk_index: int = Form(...),
+    file: UploadFile = File(...),
+    user: dict = Depends(require_user)
+):
+    """Upload a single chunk"""
+    if not user.get("is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    chunk_dir = CHUNK_UPLOADS_DIR / upload_id
+    if not chunk_dir.exists():
+        raise HTTPException(status_code=404, detail="Upload session not found")
+    
+    chunk_path = chunk_dir / f"chunk_{chunk_index:05d}"
+    content = await file.read()
+    with open(chunk_path, "wb") as f:
+        f.write(content)
+    
+    return {"chunk_index": chunk_index, "size": len(content)}
+
+@api_router.post("/upload/video/complete-chunked")
+async def complete_chunked_upload(
+    upload_id: str = Query(...),
+    filename: str = Query(...),
+    total_chunks: int = Query(...),
+    user: dict = Depends(require_user)
+):
+    """Assemble chunks, extract duration, upload to R2"""
+    if not user.get("is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    chunk_dir = CHUNK_UPLOADS_DIR / upload_id
+    if not chunk_dir.exists():
+        raise HTTPException(status_code=404, detail="Upload session not found")
+    
+    # Assemble chunks into a single file
+    video_id = str(uuid.uuid4())
+    file_ext = Path(filename).suffix or ".mp4"
+    out_filename = f"{video_id}{file_ext}"
+    assembled_path = CHUNK_UPLOADS_DIR / f"{upload_id}_assembled.mp4"
+    
+    try:
+        with open(assembled_path, "wb") as out:
+            for i in range(total_chunks):
+                chunk_path = chunk_dir / f"chunk_{i:05d}"
+                if not chunk_path.exists():
+                    raise HTTPException(status_code=400, detail=f"Missing chunk {i}")
+                with open(chunk_path, "rb") as chunk:
+                    out.write(chunk.read())
+        
+        file_size = os.path.getsize(assembled_path)
+        logger.info(f"Assembled {total_chunks} chunks into {file_size} bytes for {filename}")
+        
+        # Extract duration
+        video_duration = get_video_duration(str(assembled_path))
+        logger.info(f"Extracted duration: {video_duration}s for {filename}")
+        
+        # Upload to R2
+        if is_r2_configured():
+            object_key = f"videos/{out_filename}"
+            with open(assembled_path, "rb") as f:
+                file_content = f.read()
+            result = upload_to_r2(file_content, object_key, "video/mp4")
+            if not result["success"]:
+                raise HTTPException(status_code=500, detail=f"Cloud upload failed: {result.get('error')}")
+            video_url = result["url"]
+        else:
+            file_path = UPLOADS_DIR / out_filename
+            import shutil
+            shutil.move(str(assembled_path), str(file_path))
+            video_url = f"/api/videos/{out_filename}"
+        
+        # Store in database
+        now = datetime.now(timezone.utc).isoformat()
+        video_doc = {
+            "id": video_id,
+            "filename": out_filename,
+            "original_name": filename,
+            "url": video_url,
+            "size": file_size,
+            "duration": video_duration,
+            "thumbnail": None,
+            "owner_id": user["id"],
+            "storage_type": "r2" if is_r2_configured() else "local",
+            "created_at": now
+        }
+        await db.uploaded_videos.insert_one(video_doc)
+        
+        return {
+            "id": video_id,
+            "filename": out_filename,
+            "original_name": filename,
+            "url": video_url,
+            "size": file_size,
+            "duration": video_duration,
+            "thumbnail": None,
+            "created_at": now,
+            "storage_type": video_doc["storage_type"]
+        }
+    finally:
+        # Cleanup chunks
+        import shutil
+        if chunk_dir.exists():
+            shutil.rmtree(chunk_dir)
+        if assembled_path.exists():
+            os.unlink(assembled_path)
 
 @api_router.post("/upload/video", response_model=UploadedVideoResponse)
 async def upload_video(

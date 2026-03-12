@@ -86,21 +86,47 @@ export const seedAPI = {
 
 // Video Upload API
 export const uploadAPI = {
-  uploadVideo: (file, onProgress) => {
-    const formData = new FormData();
-    formData.append('file', file);
+  uploadVideo: async (file, onProgress) => {
+    const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB chunks
+    const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
     
-    return api.post('/upload/video', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-      onUploadProgress: (progressEvent) => {
-        if (onProgress) {
-          const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-          onProgress(percentCompleted);
-        }
-      },
+    // Step 1: Initialize chunked upload
+    const initResp = await api.post('/upload/video/init-chunked', null, {
+      params: { filename: file.name, total_size: file.size, total_chunks: totalChunks }
     });
+    const { upload_id } = initResp.data;
+    
+    // Step 2: Upload chunks
+    for (let i = 0; i < totalChunks; i++) {
+      const start = i * CHUNK_SIZE;
+      const end = Math.min(start + CHUNK_SIZE, file.size);
+      const chunk = file.slice(start, end);
+      
+      const formData = new FormData();
+      formData.append('upload_id', upload_id);
+      formData.append('chunk_index', i.toString());
+      formData.append('file', chunk, `chunk_${i}`);
+      
+      await api.post('/upload/video/chunk', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 60000,
+      });
+      
+      if (onProgress) {
+        const percent = Math.round(((i + 1) / totalChunks) * 90); // 0-90% for upload
+        onProgress(percent);
+      }
+    }
+    
+    // Step 3: Complete - assemble and store
+    if (onProgress) onProgress(95);
+    const completeResp = await api.post('/upload/video/complete-chunked', null, {
+      params: { upload_id, filename: file.name, total_chunks: totalChunks },
+      timeout: 300000, // 5 min for assembly + R2 upload
+    });
+    
+    if (onProgress) onProgress(100);
+    return completeResp;
   },
   listVideos: () => api.get('/upload/videos'),
   deleteVideo: (videoId) => api.delete(`/upload/video/${videoId}`),

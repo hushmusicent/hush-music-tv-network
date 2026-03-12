@@ -21,24 +21,29 @@ Build a TV network app named "Hush Music TV Network" with admin-only channel/vid
 - **3rd Party APIs**: YouTube Data API v3, YouTube IFrame API
 
 ## Key API Endpoints
+- `POST /api/upload/video/init-chunked` - Initialize chunked upload session
+- `POST /api/upload/video/chunk` - Upload a single 5MB chunk
+- `POST /api/upload/video/complete-chunked` - Assemble chunks + store in R2
 - `POST /api/admin/fix-all-video-metadata` - Fix titles & durations (YT API + ffprobe)
-- `POST /api/admin/remux-uploaded-videos` - De-fragment all uploaded MP4s for instant playback
+- `POST /api/admin/remux-uploaded-videos` - De-fragment all uploaded MP4s
+- `POST /api/videos/update-durations` - Batch YouTube duration + title fix
+- `POST /api/channels/update-all-uploaded-durations` - Fix uploaded video durations
 - `POST /api/schedules/regenerate-all` - Regenerate all 24h schedules
 - Admin credentials: hushmusicent419@gmail.com / $Stisdd419
 
-## Completed (Feb 27, 2026)
-- Schedule time parsing, YouTube Live Stream, uploaded video durations
-- yt-dlp geo-restricted video handling, Per-Channel Analytics
+## Completed (Mar 12, 2026)
+- **Chunked Video Upload**: Files split into 5MB chunks to bypass Kubernetes proxy limits. Tested with 120MB file successfully. Duration auto-detected on assembly.
+- **Python MP4 Duration Fallback**: Pure Python moov/mvhd parser for environments without ffprobe binary
+- **Batch YouTube API**: Duration endpoint now uses batch API (200 videos per call) and also fixes generic titles
+- **Frontend timeout**: Increased to 5 minutes for long-running admin operations
 
-## Completed (Mar 2, 2026)
-- FIXED P0 Playback Bug (React re-render loop - seekTime/isMuted refs)
-
-## Completed (Mar 6, 2026)
-- Full Data Migration: 43 channels, 2,535 videos from production
-- Silent Video Skipping: Removed all proxy/error toast messages
-- Fixed ALL video metadata: 824 YT titles, 392 YT durations, 86 uploaded durations
-- **De-fragmented all uploaded videos**: Re-muxed 20 fragmented MP4 files in R2 (e.g. 78 fragments → 0). Non-fragmented MP4 plays instantly in browsers. Added `POST /api/admin/remux-uploaded-videos` endpoint.
-- Player optimizations: `preload="auto"`, `loadedmetadata` seeking, buffering spinner
+## Previous Completions
+- P0 Playback Bug Fix (React re-render loop)
+- Full Data Migration from production
+- Silent Video Skipping (removed proxy error toasts)
+- Video Metadata Fix (824 titles, 478 durations)
+- De-fragmented uploaded videos for instant playback
+- Per-Channel Analytics, Embedding, YouTube Live Stream support
 
 ## Prioritized Backlog
 ### P3
