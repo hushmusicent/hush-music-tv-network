@@ -5,17 +5,9 @@ from fastapi.responses import StreamingResponse, RedirectResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
-# Ensure ffmpeg/ffprobe binaries are available (lazy-loaded on first use)
-_ffmpeg_paths_added = False
+# ffmpeg/ffprobe: use system binary if available, otherwise Python fallback
 def ensure_ffmpeg():
-    global _ffmpeg_paths_added
-    if not _ffmpeg_paths_added:
-        try:
-            import static_ffmpeg
-            static_ffmpeg.add_paths()
-            _ffmpeg_paths_added = True
-        except ImportError:
-            pass  # Fall back to system ffmpeg
+    pass  # No-op, rely on system ffmpeg or Python fallback
 import os
 import logging
 import shutil
