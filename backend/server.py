@@ -629,6 +629,57 @@ class UploadedVideoResponse(BaseModel):
     storage_type: str = "r2"  # "r2" or "local"
 
 MAX_UPLOAD_SIZE = 2 * 1024 * 1024 * 1024  # 2GB
+ALLOWED_VIDEO_EXTENSIONS = {'.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.webm', '.m4v', '.ts', '.mpg', '.mpeg', '.3gp', '.ogv', '.vob'}
+
+def convert_to_mp4(input_path: str, output_path: str) -> bool:
+    """Convert any video file to browser-compatible H.264/AAC MP4 with faststart."""
+    try:
+        # Check if already compatible MP4 (h264 video + aac audio)
+        probe = subprocess.run(
+            ['ffprobe', '-v', 'error', '-select_streams', 'v:0',
+             '-show_entries', 'stream=codec_name', '-of', 'csv=p=0', input_path],
+            capture_output=True, text=True, timeout=30
+        )
+        video_codec = probe.stdout.strip().lower()
+        
+        probe_a = subprocess.run(
+            ['ffprobe', '-v', 'error', '-select_streams', 'a:0',
+             '-show_entries', 'stream=codec_name', '-of', 'csv=p=0', input_path],
+            capture_output=True, text=True, timeout=30
+        )
+        audio_codec = probe_a.stdout.strip().lower()
+        
+        is_mp4 = input_path.lower().endswith('.mp4')
+        is_compatible = is_mp4 and video_codec in ('h264', 'h265', 'hevc') and audio_codec in ('aac', '')
+        
+        if is_compatible:
+            # Just remux with faststart (no re-encoding, very fast)
+            result = subprocess.run(
+                ['ffmpeg', '-y', '-i', input_path, '-c', 'copy', '-movflags', '+faststart', output_path],
+                capture_output=True, timeout=600
+            )
+        else:
+            # Full conversion to H.264/AAC MP4
+            logger.info(f"Converting {video_codec}/{audio_codec} to h264/aac MP4")
+            result = subprocess.run(
+                ['ffmpeg', '-y', '-i', input_path,
+                 '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
+                 '-c:a', 'aac', '-b:a', '128k',
+                 '-movflags', '+faststart', output_path],
+                capture_output=True, timeout=1800  # 30 min max for large files
+            )
+        
+        if result.returncode == 0 and os.path.exists(output_path) and os.path.getsize(output_path) > 1000:
+            return True
+        else:
+            logger.error(f"FFmpeg conversion failed: {result.stderr[-500:] if result.stderr else 'unknown'}")
+            return False
+    except subprocess.TimeoutExpired:
+        logger.error("FFmpeg conversion timed out")
+        return False
+    except FileNotFoundError:
+        logger.error("ffmpeg not found - storing original file")
+        return False
 
 @api_router.get("/storage/status")
 async def get_storage_status(user: dict = Depends(require_user)):
@@ -659,8 +710,9 @@ async def init_chunked_upload(
     if total_size > MAX_UPLOAD_SIZE:
         raise HTTPException(status_code=413, detail="File too large. Maximum 2GB")
     
-    if not filename.lower().endswith('.mp4'):
-        raise HTTPException(status_code=400, detail="Only MP4 files are allowed")
+    file_ext = Path(filename).suffix.lower()
+    if file_ext not in ALLOWED_VIDEO_EXTENSIONS:
+        raise HTTPException(status_code=400, detail=f"Unsupported format. Allowed: {', '.join(sorted(ALLOWED_VIDEO_EXTENSIONS))}")
     
     upload_id = str(uuid.uuid4())
     chunk_dir = CHUNK_UPLOADS_DIR / upload_id
@@ -711,9 +763,9 @@ async def complete_chunked_upload(
     
     # Assemble chunks into a single file
     video_id = str(uuid.uuid4())
-    file_ext = Path(filename).suffix or ".mp4"
-    out_filename = f"{video_id}{file_ext}"
-    assembled_path = CHUNK_UPLOADS_DIR / f"{upload_id}_assembled.mp4"
+    file_ext = Path(filename).suffix.lower() or ".mp4"
+    assembled_path = CHUNK_UPLOADS_DIR / f"{upload_id}_assembled{file_ext}"
+    converted_path = CHUNK_UPLOADS_DIR / f"{upload_id}_converted.mp4"
     
     try:
         with open(assembled_path, "wb") as out:
@@ -727,14 +779,25 @@ async def complete_chunked_upload(
         file_size = os.path.getsize(assembled_path)
         logger.info(f"Assembled {total_chunks} chunks into {file_size} bytes for {filename}")
         
-        # Extract duration
-        video_duration = get_video_duration(str(assembled_path))
+        # Convert to browser-compatible MP4 if needed
+        final_path = assembled_path
+        if convert_to_mp4(str(assembled_path), str(converted_path)):
+            final_path = converted_path
+            logger.info(f"Converted {filename} to MP4 ({os.path.getsize(converted_path)} bytes)")
+        elif file_ext != '.mp4':
+            raise HTTPException(status_code=500, detail=f"Failed to convert {file_ext} to MP4")
+        
+        # Extract duration from final file
+        video_duration = get_video_duration(str(final_path))
         logger.info(f"Extracted duration: {video_duration}s for {filename}")
+        
+        out_filename = f"{video_id}.mp4"
+        final_size = os.path.getsize(final_path)
         
         # Upload to R2
         if is_r2_configured():
             object_key = f"videos/{out_filename}"
-            with open(assembled_path, "rb") as f:
+            with open(str(final_path), "rb") as f:
                 file_content = f.read()
             result = upload_to_r2(file_content, object_key, "video/mp4")
             if not result["success"]:
@@ -743,7 +806,7 @@ async def complete_chunked_upload(
         else:
             file_path = UPLOADS_DIR / out_filename
             import shutil
-            shutil.move(str(assembled_path), str(file_path))
+            shutil.move(str(final_path), str(file_path))
             video_url = f"/api/videos/{out_filename}"
         
         # Store in database
@@ -753,7 +816,7 @@ async def complete_chunked_upload(
             "filename": out_filename,
             "original_name": filename,
             "url": video_url,
-            "size": file_size,
+            "size": final_size,
             "duration": video_duration,
             "thumbnail": None,
             "owner_id": user["id"],
@@ -767,37 +830,37 @@ async def complete_chunked_upload(
             "filename": out_filename,
             "original_name": filename,
             "url": video_url,
-            "size": file_size,
+            "size": final_size,
             "duration": video_duration,
             "thumbnail": None,
             "created_at": now,
             "storage_type": video_doc["storage_type"]
         }
     finally:
-        # Cleanup chunks
+        # Cleanup chunks and temp files
         import shutil
         if chunk_dir.exists():
             shutil.rmtree(chunk_dir)
         if assembled_path.exists():
             os.unlink(assembled_path)
+        if converted_path.exists():
+            os.unlink(converted_path)
 
 @api_router.post("/upload/video", response_model=UploadedVideoResponse)
 async def upload_video(
     file: UploadFile = File(...),
     user: dict = Depends(require_user)
 ):
-    """Upload a video file to cloud storage - MP4 only, max 2GB"""
-    # Validate file type - MP4 only
-    if file.content_type != "video/mp4":
+    """Upload a video file to cloud storage - all video formats, auto-converts to MP4, max 2GB"""
+    # Validate file type
+    file_ext = Path(file.filename).suffix.lower() if file.filename else ""
+    if file_ext not in ALLOWED_VIDEO_EXTENSIONS:
         raise HTTPException(
             status_code=400, 
-            detail="Invalid file type. Only MP4 files are allowed"
+            detail=f"Unsupported format. Allowed: {', '.join(sorted(ALLOWED_VIDEO_EXTENSIONS))}"
         )
     
-    # Generate unique filename
-    file_ext = Path(file.filename).suffix or ".mp4"
     video_id = str(uuid.uuid4())
-    filename = f"{video_id}{file_ext}"
     
     # Read file content
     try:
@@ -805,31 +868,41 @@ async def upload_video(
         file_size = len(file_content)
         
         if file_size > MAX_UPLOAD_SIZE:
-            raise HTTPException(
-                status_code=413,
-                detail=f"File too large. Maximum size is 2GB"
-            )
+            raise HTTPException(status_code=413, detail="File too large. Maximum size is 2GB")
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to read file: {str(e)}")
     
-    # Save temporarily to extract duration using ffprobe
-    video_duration = 300  # Default 5 minutes
-    with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as tmp_file:
-        tmp_file.write(file_content)
-        tmp_path = tmp_file.name
+    # Save to temp file, convert if needed, extract duration
+    video_duration = 300
+    tmp_input = f"/tmp/upload_{video_id}{file_ext}"
+    tmp_converted = f"/tmp/upload_{video_id}_converted.mp4"
     
     try:
-        video_duration = get_video_duration(tmp_path)
+        with open(tmp_input, "wb") as f:
+            f.write(file_content)
+        
+        # Convert to browser-compatible MP4
+        if convert_to_mp4(tmp_input, tmp_converted):
+            final_path = tmp_converted
+            with open(tmp_converted, "rb") as f:
+                file_content = f.read()
+            logger.info(f"Converted {file.filename} to MP4 ({len(file_content)} bytes)")
+        else:
+            final_path = tmp_input
+        
+        video_duration = get_video_duration(final_path)
         logger.info(f"Extracted video duration: {video_duration}s for {file.filename}")
     except Exception as e:
-        logger.warning(f"Could not extract duration: {e}")
+        logger.warning(f"Processing error: {e}")
     finally:
-        if os.path.exists(tmp_path):
-            os.unlink(tmp_path)
+        if os.path.exists(tmp_input):
+            os.unlink(tmp_input)
+        if os.path.exists(tmp_converted):
+            os.unlink(tmp_converted)
     
-    # Determine storage method
+    filename = f"{video_id}.mp4"
     storage_type = "r2" if is_r2_configured() else "local"
     
     if storage_type == "r2":

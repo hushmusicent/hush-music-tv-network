@@ -1528,7 +1528,7 @@ const Dashboard = () => {
               <FileVideo size={64} className="mx-auto mb-4 text-gray-600" />
               <h3 className="text-xl font-semibold mb-2">No uploaded videos</h3>
               <p className="text-gray-400 mb-6">
-                Upload MP4 videos to use in your channels
+                Upload videos to use in your channels (MP4, MKV, AVI, MOV, and more)
               </p>
               <Button
                 onClick={() => navigate('/create')}
