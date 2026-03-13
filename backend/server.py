@@ -5,12 +5,17 @@ from fastapi.responses import StreamingResponse, RedirectResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
-# Ensure ffmpeg/ffprobe binaries are available (pip-installed static build)
-try:
-    import static_ffmpeg
-    static_ffmpeg.add_paths()
-except ImportError:
-    pass  # Fall back to system ffmpeg
+# Ensure ffmpeg/ffprobe binaries are available (lazy-loaded on first use)
+_ffmpeg_paths_added = False
+def ensure_ffmpeg():
+    global _ffmpeg_paths_added
+    if not _ffmpeg_paths_added:
+        try:
+            import static_ffmpeg
+            static_ffmpeg.add_paths()
+            _ffmpeg_paths_added = True
+        except ImportError:
+            pass  # Fall back to system ffmpeg
 import os
 import logging
 import shutil
@@ -596,6 +601,7 @@ def get_video_duration_from_url(url: str) -> int:
 
 def get_video_duration(file_path: str) -> int:
     """Extract video duration using ffprobe, with Python fallback for URLs"""
+    ensure_ffmpeg()
     # Try ffprobe first
     try:
         result = subprocess.run(
@@ -639,6 +645,7 @@ ALLOWED_VIDEO_EXTENSIONS = {'.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.we
 
 def convert_to_mp4(input_path: str, output_path: str) -> bool:
     """Convert any video file to browser-compatible H.264/AAC MP4 with faststart."""
+    ensure_ffmpeg()
     try:
         # Check if already compatible MP4 (h264 video + aac audio)
         probe = subprocess.run(
