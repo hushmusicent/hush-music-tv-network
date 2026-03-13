@@ -5,6 +5,12 @@ from fastapi.responses import StreamingResponse, RedirectResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
+# Ensure ffmpeg/ffprobe binaries are available (pip-installed static build)
+try:
+    import static_ffmpeg
+    static_ffmpeg.add_paths()
+except ImportError:
+    pass  # Fall back to system ffmpeg
 import os
 import logging
 import shutil
@@ -947,7 +953,7 @@ async def upload_video(
         original_name=file.filename,
         url=video_url,
         size=file_size,
-        duration=300,
+        duration=video_duration,
         thumbnail=None,
         created_at=now,
         storage_type=storage_type
