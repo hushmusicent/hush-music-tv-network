@@ -756,93 +756,108 @@ const Dashboard = () => {
   };
 
   return (
-    <div className="min-h-screen overflow-y-auto px-6 md:px-12 lg:px-16 py-8" data-testid="dashboard-page">
+    <div className="min-h-screen overflow-y-auto px-4 md:px-12 lg:px-16 py-4 md:py-8" data-testid="dashboard-page">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
+      <div className="flex flex-col gap-4 mb-6 md:mb-8">
         <div>
-          <h1 className="font-heading text-4xl md:text-5xl tracking-tight flex items-center gap-3">
-            <Settings size={36} className="text-primary" />
+          <h1 className="font-heading text-2xl md:text-4xl lg:text-5xl tracking-tight flex items-center gap-2 md:gap-3">
+            <Settings size={24} className="text-primary md:hidden" />
+            <Settings size={36} className="text-primary hidden md:block" />
             Admin Dashboard
           </h1>
-          <p className="text-gray-400 mt-2">
+          <p className="text-gray-400 mt-1 md:mt-2 text-sm md:text-base">
             Manage your TV network, channels, and content
           </p>
         </div>
 
-        <div className="flex gap-3 flex-wrap">
+        {/* Action buttons - scrollable on mobile */}
+        <div className="flex gap-2 md:gap-3 overflow-x-auto pb-2 scrollbar-hide md:flex-wrap md:overflow-visible">
+          <Button
+            onClick={() => navigate('/live')}
+            className="bg-red-600 hover:bg-red-700 whitespace-nowrap text-xs md:text-sm shrink-0"
+            data-testid="live-tv-btn"
+          >
+            <Radio size={16} className="mr-1 md:mr-2" />
+            Live TV
+          </Button>
           <Button
             onClick={() => navigate('/schedule')}
             variant="outline"
-            className="border-cyan-500/50 text-cyan-400 hover:bg-cyan-500/10"
+            className="border-cyan-500/50 text-cyan-400 hover:bg-cyan-500/10 whitespace-nowrap text-xs md:text-sm shrink-0"
             data-testid="schedule-btn"
           >
-            <Calendar size={18} className="mr-2" />
-            TV Guide
+            <Calendar size={16} className="mr-1 md:mr-2" />
+            <span className="hidden sm:inline">TV </span>Guide
           </Button>
           <Button
             onClick={() => navigate('/analytics')}
             variant="outline"
-            className="border-purple-500/50 text-purple-400 hover:bg-purple-500/10"
+            className="border-purple-500/50 text-purple-400 hover:bg-purple-500/10 whitespace-nowrap text-xs md:text-sm shrink-0"
             data-testid="analytics-btn"
           >
-            <BarChart3 size={18} className="mr-2" />
-            Analytics
+            <BarChart3 size={16} className="mr-1 md:mr-2" />
+            <span className="hidden sm:inline">Analytics</span>
+            <span className="sm:hidden">Stats</span>
           </Button>
           <Button
             onClick={() => navigate('/bulk-thumbnails')}
             variant="outline"
-            className="border-orange-500/50 text-orange-400 hover:bg-orange-500/10"
+            className="border-orange-500/50 text-orange-400 hover:bg-orange-500/10 whitespace-nowrap text-xs md:text-sm shrink-0"
             data-testid="bulk-thumbnails-btn"
           >
-            <ImageIcon size={18} className="mr-2" />
-            Thumbnails
+            <ImageIcon size={16} className="mr-1 md:mr-2" />
+            <span className="hidden sm:inline">Thumbnails</span>
+            <span className="sm:hidden">Imgs</span>
           </Button>
           <Button
             onClick={() => navigate('/youtube-settings')}
             variant="outline"
-            className="border-red-500/50 text-red-400 hover:bg-red-500/10"
+            className="border-red-500/50 text-red-400 hover:bg-red-500/10 whitespace-nowrap text-xs md:text-sm shrink-0"
             data-testid="youtube-settings-btn"
           >
-            <Youtube size={18} className="mr-2" />
-            YT Cookies
+            <Youtube size={16} className="mr-1 md:mr-2" />
+            <span className="hidden sm:inline">YT Cookies</span>
+            <span className="sm:hidden">YT</span>
           </Button>
           {reorderMode ? (
             <>
               <Button
                 onClick={() => setReorderMode(false)}
                 variant="outline"
-                className="border-gray-500/50 text-gray-400 hover:bg-gray-500/10"
+                className="border-gray-500/50 text-gray-400 hover:bg-gray-500/10 whitespace-nowrap text-xs md:text-sm shrink-0"
               >
-                <X size={18} className="mr-2" />
+                <X size={16} className="mr-1 md:mr-2" />
                 Cancel
               </Button>
               <Button
                 onClick={saveChannelOrder}
                 disabled={savingOrder}
-                className="bg-green-600 hover:bg-green-700"
+                className="bg-green-600 hover:bg-green-700 whitespace-nowrap text-xs md:text-sm shrink-0"
               >
-                {savingOrder ? <Loader2 size={18} className="mr-2 animate-spin" /> : <Save size={18} className="mr-2" />}
-                Save Order
+                {savingOrder ? <Loader2 size={16} className="mr-1 md:mr-2 animate-spin" /> : <Save size={16} className="mr-1 md:mr-2" />}
+                Save
               </Button>
             </>
           ) : (
             <Button
               onClick={() => setReorderMode(true)}
               variant="outline"
-              className="border-yellow-500/50 text-yellow-400 hover:bg-yellow-500/10"
+              className="border-yellow-500/50 text-yellow-400 hover:bg-yellow-500/10 whitespace-nowrap text-xs md:text-sm shrink-0"
               data-testid="reorder-channels-btn"
             >
-              <ArrowUpDown size={18} className="mr-2" />
-              Reorder
+              <ArrowUpDown size={16} className="mr-1 md:mr-2" />
+              <span className="hidden sm:inline">Reorder</span>
+              <span className="sm:hidden">Sort</span>
             </Button>
           )}
           <Button
             onClick={() => navigate('/create')}
-            className="bg-primary hover:bg-primary-hover font-bold glow-primary-hover"
+            className="bg-primary hover:bg-primary-hover font-bold glow-primary-hover whitespace-nowrap text-xs md:text-sm shrink-0"
             data-testid="create-channel-btn"
           >
-            <Plus size={18} className="mr-2" />
-            Create Channel
+            <Plus size={16} className="mr-1 md:mr-2" />
+            <span className="hidden sm:inline">Create Channel</span>
+            <span className="sm:hidden">New</span>
           </Button>
         </div>
       </div>

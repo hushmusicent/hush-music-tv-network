@@ -190,7 +190,7 @@ const LiveTV = () => {
   const [seekTime, setSeekTime] = useState(0);
   const [loading, setLoading] = useState(true);
   const [isMuted, setIsMuted] = useState(false);
-  const [showChannelList, setShowChannelList] = useState(true);
+  const [showChannelList, setShowChannelList] = useState(window.innerWidth >= 768); // Start collapsed on mobile
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [scheduleDate, setScheduleDate] = useState('');
@@ -206,6 +206,7 @@ const LiveTV = () => {
   const [sessionStartTime, setSessionStartTime] = useState(null); // When user started watching
   const [useProxyPlayer, setUseProxyPlayer] = useState(false); // Whether to use proxy for current video
   const [proxyVideoUrl, setProxyVideoUrl] = useState(null); // Direct video URL from proxy
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768); // Mobile detection
   
   const playerRef = useRef(null);
   const videoRef = useRef(null);
@@ -220,6 +221,15 @@ const LiveTV = () => {
   // Auto-hide controls after inactivity
   const CONTROLS_HIDE_DELAY = 3000;
   const isPausedRef = useRef(isPaused);
+  
+  // Detect mobile screen resize
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
   
   useEffect(() => {
     isPausedRef.current = isPaused;
@@ -1097,96 +1107,140 @@ const LiveTV = () => {
 
   const upcomingVideos = getUpcomingVideos();
 
+  // Close sidebar when selecting channel on mobile
+  const handleChannelSelect = (channel) => {
+    selectChannel(channel);
+    if (isMobile) {
+      setShowChannelList(false);
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-black text-white flex" data-testid="live-tv-page">
-      {/* Channel Sidebar */}
+    <div className="min-h-screen bg-black text-white flex flex-col md:flex-row" data-testid="live-tv-page">
+      {/* Channel Sidebar - Overlay on mobile, fixed sidebar on desktop */}
       {showChannelList && (
-        <div className="w-72 bg-[#0a0a0f] border-r border-white/10 flex flex-col h-screen overflow-hidden">
-          <div className="p-4 border-b border-white/10">
-            <div className="flex items-center justify-between">
-              <h2 className="font-bold text-lg flex items-center gap-2">
-                <Tv size={20} className="text-primary" />
-                Channels
-              </h2>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setShowChannelList(false)}
-                className="h-8 w-8"
-              >
-                <X size={16} />
-              </Button>
-            </div>
-            <div className="flex items-center gap-2 mt-2 text-xs text-gray-400">
-              <Calendar size={12} />
-              <span>Playlist: {scheduleDate}</span>
-            </div>
-          </div>
-          
-          <div className="flex-1 overflow-y-auto">
-            {channels.map((channel, index) => {
-              const isActive = currentChannel?.id === channel.id;
-              
-              return (
-                <button
-                  key={channel.id}
-                  onClick={() => selectChannel(channel)}
-                  className={`w-full p-3 flex items-center gap-3 transition-colors ${
-                    isActive 
-                      ? 'bg-primary/20 border-l-2 border-primary' 
-                      : 'hover:bg-white/5 border-l-2 border-transparent'
-                  }`}
-                  data-testid={`channel-${channel.id}`}
+        <>
+          {/* Mobile overlay backdrop */}
+          {isMobile && (
+            <div 
+              className="fixed inset-0 bg-black/70 z-40 md:hidden"
+              onClick={() => setShowChannelList(false)}
+            />
+          )}
+          <div className={`
+            ${isMobile 
+              ? 'fixed inset-y-0 left-0 z-50 w-[280px] animate-in slide-in-from-left duration-200' 
+              : 'w-72 relative'
+            }
+            bg-[#0a0a0f] border-r border-white/10 flex flex-col h-screen overflow-hidden
+          `}>
+            <div className="p-4 border-b border-white/10">
+              <div className="flex items-center justify-between">
+                <h2 className="font-bold text-lg flex items-center gap-2">
+                  <Tv size={20} className="text-primary" />
+                  Channels
+                </h2>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setShowChannelList(false)}
+                  className="h-8 w-8"
                 >
-                  <div className="relative w-12 h-12 rounded overflow-hidden bg-primary/20 flex-shrink-0">
-                    {channel.thumbnail && (
-                      <img 
-                        src={channel.thumbnail.startsWith('/api') 
-                          ? `${BACKEND_URL}${channel.thumbnail}` 
-                          : channel.thumbnail
-                        }
-                        alt={channel.name}
-                        className="w-full h-full object-cover"
-                      />
-                    )}
-                    {!channel.thumbnail && (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <Tv size={20} className="text-primary/50" />
-                      </div>
-                    )}
-                    {isActive && (
-                      <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-pulse" />
-                    )}
-                  </div>
-                  <div className="flex-1 text-left min-w-0">
-                    <p className="font-medium text-sm truncate">{channel.name}</p>
-                    <p className="text-xs text-gray-500">
-                      {channel.is_live_stream ? (
-                        <span className="text-red-400 font-medium">LIVE STREAM</span>
-                      ) : (
-                        `${channel.videoCount} videos`
+                  <X size={16} />
+                </Button>
+              </div>
+              <div className="flex items-center gap-2 mt-2 text-xs text-gray-400">
+                <Calendar size={12} />
+                <span>Playlist: {scheduleDate}</span>
+              </div>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto">
+              {channels.map((channel, index) => {
+                const isActive = currentChannel?.id === channel.id;
+                
+                return (
+                  <button
+                    key={channel.id}
+                    onClick={() => handleChannelSelect(channel)}
+                    className={`w-full p-3 flex items-center gap-3 transition-colors ${
+                      isActive 
+                        ? 'bg-primary/20 border-l-2 border-primary' 
+                        : 'hover:bg-white/5 border-l-2 border-transparent'
+                    }`}
+                    data-testid={`channel-${channel.id}`}
+                  >
+                    <div className="relative w-12 h-12 rounded overflow-hidden bg-primary/20 flex-shrink-0">
+                      {channel.thumbnail && (
+                        <img 
+                          src={channel.thumbnail.startsWith('/api') 
+                            ? `${BACKEND_URL}${channel.thumbnail}` 
+                            : channel.thumbnail
+                          }
+                          alt={channel.name}
+                          className="w-full h-full object-cover"
+                        />
                       )}
-                    </p>
-                  </div>
-                  <span className="text-xs text-gray-600">{index + 1}</span>
-                </button>
-              );
-            })}
+                      {!channel.thumbnail && (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <Tv size={20} className="text-primary/50" />
+                        </div>
+                      )}
+                      {isActive && (
+                        <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-pulse" />
+                      )}
+                    </div>
+                    <div className="flex-1 text-left min-w-0">
+                      <p className="font-medium text-sm truncate">{channel.name}</p>
+                      <p className="text-xs text-gray-500">
+                        {channel.is_live_stream ? (
+                          <span className="text-red-400 font-medium">LIVE STREAM</span>
+                        ) : (
+                          `${channel.videoCount} videos`
+                        )}
+                      </p>
+                    </div>
+                    <span className="text-xs text-gray-600">{index + 1}</span>
+                  </button>
+                );
+              })}
+            </div>
+            
+            <div className="p-3 border-t border-white/10 text-xs text-gray-500 hidden md:block">
+              <p>↑↓ Switch • 0-9 Go to • C Remote</p>
+            </div>
           </div>
-          
-          <div className="p-3 border-t border-white/10 text-xs text-gray-500">
-            <p>↑↓ Switch • 0-9 Go to • C Remote</p>
-          </div>
-        </div>
+        </>
       )}
 
       {/* Main Content */}
       <div className={`flex-1 flex flex-col ${isFullscreen ? 'w-screen h-screen' : ''}`}>
         <div 
-          className={`flex-1 relative bg-black ${isFullscreen ? 'w-full h-full' : ''}`} 
+          className={`flex-1 relative bg-black ${isFullscreen ? 'w-full h-full' : isMobile ? 'h-[60vh]' : ''}`} 
           ref={playerRef}
         >
-          {!showChannelList && !isFullscreen && (
+          {/* Mobile top bar with channel button */}
+          {isMobile && !isFullscreen && (
+            <div className="absolute top-0 left-0 right-0 z-20 p-2 flex items-center justify-between bg-gradient-to-b from-black/80 to-transparent">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowChannelList(true)}
+                className="bg-black/50 hover:bg-black/70 h-8 px-2"
+              >
+                <List size={16} className="mr-1" />
+                <span className="text-xs">Channels</span>
+              </Button>
+              {currentChannel && (
+                <div className="text-xs text-white/80 truncate max-w-[50%]">
+                  {currentChannel.name}
+                </div>
+              )}
+            </div>
+          )}
+          
+          {/* Desktop: Show sidebar toggle */}
+          {!showChannelList && !isFullscreen && !isMobile && (
             <Button
               variant="ghost"
               size="icon"
@@ -1338,37 +1392,38 @@ const LiveTV = () => {
             </div>
           )}
 
+          {/* Now Playing OSD - Responsive */}
           {currentChannel && currentVideo && (
-            <div className={`${isFullscreen ? 'fixed' : 'absolute'} top-4 right-4 bg-black/70 backdrop-blur-sm rounded-lg p-3 max-w-sm z-40 transition-opacity duration-300 ${controlsVisible ? 'opacity-100' : 'opacity-0'}`}>
-              <div className="flex items-center gap-2 mb-2">
+            <div className={`${isFullscreen ? 'fixed' : 'absolute'} ${isMobile ? 'top-12 right-2 max-w-[200px] p-2' : 'top-4 right-4 max-w-sm p-3'} bg-black/70 backdrop-blur-sm rounded-lg z-40 transition-opacity duration-300 ${controlsVisible ? 'opacity-100' : 'opacity-0'}`}>
+              <div className="flex items-center gap-2 mb-1 md:mb-2">
                 {isPaused ? (
                   <>
-                    <Pause size={12} className="text-yellow-400" />
-                    <span className="text-xs text-yellow-400 font-medium">PAUSED</span>
+                    <Pause size={isMobile ? 10 : 12} className="text-yellow-400" />
+                    <span className={`${isMobile ? 'text-[10px]' : 'text-xs'} text-yellow-400 font-medium`}>PAUSED</span>
                   </>
                 ) : isCurrentChannelLiveStream ? (
                   <>
                     <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-                    <span className="text-xs text-red-400 font-medium">LIVE STREAM</span>
+                    <span className={`${isMobile ? 'text-[10px]' : 'text-xs'} text-red-400 font-medium`}>LIVE STREAM</span>
                   </>
                 ) : isCurrentChannelScheduled ? (
                   <>
                     <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-                    <span className="text-xs text-red-400 font-medium">LIVE</span>
+                    <span className={`${isMobile ? 'text-[10px]' : 'text-xs'} text-red-400 font-medium`}>LIVE</span>
                   </>
                 ) : (
                   <>
                     <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                    <span className="text-xs text-green-400 font-medium">PLAYING</span>
+                    <span className={`${isMobile ? 'text-[10px]' : 'text-xs'} text-green-400 font-medium`}>PLAYING</span>
                   </>
                 )}
-                <span className="text-xs text-gray-400">
+                <span className={`${isMobile ? 'text-[10px]' : 'text-xs'} text-gray-400`}>
                   {formatTime(currentTime)}
                 </span>
               </div>
-              <p className="font-medium text-sm">{currentChannel.name}</p>
-              <p className="text-xs text-gray-400 truncate mt-1">{currentVideo.title}</p>
-              {currentVideo.duration && !isCurrentChannelLiveStream && (
+              <p className={`font-medium ${isMobile ? 'text-xs' : 'text-sm'}`}>{currentChannel.name}</p>
+              <p className={`${isMobile ? 'text-[10px]' : 'text-xs'} text-gray-400 truncate mt-1`}>{currentVideo.title}</p>
+              {currentVideo.duration && !isCurrentChannelLiveStream && !isMobile && (
                 <p className="text-xs text-gray-500 mt-1">
                   Duration: {Math.floor(currentVideo.duration / 60)}:{(currentVideo.duration % 60).toString().padStart(2, '0')}
                 </p>
@@ -1394,28 +1449,29 @@ const LiveTV = () => {
             </div>
           )}
 
+          {/* Channel Changer - Responsive positioning */}
           {showChannelChanger && (
             <div 
-              className={`${isFullscreen ? 'fixed bottom-24 right-6' : 'absolute bottom-20 right-4'} z-50 transition-opacity duration-300 ${controlsVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`} 
+              className={`${isFullscreen ? 'fixed bottom-24 right-6' : 'absolute'} ${isMobile ? 'bottom-16 right-2' : 'bottom-20 right-4'} z-50 transition-opacity duration-300 ${controlsVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`} 
               data-testid="channel-changer"
             >
-              <div className="bg-[#12121a]/95 backdrop-blur-sm border border-white/10 rounded-xl p-3 flex flex-col items-center gap-2">
+              <div className={`bg-[#12121a]/95 backdrop-blur-sm border border-white/10 rounded-xl ${isMobile ? 'p-2' : 'p-3'} flex flex-col items-center gap-1 md:gap-2`}>
                 <Button
                   variant="ghost"
                   size="icon"
                   onClick={channelUp}
-                  className="h-10 w-10 rounded-full hover:bg-primary/20 hover:text-primary"
+                  className={`${isMobile ? 'h-8 w-8' : 'h-10 w-10'} rounded-full hover:bg-primary/20 hover:text-primary`}
                   data-testid="channel-up"
                 >
-                  <ChevronUp size={24} />
+                  <ChevronUp size={isMobile ? 20 : 24} />
                 </Button>
                 
                 <div 
-                  className="w-14 h-14 rounded-lg bg-black flex items-center justify-center cursor-pointer hover:bg-white/5"
+                  className={`${isMobile ? 'w-10 h-10' : 'w-14 h-14'} rounded-lg bg-black flex items-center justify-center cursor-pointer hover:bg-white/5`}
                   onClick={showOSD}
                   data-testid="channel-number-display"
                 >
-                  <span className="text-2xl font-bold text-primary">
+                  <span className={`${isMobile ? 'text-xl' : 'text-2xl'} font-bold text-primary`}>
                     {channelInput || (getCurrentChannelIndex() + 1)}
                   </span>
                 </div>
@@ -1424,10 +1480,10 @@ const LiveTV = () => {
                   variant="ghost"
                   size="icon"
                   onClick={channelDown}
-                  className="h-10 w-10 rounded-full hover:bg-primary/20 hover:text-primary"
+                  className={`${isMobile ? 'h-8 w-8' : 'h-10 w-10'} rounded-full hover:bg-primary/20 hover:text-primary`}
                   data-testid="channel-down"
                 >
-                  <ChevronDown size={24} />
+                  <ChevronDown size={isMobile ? 20 : 24} />
                 </Button>
                 
                 <span className="text-[10px] text-gray-500">
@@ -1437,26 +1493,27 @@ const LiveTV = () => {
             </div>
           )}
 
-          <div className={`${isFullscreen ? 'fixed' : 'absolute'} bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4 z-40 transition-opacity duration-300 ${controlsVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+          {/* Bottom Controls - Responsive */}
+          <div className={`${isFullscreen ? 'fixed' : 'absolute'} bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent ${isMobile ? 'p-2' : 'p-4'} z-40 transition-opacity duration-300 ${controlsVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1 md:gap-2">
                 <Button
                   variant="ghost"
                   size="icon"
                   onClick={toggleMute}
-                  className="hover:bg-white/10"
+                  className={`hover:bg-white/10 ${isMobile ? 'h-8 w-8' : ''}`}
                 >
-                  {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} />}
+                  {isMuted ? <VolumeX size={isMobile ? 16 : 20} /> : <Volume2 size={isMobile ? 16 : 20} />}
                 </Button>
-                {isFullscreen && (
+                {isFullscreen && !isMobile && (
                   <span className="text-sm text-gray-400 ml-2">
                     Press C to toggle remote • ↑↓ to change channels
                   </span>
                 )}
               </div>
               
-              <div className="flex items-center gap-2">
-                {isAdmin && !isFullscreen && (
+              <div className="flex items-center gap-1 md:gap-2">
+                {isAdmin && !isFullscreen && !isMobile && (
                   <Button
                     variant="ghost"
                     size="sm"
@@ -1471,32 +1528,33 @@ const LiveTV = () => {
                   variant="ghost"
                   size="icon"
                   onClick={toggleFullscreen}
-                  className="hover:bg-white/10"
+                  className={`hover:bg-white/10 ${isMobile ? 'h-8 w-8' : ''}`}
                 >
-                  <Maximize size={20} />
+                  <Maximize size={isMobile ? 16 : 20} />
                 </Button>
               </div>
             </div>
           </div>
         </div>
 
+        {/* Up Next Section - Responsive */}
         {currentChannel && upcomingVideos.length > 0 && !isCurrentChannelLiveStream && (
-          <div className="bg-[#0a0a0f] border-t border-white/10 p-3">
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2 text-xs text-gray-400 shrink-0">
-                <Clock size={14} />
+          <div className={`bg-[#0a0a0f] border-t border-white/10 ${isMobile ? 'p-2' : 'p-3'}`}>
+            <div className="flex items-center gap-2 md:gap-4">
+              <div className={`flex items-center gap-1 md:gap-2 ${isMobile ? 'text-[10px]' : 'text-xs'} text-gray-400 shrink-0`}>
+                <Clock size={isMobile ? 12 : 14} />
                 <span>Up Next</span>
               </div>
-              <div className="flex gap-3 overflow-x-auto">
-                {upcomingVideos.map((video, idx) => (
+              <div className="flex gap-2 md:gap-3 overflow-x-auto scrollbar-hide">
+                {upcomingVideos.slice(0, isMobile ? 2 : 3).map((video, idx) => (
                   <div 
                     key={`${video.video_id}-${idx}`}
-                    className="flex items-center gap-2 bg-white/5 rounded px-2 py-1 shrink-0"
+                    className={`flex items-center gap-2 bg-white/5 rounded ${isMobile ? 'px-1.5 py-0.5' : 'px-2 py-1'} shrink-0`}
                   >
-                    <span className="text-xs text-gray-300 truncate max-w-[200px]">
+                    <span className={`${isMobile ? 'text-[10px]' : 'text-xs'} text-gray-300 truncate ${isMobile ? 'max-w-[100px]' : 'max-w-[200px]'}`}>
                       {video.title}
                     </span>
-                    {video.duration && (
+                    {video.duration && !isMobile && (
                       <span className="text-xs text-gray-500">
                         ({Math.floor(video.duration / 60)}m)
                       </span>
@@ -1509,7 +1567,8 @@ const LiveTV = () => {
         )}
       </div>
 
-      {showAdminPanel && isAdmin && (
+      {/* Admin Panel - Hide on mobile unless specifically toggled */}
+      {showAdminPanel && isAdmin && !isMobile && (
         <div className="w-80 bg-[#0a0a0f] border-l border-white/10 p-4 h-screen overflow-y-auto">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-bold flex items-center gap-2">

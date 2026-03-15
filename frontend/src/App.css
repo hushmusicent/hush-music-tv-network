@@ -119,3 +119,27 @@ a:focus-visible {
   outline: 2px solid #7C3AED;
   outline-offset: 2px;
 }
+
+/* Hide scrollbar for mobile up-next section */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* Mobile slide-in animation */
+@keyframes slideInFromLeft {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.animate-in.slide-in-from-left {
+  animation: slideInFromLeft 0.2s ease-out;
+}
