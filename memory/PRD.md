@@ -12,6 +12,7 @@ Build a TV network app named "Hush Music TV Network" with admin-only channel/vid
 - Admin dashboard: bulk thumbnails, video cleanup, health-check tools
 - Channel/network embedding, Installable PWA
 - YouTube Live Stream channel support, Analytics page
+- **Mobile responsive design ("Cellphone Mode")**
 
 ## Tech Stack
 - **Frontend**: React, Tailwind CSS, Shadcn UI, react-youtube, @dnd-kit/core
@@ -31,6 +32,16 @@ Build a TV network app named "Hush Music TV Network" with admin-only channel/vid
 - `POST /api/schedules/regenerate-all` - Regenerate all 24h schedules
 - Admin credentials: hushmusicent419@gmail.com / $Stisdd419
 
+## Completed (Mar 15, 2026)
+- **Mobile Responsive Design ("Cellphone Mode")**:
+  - Live TV: Channel sidebar as slide-in overlay with backdrop on mobile
+  - Live TV: Auto-close sidebar after channel selection on mobile
+  - Live TV: Scaled-down channel changer remote and OSD on mobile
+  - Live TV: Mobile top bar with "Channels" button
+  - Dashboard: Horizontally scrollable action buttons on mobile
+  - Dashboard: 2-column stats grid on mobile (4-column on desktop)
+  - Added CSS for scrollbar-hide and slide-in animations
+
 ## Completed (Mar 12, 2026)
 - **Chunked Video Upload**: Files split into 5MB chunks to bypass Kubernetes proxy limits. Tested with 120MB file successfully. Duration auto-detected on assembly.
 - **Python MP4 Duration Fallback**: Pure Python moov/mvhd parser for environments without ffprobe binary
@@ -46,6 +57,9 @@ Build a TV network app named "Hush Music TV Network" with admin-only channel/vid
 - Per-Channel Analytics, Embedding, YouTube Live Stream support
 
 ## Prioritized Backlog
+### P1 - Deferred
+- **Multi-format video uploads (MKV/AVI → MP4)**: Removed due to `static-ffmpeg` causing deployment timeouts. Requires alternative approach (client-side conversion or background worker).
+
 ### P3
 - Refactor server.py into separate routers
 - Refactor LiveTV.jsx into smaller components/hooks
