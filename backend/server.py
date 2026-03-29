@@ -633,54 +633,30 @@ class UploadedVideoResponse(BaseModel):
     storage_type: str = "r2"  # "r2" or "local"
 
 MAX_UPLOAD_SIZE = 2 * 1024 * 1024 * 1024  # 2GB
-ALLOWED_VIDEO_EXTENSIONS = {'.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.webm', '.m4v', '.ts', '.mpg', '.mpeg', '.3gp', '.ogv', '.vob'}
+ALLOWED_VIDEO_EXTENSIONS = {'.mp4'}
 
 def convert_to_mp4(input_path: str, output_path: str) -> bool:
-    """Convert any video file to browser-compatible H.264/AAC MP4 with faststart."""
-    ensure_ffmpeg()
+    """Remux MP4 with faststart for fast playback start."""
     try:
-        # Check if already compatible MP4 (h264 video + aac audio)
-        probe = subprocess.run(
-            ['ffprobe', '-v', 'error', '-select_streams', 'v:0',
-             '-show_entries', 'stream=codec_name', '-of', 'csv=p=0', input_path],
-            capture_output=True, text=True, timeout=30
+        # Check if ffmpeg is available
+        ffmpeg_path = shutil.which('ffmpeg')
+        if not ffmpeg_path:
+            logger.warning("ffmpeg not found - skipping remux")
+            return False
+            
+        # Just remux with faststart (no re-encoding, very fast)
+        result = subprocess.run(
+            ['ffmpeg', '-y', '-i', input_path, '-c', 'copy', '-movflags', '+faststart', output_path],
+            capture_output=True, timeout=600
         )
-        video_codec = probe.stdout.strip().lower()
-        
-        probe_a = subprocess.run(
-            ['ffprobe', '-v', 'error', '-select_streams', 'a:0',
-             '-show_entries', 'stream=codec_name', '-of', 'csv=p=0', input_path],
-            capture_output=True, text=True, timeout=30
-        )
-        audio_codec = probe_a.stdout.strip().lower()
-        
-        is_mp4 = input_path.lower().endswith('.mp4')
-        is_compatible = is_mp4 and video_codec in ('h264', 'h265', 'hevc') and audio_codec in ('aac', '')
-        
-        if is_compatible:
-            # Just remux with faststart (no re-encoding, very fast)
-            result = subprocess.run(
-                ['ffmpeg', '-y', '-i', input_path, '-c', 'copy', '-movflags', '+faststart', output_path],
-                capture_output=True, timeout=600
-            )
-        else:
-            # Full conversion to H.264/AAC MP4
-            logger.info(f"Converting {video_codec}/{audio_codec} to h264/aac MP4")
-            result = subprocess.run(
-                ['ffmpeg', '-y', '-i', input_path,
-                 '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
-                 '-c:a', 'aac', '-b:a', '128k',
-                 '-movflags', '+faststart', output_path],
-                capture_output=True, timeout=1800  # 30 min max for large files
-            )
         
         if result.returncode == 0 and os.path.exists(output_path) and os.path.getsize(output_path) > 1000:
             return True
         else:
-            logger.error(f"FFmpeg conversion failed: {result.stderr[-500:] if result.stderr else 'unknown'}")
+            logger.error(f"FFmpeg remux failed: {result.stderr[-500:] if result.stderr else 'unknown'}")
             return False
     except subprocess.TimeoutExpired:
-        logger.error("FFmpeg conversion timed out")
+        logger.error("FFmpeg remux timed out")
         return False
     except FileNotFoundError:
         logger.error("ffmpeg not found - storing original file")

@@ -248,12 +248,12 @@ const ChannelCreator = () => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    // Validate file type - all common video formats
-    const allowedTypes = ['video/mp4', 'video/x-matroska', 'video/avi', 'video/x-msvideo', 'video/quicktime', 'video/x-ms-wmv', 'video/x-flv', 'video/webm', 'video/x-m4v', 'video/mp2t', 'video/mpeg', 'video/3gpp', 'video/ogg'];
-    const allowedExts = ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.webm', '.m4v', '.ts', '.mpg', '.mpeg', '.3gp', '.ogv', '.vob'];
+    // Validate file type - MP4 only
+    const allowedTypes = ['video/mp4'];
+    const allowedExts = ['.mp4'];
     const ext = file.name.toLowerCase().slice(file.name.lastIndexOf('.'));
     if (!allowedTypes.includes(file.type) && !allowedExts.includes(ext)) {
-      toast.error('Unsupported video format. Allowed: MP4, MKV, AVI, MOV, WMV, FLV, WebM, and more');
+      toast.error('Only MP4 video format is supported');
       return;
     }
 
@@ -700,7 +700,7 @@ const ChannelCreator = () => {
                   <input
                     ref={fileInputRef}
                     type="file"
-                    accept="video/*,.mkv,.avi,.mov,.wmv,.flv,.webm,.m4v,.ts,.mpg,.mpeg,.3gp,.ogv,.vob"
+                    accept="video/mp4,.mp4"
                     onChange={handleFileUpload}
                     className="hidden"
                     id="video-upload"
