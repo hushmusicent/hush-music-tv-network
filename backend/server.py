@@ -656,30 +656,51 @@ MAX_UPLOAD_SIZE = 2 * 1024 * 1024 * 1024  # 2GB
 ALLOWED_VIDEO_EXTENSIONS = {'.mp4'}
 
 def convert_to_mp4(input_path: str, output_path: str) -> bool:
-    """Remux MP4 with faststart for fast playback start."""
+    """Convert video to browser-compatible H.264 MP4 with faststart."""
     try:
-        # Check if ffmpeg is available
         ffmpeg_path = shutil.which('ffmpeg')
         if not ffmpeg_path:
-            logger.warning("ffmpeg not found - skipping remux")
+            logger.warning("ffmpeg not found - skipping conversion")
             return False
-            
-        # Just remux with faststart (no re-encoding, very fast)
-        result = subprocess.run(
-            ['ffmpeg', '-y', '-i', input_path, '-c', 'copy', '-movflags', '+faststart', output_path],
-            capture_output=True, timeout=600
+        
+        # Check input video codec
+        probe = subprocess.run(
+            ['ffprobe', '-v', 'error', '-select_streams', 'v:0',
+             '-show_entries', 'stream=codec_name', '-of', 'csv=p=0', input_path],
+            capture_output=True, text=True, timeout=30
         )
+        video_codec = probe.stdout.strip().lower()
+        logger.info(f"Input video codec: {video_codec}")
+        
+        # If already H.264, just remux with faststart
+        if video_codec in ('h264', 'hevc', 'h265'):
+            logger.info("Video is H.264/HEVC - remuxing with faststart")
+            result = subprocess.run(
+                ['ffmpeg', '-y', '-i', input_path, '-c', 'copy', '-movflags', '+faststart', output_path],
+                capture_output=True, timeout=600
+            )
+        else:
+            # Re-encode to H.264 (for MPEG-4 Part 2 and other codecs)
+            logger.info(f"Re-encoding {video_codec} to H.264...")
+            result = subprocess.run(
+                ['ffmpeg', '-y', '-i', input_path,
+                 '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
+                 '-c:a', 'aac', '-b:a', '128k',
+                 '-movflags', '+faststart', output_path],
+                capture_output=True, timeout=1800  # 30 min for large files
+            )
         
         if result.returncode == 0 and os.path.exists(output_path) and os.path.getsize(output_path) > 1000:
+            logger.info(f"Conversion successful: {os.path.getsize(output_path)} bytes")
             return True
         else:
-            logger.error(f"FFmpeg remux failed: {result.stderr[-500:] if result.stderr else 'unknown'}")
+            logger.error(f"FFmpeg failed: {result.stderr[-500:] if result.stderr else 'unknown'}")
             return False
     except subprocess.TimeoutExpired:
-        logger.error("FFmpeg remux timed out")
+        logger.error("FFmpeg conversion timed out")
         return False
     except FileNotFoundError:
-        logger.error("ffmpeg not found - storing original file")
+        logger.error("ffmpeg not found")
         return False
 
 @api_router.get("/storage/status")
