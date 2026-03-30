@@ -1537,6 +1537,117 @@ async def remux_uploaded_videos(user: dict = Depends(require_user)):
     }
 
 
+@api_router.post("/admin/reencode-mpeg4-videos")
+async def reencode_mpeg4_videos(user: dict = Depends(require_user)):
+    """
+    Re-encode uploaded videos from MPEG-4 Part 2 codec to H.264.
+    MPEG-4 Part 2 has poor browser support (audio plays but no video).
+    H.264 is universally supported by all browsers.
+    """
+    if not user.get("is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    from r2_service import get_r2_client, R2_BUCKET_NAME, R2_PUBLIC_URL, is_r2_configured, upload_to_r2
+    import tempfile
+    
+    if not is_r2_configured():
+        raise HTTPException(status_code=500, detail="R2 not configured")
+    
+    r2_client = get_r2_client()
+    
+    # Get all uploaded videos
+    uploaded_videos = await db.uploaded_videos.find({}, {"_id": 0}).to_list(None)
+    
+    results = {
+        "total_checked": 0,
+        "mpeg4_found": 0,
+        "reencoded": 0,
+        "already_h264": 0,
+        "errors": []
+    }
+    
+    for video in uploaded_videos:
+        video_url = video.get("url")
+        if not video_url or not video_url.endswith(".mp4"):
+            continue
+        
+        results["total_checked"] += 1
+        video_name = video.get("original_name", video.get("filename", "unknown"))
+        
+        try:
+            # Check codec
+            probe = subprocess.run(
+                ["ffprobe", "-v", "error", "-select_streams", "v:0",
+                 "-show_entries", "stream=codec_name", "-of", "csv=p=0", video_url],
+                capture_output=True, text=True, timeout=30
+            )
+            codec = probe.stdout.strip().lower()
+            
+            if codec == "h264" or codec == "hevc":
+                results["already_h264"] += 1
+                continue
+            
+            if codec != "mpeg4":
+                continue
+            
+            results["mpeg4_found"] += 1
+            logger.info(f"Re-encoding MPEG-4 video: {video_name}")
+            
+            # Download, re-encode, upload
+            with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp_in, \
+                 tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp_out:
+                
+                # Download from R2
+                import requests
+                resp = requests.get(video_url, stream=True, timeout=60)
+                for chunk in resp.iter_content(chunk_size=8192):
+                    tmp_in.write(chunk)
+                tmp_in.flush()
+                
+                # Re-encode to H.264
+                encode_result = subprocess.run(
+                    ["ffmpeg", "-y", "-i", tmp_in.name,
+                     "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+                     "-c:a", "aac", "-b:a", "128k",
+                     "-movflags", "+faststart", tmp_out.name],
+                    capture_output=True, timeout=600  # 10 minutes max per video
+                )
+                
+                if encode_result.returncode != 0:
+                    results["errors"].append(f"Encode failed: {video_name}")
+                    continue
+                
+                out_size = os.path.getsize(tmp_out.name)
+                if out_size < 1000:
+                    results["errors"].append(f"Encode empty: {video_name}")
+                    continue
+                
+                # Extract key from URL
+                # URL: https://pub-xxx.r2.dev/videos/uuid.mp4
+                key = video_url.split("/")[-2] + "/" + video_url.split("/")[-1]
+                
+                # Upload back to R2
+                with open(tmp_out.name, "rb") as f:
+                    r2_client.upload_fileobj(
+                        f, R2_BUCKET_NAME, key,
+                        ExtraArgs={"ContentType": "video/mp4"}
+                    )
+                
+                results["reencoded"] += 1
+                logger.info(f"Re-encoded: {video_name} ({out_size / 1024 / 1024:.1f} MB)")
+                
+                # Cleanup
+                os.unlink(tmp_in.name)
+                os.unlink(tmp_out.name)
+                
+        except subprocess.TimeoutExpired:
+            results["errors"].append(f"Timeout: {video_name}")
+        except Exception as e:
+            results["errors"].append(f"Error {video_name}: {str(e)[:50]}")
+    
+    return results
+
+
 # ===================== VIDEO CLEANUP ROUTES =====================
 import httpx
 
