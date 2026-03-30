@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, UploadFile, File, Body, Request, Query, Form
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, UploadFile, File, Body, Request, Query, Form, BackgroundTasks
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import StreamingResponse, RedirectResponse
@@ -1535,6 +1535,95 @@ async def remux_uploaded_videos(user: dict = Depends(require_user)):
         "errors_count": len(errors),
         "errors": errors[:20],
     }
+
+
+@api_router.post("/admin/reencode-video/{video_id}")
+async def reencode_single_video(video_id: str, background_tasks: BackgroundTasks, user: dict = Depends(require_user)):
+    """
+    Re-encode a single video from MPEG-4 to H.264 in the background.
+    Returns immediately - check logs for progress.
+    """
+    if not user.get("is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    from r2_service import is_r2_configured
+    
+    if not is_r2_configured():
+        raise HTTPException(status_code=500, detail="R2 not configured")
+    
+    video = await db.uploaded_videos.find_one({"id": video_id}, {"_id": 0})
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+    
+    # Queue the re-encoding task
+    background_tasks.add_task(reencode_video_task, video)
+    
+    return {"message": f"Re-encoding started for {video.get('original_name')}", "video_id": video_id}
+
+
+def reencode_video_task(video: dict):
+    """Background task to re-encode a single video"""
+    import tempfile
+    import requests
+    from r2_service import get_r2_client, R2_BUCKET_NAME
+    
+    video_url = video.get("url")
+    video_name = video.get("original_name", "unknown")
+    
+    try:
+        # Check codec
+        probe = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=codec_name", "-of", "csv=p=0", video_url],
+            capture_output=True, text=True, timeout=30
+        )
+        codec = probe.stdout.strip().lower()
+        
+        if codec == "h264":
+            logger.info(f"Video {video_name} is already H.264, skipping")
+            return
+        
+        logger.info(f"Re-encoding {video_name} from {codec} to H.264...")
+        
+        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp_in, \
+             tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp_out:
+            
+            # Download
+            resp = requests.get(video_url, stream=True, timeout=120)
+            for chunk in resp.iter_content(chunk_size=8192):
+                tmp_in.write(chunk)
+            tmp_in.flush()
+            
+            # Re-encode
+            result = subprocess.run(
+                ["ffmpeg", "-y", "-i", tmp_in.name,
+                 "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+                 "-c:a", "aac", "-b:a", "128k",
+                 "-movflags", "+faststart", tmp_out.name],
+                capture_output=True, timeout=900
+            )
+            
+            if result.returncode != 0:
+                logger.error(f"FFmpeg failed for {video_name}: {result.stderr[-200:]}")
+                return
+            
+            out_size = os.path.getsize(tmp_out.name)
+            
+            # Extract key and upload
+            key = video_url.split("/")[-2] + "/" + video_url.split("/")[-1]
+            r2_client = get_r2_client()
+            
+            with open(tmp_out.name, "rb") as f:
+                r2_client.upload_fileobj(f, R2_BUCKET_NAME, key, ExtraArgs={"ContentType": "video/mp4"})
+            
+            logger.info(f"Re-encoded {video_name}: {out_size / 1024 / 1024:.1f} MB")
+            
+            # Cleanup
+            os.unlink(tmp_in.name)
+            os.unlink(tmp_out.name)
+            
+    except Exception as e:
+        logger.error(f"Error re-encoding {video_name}: {e}")
 
 
 @api_router.post("/admin/reencode-mpeg4-videos")
