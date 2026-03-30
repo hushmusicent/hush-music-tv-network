@@ -24,6 +24,26 @@ import bcrypt
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
+def serialize_doc(doc):
+    """Convert datetime fields to ISO strings for JSON serialization"""
+    if doc is None:
+        return None
+    if isinstance(doc, list):
+        return [serialize_doc(d) for d in doc]
+    if isinstance(doc, dict):
+        result = {}
+        for k, v in doc.items():
+            if isinstance(v, datetime):
+                result[k] = v.isoformat()
+            elif isinstance(v, dict):
+                result[k] = serialize_doc(v)
+            elif isinstance(v, list):
+                result[k] = serialize_doc(v)
+            else:
+                result[k] = v
+        return result
+    return doc
+
 # Create uploads directories
 UPLOADS_DIR = ROOT_DIR / "uploads" / "videos"
 UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
@@ -297,7 +317,7 @@ async def get_channels(
     
     # Sort by sort_order first, then by favorites_count
     channels = await db.channels.find(query, {"_id": 0}).sort([("sort_order", 1), ("favorites_count", -1)]).to_list(100)
-    return channels
+    return serialize_doc(channels)
 
 @api_router.get("/channels/featured", response_model=List[ChannelResponse])
 async def get_featured_channels():
@@ -305,12 +325,12 @@ async def get_featured_channels():
         {"is_public": True},
         {"_id": 0}
     ).sort("favorites_count", -1).limit(6).to_list(6)
-    return channels
+    return serialize_doc(channels)
 
 @api_router.get("/channels/my", response_model=List[ChannelResponse])
 async def get_my_channels(user: dict = Depends(require_user)):
     channels = await db.channels.find({"owner_id": user["id"]}, {"_id": 0}).to_list(100)
-    return channels
+    return serialize_doc(channels)
 
 class ChannelOrderUpdate(BaseModel):
     channel_ids: List[str]  # List of channel IDs in the desired order
