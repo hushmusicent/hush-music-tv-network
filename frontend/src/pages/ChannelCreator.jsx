@@ -280,7 +280,8 @@ const ChannelCreator = () => {
       toast.success('Video uploaded successfully!');
     } catch (error) {
       console.error('Upload failed:', error);
-      toast.error(error.response?.data?.detail || 'Failed to upload video');
+      const errorMsg = error.response?.data?.detail || error.message || 'Failed to upload video';
+      toast.error(errorMsg);
     } finally {
       setUploading(false);
       setUploadProgress(0);

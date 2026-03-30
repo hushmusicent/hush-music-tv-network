@@ -99,7 +99,7 @@ export const uploadAPI = {
         });
         const { upload_id } = initResp.data;
         
-        // Step 2: Upload chunks
+        // Step 2: Upload chunks with retry logic
         for (let i = 0; i < totalChunks; i++) {
           const start = i * CHUNK_SIZE;
           const end = Math.min(start + CHUNK_SIZE, file.size);
@@ -110,10 +110,25 @@ export const uploadAPI = {
           formData.append('chunk_index', i.toString());
           formData.append('file', chunk, `chunk_${i}`);
           
-          await api.post('/upload/video/chunk', formData, {
-            headers: { 'Content-Type': 'multipart/form-data' },
-            timeout: 60000,
-          });
+          // Retry up to 3 times per chunk
+          let retries = 0;
+          const maxRetries = 3;
+          while (retries < maxRetries) {
+            try {
+              await api.post('/upload/video/chunk', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' },
+                timeout: 120000, // 2 minutes per chunk
+              });
+              break; // Success, exit retry loop
+            } catch (chunkErr) {
+              retries++;
+              if (retries >= maxRetries) {
+                throw new Error(`Failed to upload chunk ${i + 1}/${totalChunks} after ${maxRetries} attempts`);
+              }
+              // Wait before retry
+              await new Promise(resolve => setTimeout(resolve, 1000 * retries));
+            }
+          }
           
           if (onProgress) {
             const percent = Math.round(((i + 1) / totalChunks) * 90);
@@ -125,18 +140,18 @@ export const uploadAPI = {
         if (onProgress) onProgress(95);
         const completeResp = await api.post('/upload/video/complete-chunked', null, {
           params: { upload_id, filename: file.name, total_chunks: totalChunks },
-          timeout: 300000,
+          timeout: 600000, // 10 minutes for assembly and R2 upload
         });
         
         if (onProgress) onProgress(100);
         return completeResp;
       } catch (err) {
-        console.warn('Chunked upload failed, falling back to single upload:', err.message);
-        // Fall through to single upload
+        console.error('Chunked upload failed:', err.message);
+        throw err; // Don't fall back - throw the error
       }
     }
     
-    // Single-request upload (for small files or as fallback)
+    // Single-request upload (for small files only)
     const formData = new FormData();
     formData.append('file', file);
     return api.post('/upload/video', formData, {
