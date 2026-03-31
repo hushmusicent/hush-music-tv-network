@@ -1378,13 +1378,18 @@ async def delete_commercial(commercial_id: str, user: dict = Depends(require_use
     return {"message": "Commercial deleted"}
 
 
+class CommercialAssignment(BaseModel):
+    channel_ids: List[str] = []
+    is_global: bool = False
+
+
 @api_router.put("/commercials/{commercial_id}/assign")
-async def assign_commercial_to_channel(
+async def assign_commercial_to_channels(
     commercial_id: str,
-    channel_id: Optional[str] = None,
+    assignment: CommercialAssignment,
     user: dict = Depends(require_user)
 ):
-    """Assign a commercial to a channel (or remove assignment with channel_id=None)"""
+    """Update channel assignments for a commercial"""
     if not user.get("is_admin", False):
         raise HTTPException(status_code=403, detail="Admin access required")
     
@@ -1392,17 +1397,27 @@ async def assign_commercial_to_channel(
     if not commercial:
         raise HTTPException(status_code=404, detail="Commercial not found")
     
-    if channel_id:
-        channel = await db.channels.find_one({"id": channel_id})
-        if not channel:
-            raise HTTPException(status_code=404, detail="Channel not found")
+    # Validate channels if not global
+    if not assignment.is_global and assignment.channel_ids:
+        for cid in assignment.channel_ids:
+            channel = await db.channels.find_one({"id": cid})
+            if not channel:
+                raise HTTPException(status_code=404, detail=f"Channel {cid} not found")
+    
+    # If global or no channels selected, set is_global to true
+    is_global = assignment.is_global or len(assignment.channel_ids) == 0
     
     await db.commercials.update_one(
         {"id": commercial_id},
-        {"$set": {"channel_id": channel_id}}
+        {"$set": {
+            "channel_ids": [] if is_global else assignment.channel_ids,
+            "is_global": is_global
+        }}
     )
     
-    return {"message": "Commercial assignment updated"}
+    # Return updated commercial
+    updated = await db.commercials.find_one({"id": commercial_id}, {"_id": 0})
+    return serialize_doc(updated)
 
 
 @api_router.post("/channels/{channel_id}/update-durations")

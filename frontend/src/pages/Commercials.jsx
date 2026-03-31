@@ -6,10 +6,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Progress } from '../components/ui/progress';
 import { Checkbox } from '../components/ui/checkbox';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
 import { toast } from 'sonner';
 import { 
   ArrowLeft, Upload, Trash2, Tv, Video, Clock, Film,
-  Loader2, Plus, Play, AlertCircle, Globe, Check
+  Loader2, Plus, Play, AlertCircle, Globe, Check, Edit, X, Save
 } from 'lucide-react';
 import api from '../lib/api';
 
@@ -26,6 +27,12 @@ const Commercials = () => {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isGlobal, setIsGlobal] = useState(true); // Default to all channels
   const [selectedChannelIds, setSelectedChannelIds] = useState([]); // For specific channel selection
+  
+  // Edit modal state
+  const [editingCommercial, setEditingCommercial] = useState(null);
+  const [editIsGlobal, setEditIsGlobal] = useState(true);
+  const [editChannelIds, setEditChannelIds] = useState([]);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!user?.is_admin) {
@@ -176,6 +183,51 @@ const Commercials = () => {
     } catch (error) {
       console.error('Delete failed:', error);
       toast.error('Failed to delete commercial');
+    }
+  };
+
+  const openEditModal = (commercial) => {
+    setEditingCommercial(commercial);
+    setEditIsGlobal(commercial.is_global || !commercial.channel_ids?.length);
+    setEditChannelIds(commercial.channel_ids || []);
+  };
+
+  const closeEditModal = () => {
+    setEditingCommercial(null);
+    setEditIsGlobal(true);
+    setEditChannelIds([]);
+  };
+
+  const toggleEditChannel = (channelId) => {
+    setEditChannelIds(prev => 
+      prev.includes(channelId) 
+        ? prev.filter(id => id !== channelId)
+        : [...prev, channelId]
+    );
+  };
+
+  const saveChannelAssignment = async () => {
+    if (!editingCommercial) return;
+    
+    setSaving(true);
+    try {
+      const response = await api.put(`/commercials/${editingCommercial.id}/assign`, {
+        channel_ids: editIsGlobal ? [] : editChannelIds,
+        is_global: editIsGlobal
+      });
+      
+      // Update the commercial in the list
+      setCommercials(prev => prev.map(c => 
+        c.id === editingCommercial.id ? response.data : c
+      ));
+      
+      toast.success('Channel assignment updated!');
+      closeEditModal();
+    } catch (error) {
+      console.error('Failed to update assignment:', error);
+      toast.error('Failed to update channel assignment');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -480,15 +532,26 @@ const Commercials = () => {
                 
                 <div className="flex items-center justify-between text-xs text-gray-500">
                   <span>{formatFileSize(commercial.size)}</span>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-red-400 hover:text-red-300 hover:bg-red-500/10 h-7 px-2"
-                    onClick={() => handleDelete(commercial.id)}
-                  >
-                    <Trash2 size={14} className="mr-1" />
-                    Delete
-                  </Button>
+                  <div className="flex gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 h-7 px-2"
+                      onClick={() => openEditModal(commercial)}
+                    >
+                      <Edit size={14} className="mr-1" />
+                      Edit
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-red-400 hover:text-red-300 hover:bg-red-500/10 h-7 px-2"
+                      onClick={() => handleDelete(commercial.id)}
+                    >
+                      <Trash2 size={14} className="mr-1" />
+                      Delete
+                    </Button>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -525,6 +588,119 @@ const Commercials = () => {
           })}
         </div>
       </div>
+
+      {/* Edit Channel Assignment Modal */}
+      <Dialog open={!!editingCommercial} onOpenChange={(open) => !open && closeEditModal()}>
+        <DialogContent className="bg-[#12121a] border-white/10 max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Edit size={20} className="text-primary" />
+              Edit Channel Assignment
+            </DialogTitle>
+          </DialogHeader>
+          
+          {editingCommercial && (
+            <div className="py-4">
+              {/* Commercial Info */}
+              <div className="flex items-center gap-4 mb-6 p-3 bg-black/30 rounded-lg">
+                <Film size={24} className="text-primary" />
+                <div>
+                  <p className="font-medium">{editingCommercial.original_name}</p>
+                  <p className="text-sm text-gray-400">
+                    {formatDuration(editingCommercial.duration)} • {formatFileSize(editingCommercial.size)}
+                  </p>
+                </div>
+              </div>
+              
+              {/* All Channels Option */}
+              <div 
+                className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer mb-3 transition-colors ${
+                  editIsGlobal 
+                    ? 'bg-primary/20 border-primary' 
+                    : 'bg-black/30 border-white/10 hover:border-white/20'
+                }`}
+                onClick={() => {
+                  setEditIsGlobal(true);
+                  setEditChannelIds([]);
+                }}
+              >
+                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                  editIsGlobal ? 'border-primary bg-primary' : 'border-white/30'
+                }`}>
+                  {editIsGlobal && <Check size={12} className="text-white" />}
+                </div>
+                <Globe size={18} className="text-primary" />
+                <span className="font-medium">All Channels</span>
+              </div>
+              
+              {/* Selected Channels Option */}
+              <div 
+                className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                  !editIsGlobal 
+                    ? 'bg-primary/20 border-primary' 
+                    : 'bg-black/30 border-white/10 hover:border-white/20'
+                }`}
+                onClick={() => setEditIsGlobal(false)}
+              >
+                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                  !editIsGlobal ? 'border-primary bg-primary' : 'border-white/30'
+                }`}>
+                  {!editIsGlobal && <Check size={12} className="text-white" />}
+                </div>
+                <Tv size={18} className="text-blue-400" />
+                <span className="font-medium">Selected Channels</span>
+                <span className="text-xs text-gray-500 ml-auto">
+                  {editChannelIds.length > 0 ? `${editChannelIds.length} selected` : 'Choose channels'}
+                </span>
+              </div>
+              
+              {/* Channel Grid */}
+              {!editIsGlobal && (
+                <div className="mt-3 p-3 bg-black/20 rounded-lg border border-white/5 max-h-64 overflow-y-auto">
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                    {channels.map(channel => (
+                      <div
+                        key={channel.id}
+                        className={`flex items-center gap-2 p-2 rounded cursor-pointer transition-colors ${
+                          editChannelIds.includes(channel.id)
+                            ? 'bg-primary/30 border border-primary/50'
+                            : 'bg-black/30 border border-transparent hover:border-white/20'
+                        }`}
+                        onClick={() => toggleEditChannel(channel.id)}
+                      >
+                        <Checkbox 
+                          checked={editChannelIds.includes(channel.id)}
+                          className="pointer-events-none"
+                        />
+                        <span className="text-sm truncate">{channel.name}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={closeEditModal} disabled={saving}>
+              <X size={16} className="mr-2" />
+              Cancel
+            </Button>
+            <Button 
+              onClick={saveChannelAssignment} 
+              disabled={saving || (!editIsGlobal && editChannelIds.length === 0)}
+              className="bg-primary hover:bg-primary-hover"
+            >
+              {saving ? (
+                <Loader2 size={16} className="mr-2 animate-spin" />
+              ) : (
+                <Save size={16} className="mr-2" />
+              )}
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
