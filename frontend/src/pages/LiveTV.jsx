@@ -509,23 +509,32 @@ const LiveTV = () => {
   const startCommercialBreak = useCallback(() => {
     if (commercials.length === 0) return;
     
-    // Save current video state
+    // Save current video state - capture time immediately
     let currentSeekTime = 0;
-    if (videoRef.current) {
-      currentSeekTime = videoRef.current.currentTime || 0;
-    } else if (youtubePlayerRef.current?.getCurrentTime) {
+    
+    // Try to get the most accurate current time
+    if (youtubePlayerRef.current?.getCurrentTime) {
       currentSeekTime = youtubePlayerRef.current.getCurrentTime() || 0;
-    } else if (proxyVideoRef.current) {
+      console.log('Captured YouTube time:', currentSeekTime);
+    } else if (proxyVideoRef.current && !proxyVideoRef.current.paused) {
       currentSeekTime = proxyVideoRef.current.currentTime || 0;
+      console.log('Captured proxy video time:', currentSeekTime);
+    } else if (videoRef.current && !videoRef.current.paused) {
+      currentSeekTime = videoRef.current.currentTime || 0;
+      console.log('Captured uploaded video time:', currentSeekTime);
     }
     
-    setSavedVideoState({
+    // Store the saved state
+    const stateToSave = {
       video: currentVideo,
       videoIndex: currentVideoIndex,
       seekTime: currentSeekTime,
       useProxy: useProxyPlayer,
       proxyUrl: proxyVideoUrl,
-    });
+    };
+    
+    console.log('Saving video state for commercial break:', stateToSave);
+    setSavedVideoState(stateToSave);
     
     // Select random commercials (up to 3)
     const shuffled = [...commercials].sort(() => Math.random() - 0.5);
@@ -566,13 +575,39 @@ const LiveTV = () => {
     setCurrentCommercialIndex(0);
     lastCommercialBreakRef.current = Date.now();
     
-    // Restore video state
+    // Restore video state and force seek
     if (savedVideoState) {
+      const resumeTime = savedVideoState.seekTime;
+      console.log(`Resuming video at ${resumeTime} seconds`);
+      
       setCurrentVideo(savedVideoState.video);
       setCurrentVideoIndex(savedVideoState.videoIndex);
-      setSeekTime(savedVideoState.seekTime);
       setUseProxyPlayer(savedVideoState.useProxy);
       setProxyVideoUrl(savedVideoState.proxyUrl);
+      
+      // Use a ref to track that we need to seek after commercial
+      // Set seekTime which will be picked up by the video player
+      setSeekTime(resumeTime);
+      
+      // Also directly seek the video elements after a short delay
+      setTimeout(() => {
+        if (videoRef.current) {
+          videoRef.current.currentTime = resumeTime;
+          videoRef.current.play().catch(() => {});
+          console.log('Seeked uploaded video to', resumeTime);
+        }
+        if (proxyVideoRef.current) {
+          proxyVideoRef.current.currentTime = resumeTime;
+          proxyVideoRef.current.play().catch(() => {});
+          console.log('Seeked proxy video to', resumeTime);
+        }
+        if (youtubePlayerRef.current?.seekTo) {
+          youtubePlayerRef.current.seekTo(resumeTime, true);
+          youtubePlayerRef.current.playVideo();
+          console.log('Seeked YouTube video to', resumeTime);
+        }
+      }, 500);
+      
       setSavedVideoState(null);
     }
   }, [savedVideoState]);
