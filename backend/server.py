@@ -662,7 +662,8 @@ class CommercialResponse(BaseModel):
     duration: int = 30  # Default 30 seconds
     thumbnail: Optional[str] = None
     created_at: str
-    channel_id: Optional[str] = None  # If None, it's a global commercial
+    channel_ids: List[str] = []  # Empty list means ALL channels, otherwise specific channel IDs
+    is_global: bool = False  # True = plays on all channels
 
 MAX_UPLOAD_SIZE = 2 * 1024 * 1024 * 1024  # 2GB
 ALLOWED_VIDEO_EXTENSIONS = {'.mp4'}
@@ -1058,10 +1059,11 @@ async def update_video_duration(
 @api_router.post("/commercials/upload")
 async def upload_commercial(
     file: UploadFile = File(...),
-    channel_id: Optional[str] = Form(None),
+    channel_ids: Optional[str] = Form(None),  # Comma-separated channel IDs, empty = all channels
+    is_global: bool = Form(False),
     user: dict = Depends(require_user)
 ):
-    """Upload a commercial video for a specific channel"""
+    """Upload a commercial video for specific channels or all channels"""
     if not user.get("is_admin", False):
         raise HTTPException(status_code=403, detail="Admin access required")
     
@@ -1070,11 +1072,15 @@ async def upload_commercial(
     if not is_r2_configured():
         raise HTTPException(status_code=500, detail="R2 storage not configured")
     
-    # Validate channel if provided
-    if channel_id:
-        channel = await db.channels.find_one({"id": channel_id})
-        if not channel:
-            raise HTTPException(status_code=404, detail="Channel not found")
+    # Parse channel IDs
+    parsed_channel_ids = []
+    if channel_ids and not is_global:
+        parsed_channel_ids = [cid.strip() for cid in channel_ids.split(",") if cid.strip()]
+        # Validate channels exist
+        for cid in parsed_channel_ids:
+            channel = await db.channels.find_one({"id": cid})
+            if not channel:
+                raise HTTPException(status_code=404, detail=f"Channel {cid} not found")
     
     # Validate file
     file_ext = Path(file.filename).suffix.lower()
@@ -1134,7 +1140,8 @@ async def upload_commercial(
             "url": r2_result["url"],
             "size": len(file_content),
             "duration": duration,
-            "channel_id": channel_id,
+            "channel_ids": parsed_channel_ids,
+            "is_global": is_global or len(parsed_channel_ids) == 0,
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
         
@@ -1160,17 +1167,18 @@ async def init_chunked_commercial_upload(
     filename: str,
     total_size: int,
     total_chunks: int,
-    channel_id: str,
+    channel_ids: Optional[str] = None,  # Comma-separated, empty = all channels
+    is_global: bool = False,
     user: dict = Depends(require_user)
 ):
     """Initialize a chunked commercial upload session"""
     if not user.get("is_admin", False):
         raise HTTPException(status_code=403, detail="Admin access required")
     
-    # Validate channel
-    channel = await db.channels.find_one({"id": channel_id})
-    if not channel:
-        raise HTTPException(status_code=404, detail="Channel not found")
+    # Parse channel IDs
+    parsed_channel_ids = []
+    if channel_ids and not is_global:
+        parsed_channel_ids = [cid.strip() for cid in channel_ids.split(",") if cid.strip()]
     
     upload_id = str(uuid.uuid4())
     chunk_dir = Path(f"/tmp/commercial_chunks/{upload_id}")
@@ -1180,7 +1188,8 @@ async def init_chunked_commercial_upload(
         "filename": filename,
         "total_size": total_size,
         "total_chunks": total_chunks,
-        "channel_id": channel_id,
+        "channel_ids": parsed_channel_ids,
+        "is_global": is_global or len(parsed_channel_ids) == 0,
         "chunk_dir": str(chunk_dir),
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
@@ -1218,7 +1227,6 @@ async def complete_chunked_commercial_upload(
     upload_id: str,
     filename: str,
     total_chunks: int,
-    channel_id: str,
     user: dict = Depends(require_user)
 ):
     """Assemble chunks and complete commercial upload"""
@@ -1283,7 +1291,10 @@ async def complete_chunked_commercial_upload(
         if not r2_result["success"]:
             raise HTTPException(status_code=500, detail="Failed to upload to storage")
         
-        # Store in database
+        # Store in database - get channel info from session
+        channel_ids = session.get("channel_ids", [])
+        is_global = session.get("is_global", False)
+        
         commercial_doc = {
             "id": commercial_id,
             "filename": r2_filename,
@@ -1291,7 +1302,8 @@ async def complete_chunked_commercial_upload(
             "url": r2_result["url"],
             "size": len(file_content),
             "duration": duration,
-            "channel_id": channel_id,
+            "channel_ids": channel_ids,
+            "is_global": is_global,
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
         
@@ -1330,9 +1342,15 @@ async def list_commercials(
 
 @api_router.get("/channels/{channel_id}/commercials", response_model=List[CommercialResponse])
 async def get_channel_commercials(channel_id: str):
-    """Get commercials assigned to a specific channel (public endpoint for playback)"""
+    """Get commercials assigned to a specific channel or global commercials (for playback)"""
+    # Get commercials that are either:
+    # 1. Global (is_global = true)
+    # 2. Assigned to this specific channel (channel_id in channel_ids)
     commercials = await db.commercials.find(
-        {"channel_id": channel_id}, 
+        {"$or": [
+            {"is_global": True},
+            {"channel_ids": channel_id}
+        ]}, 
         {"_id": 0}
     ).to_list(100)
     return serialize_doc(commercials)

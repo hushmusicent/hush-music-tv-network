@@ -5,10 +5,11 @@ import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Progress } from '../components/ui/progress';
+import { Checkbox } from '../components/ui/checkbox';
 import { toast } from 'sonner';
 import { 
   ArrowLeft, Upload, Trash2, Tv, Video, Clock, Film,
-  Loader2, Plus, Play, AlertCircle
+  Loader2, Plus, Play, AlertCircle, Globe, Check
 } from 'lucide-react';
 import api from '../lib/api';
 
@@ -23,7 +24,8 @@ const Commercials = () => {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [uploadChannelId, setUploadChannelId] = useState('');
+  const [isGlobal, setIsGlobal] = useState(true); // Default to all channels
+  const [selectedChannelIds, setSelectedChannelIds] = useState([]); // For specific channel selection
 
   useEffect(() => {
     if (!user?.is_admin) {
@@ -59,8 +61,9 @@ const Commercials = () => {
       return;
     }
 
-    if (!uploadChannelId) {
-      toast.error('Please select a channel first');
+    // Validate channel selection
+    if (!isGlobal && selectedChannelIds.length === 0) {
+      toast.error('Please select at least one channel or choose "All Channels"');
       return;
     }
 
@@ -70,12 +73,14 @@ const Commercials = () => {
     try {
       const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB chunks
       const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+      const channelIdsStr = isGlobal ? '' : selectedChannelIds.join(',');
       
       // For small files (< 10MB), use direct upload
       if (file.size < 10 * 1024 * 1024) {
         const formData = new FormData();
         formData.append('file', file);
-        formData.append('channel_id', uploadChannelId);
+        formData.append('channel_ids', channelIdsStr);
+        formData.append('is_global', isGlobal.toString());
 
         setUploadProgress(30);
 
@@ -99,7 +104,8 @@ const Commercials = () => {
             filename: file.name, 
             total_size: file.size, 
             total_chunks: totalChunks,
-            channel_id: uploadChannelId
+            channel_ids: channelIdsStr,
+            is_global: isGlobal
           }
         });
         
@@ -139,7 +145,7 @@ const Commercials = () => {
         // Step 3: Complete upload
         setUploadProgress(90);
         const completeResp = await api.post('/commercials/upload/complete-chunked', null, {
-          params: { upload_id, filename: file.name, total_chunks: totalChunks, channel_id: uploadChannelId },
+          params: { upload_id, filename: file.name, total_chunks: totalChunks },
           timeout: 600000,
         });
         
@@ -189,14 +195,32 @@ const Commercials = () => {
     return channel?.name || 'Unknown Channel';
   };
 
+  const getChannelNames = (commercial) => {
+    if (commercial.is_global) return 'All Channels';
+    if (!commercial.channel_ids || commercial.channel_ids.length === 0) return 'All Channels';
+    return commercial.channel_ids.map(id => getChannelName(id)).join(', ');
+  };
+
+  const toggleChannelSelection = (channelId) => {
+    setSelectedChannelIds(prev => 
+      prev.includes(channelId) 
+        ? prev.filter(id => id !== channelId)
+        : [...prev, channelId]
+    );
+  };
+
   const filteredCommercials = selectedChannel === 'all'
     ? commercials
-    : commercials.filter(c => c.channel_id === selectedChannel);
+    : selectedChannel === 'global'
+    ? commercials.filter(c => c.is_global)
+    : commercials.filter(c => c.channel_ids?.includes(selectedChannel));
 
-  // Group commercials by channel
+  // Group commercials by channel (including global)
   const commercialsByChannel = {};
   channels.forEach(ch => {
-    commercialsByChannel[ch.id] = commercials.filter(c => c.channel_id === ch.id);
+    commercialsByChannel[ch.id] = commercials.filter(c => 
+      c.is_global || c.channel_ids?.includes(ch.id)
+    );
   });
 
   if (loading) {
@@ -242,50 +266,110 @@ const Commercials = () => {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-col md:flex-row gap-4">
-            <div className="flex-1">
-              <label className="text-sm text-gray-400 mb-2 block">Select Channel</label>
-              <Select value={uploadChannelId} onValueChange={setUploadChannelId}>
-                <SelectTrigger className="bg-black/50 border-white/10">
-                  <SelectValue placeholder="Choose a channel for this commercial" />
-                </SelectTrigger>
-                <SelectContent>
-                  {channels.map(channel => (
-                    <SelectItem key={channel.id} value={channel.id}>
-                      {channel.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          {/* Channel Selection */}
+          <div className="mb-4">
+            <label className="text-sm text-gray-400 mb-3 block">Assign to Channels</label>
+            
+            {/* All Channels Toggle */}
+            <div 
+              className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer mb-3 transition-colors ${
+                isGlobal 
+                  ? 'bg-primary/20 border-primary' 
+                  : 'bg-black/30 border-white/10 hover:border-white/20'
+              }`}
+              onClick={() => {
+                setIsGlobal(true);
+                setSelectedChannelIds([]);
+              }}
+            >
+              <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                isGlobal ? 'border-primary bg-primary' : 'border-white/30'
+              }`}>
+                {isGlobal && <Check size={12} className="text-white" />}
+              </div>
+              <Globe size={18} className="text-primary" />
+              <span className="font-medium">All Channels</span>
+              <span className="text-xs text-gray-500 ml-auto">Commercial plays on every channel</span>
             </div>
             
-            <div className="flex items-end">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="video/mp4,.mp4"
-                onChange={handleFileSelect}
-                className="hidden"
-                disabled={uploading || !uploadChannelId}
-              />
-              <Button
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploading || !uploadChannelId}
-                className="bg-primary hover:bg-primary-hover w-full md:w-auto"
-              >
-                {uploading ? (
-                  <>
-                    <Loader2 size={16} className="mr-2 animate-spin" />
-                    Uploading...
-                  </>
-                ) : (
-                  <>
-                    <Plus size={16} className="mr-2" />
-                    Upload MP4
-                  </>
-                )}
-              </Button>
+            {/* Specific Channels Toggle */}
+            <div 
+              className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                !isGlobal 
+                  ? 'bg-primary/20 border-primary' 
+                  : 'bg-black/30 border-white/10 hover:border-white/20'
+              }`}
+              onClick={() => setIsGlobal(false)}
+            >
+              <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                !isGlobal ? 'border-primary bg-primary' : 'border-white/30'
+              }`}>
+                {!isGlobal && <Check size={12} className="text-white" />}
+              </div>
+              <Tv size={18} className="text-blue-400" />
+              <span className="font-medium">Selected Channels</span>
+              <span className="text-xs text-gray-500 ml-auto">
+                {selectedChannelIds.length > 0 ? `${selectedChannelIds.length} selected` : 'Choose specific channels'}
+              </span>
             </div>
+            
+            {/* Channel Multi-Select Grid */}
+            {!isGlobal && (
+              <div className="mt-3 p-3 bg-black/20 rounded-lg border border-white/5 max-h-48 overflow-y-auto">
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                  {channels.map(channel => (
+                    <div
+                      key={channel.id}
+                      className={`flex items-center gap-2 p-2 rounded cursor-pointer transition-colors ${
+                        selectedChannelIds.includes(channel.id)
+                          ? 'bg-primary/30 border border-primary/50'
+                          : 'bg-black/30 border border-transparent hover:border-white/20'
+                      }`}
+                      onClick={() => toggleChannelSelection(channel.id)}
+                    >
+                      <Checkbox 
+                        checked={selectedChannelIds.includes(channel.id)}
+                        className="pointer-events-none"
+                      />
+                      <span className="text-sm truncate">{channel.name}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+          
+          {/* Upload Button */}
+          <div className="flex items-center gap-4">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="video/mp4,.mp4"
+              onChange={handleFileSelect}
+              className="hidden"
+              disabled={uploading}
+            />
+            <Button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading || (!isGlobal && selectedChannelIds.length === 0)}
+              className="bg-primary hover:bg-primary-hover"
+            >
+              {uploading ? (
+                <>
+                  <Loader2 size={16} className="mr-2 animate-spin" />
+                  Uploading...
+                </>
+              ) : (
+                <>
+                  <Plus size={16} className="mr-2" />
+                  Upload MP4 Commercial
+                </>
+              )}
+            </Button>
+            
+            {!isGlobal && selectedChannelIds.length === 0 && (
+              <span className="text-sm text-yellow-400">Select at least one channel</span>
+            )}
           </div>
           
           {uploading && (
@@ -320,7 +404,8 @@ const Commercials = () => {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Channels</SelectItem>
+            <SelectItem value="all">All Commercials</SelectItem>
+            <SelectItem value="global">Global (All Channels)</SelectItem>
             {channels.map(channel => (
               <SelectItem key={channel.id} value={channel.id}>
                 {channel.name} ({commercialsByChannel[channel.id]?.length || 0})
@@ -364,6 +449,12 @@ const Commercials = () => {
                 <div className="absolute bottom-2 right-2 bg-black/70 px-2 py-1 rounded text-xs">
                   {formatDuration(commercial.duration)}
                 </div>
+                {commercial.is_global && (
+                  <div className="absolute top-2 left-2 bg-primary/80 px-2 py-1 rounded text-xs flex items-center gap-1">
+                    <Globe size={10} />
+                    All Channels
+                  </div>
+                )}
               </div>
               
               <CardContent className="p-4">
@@ -372,8 +463,19 @@ const Commercials = () => {
                 </h3>
                 
                 <div className="flex items-center gap-2 text-xs text-gray-400 mb-3">
-                  <Tv size={12} />
-                  <span className="truncate">{getChannelName(commercial.channel_id)}</span>
+                  {commercial.is_global ? (
+                    <>
+                      <Globe size={12} className="text-primary" />
+                      <span>All Channels</span>
+                    </>
+                  ) : (
+                    <>
+                      <Tv size={12} />
+                      <span className="truncate" title={getChannelNames(commercial)}>
+                        {commercial.channel_ids?.length || 0} channel{(commercial.channel_ids?.length || 0) !== 1 ? 's' : ''}
+                      </span>
+                    </>
+                  )}
                 </div>
                 
                 <div className="flex items-center justify-between text-xs text-gray-500">
