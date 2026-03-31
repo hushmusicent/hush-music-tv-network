@@ -99,15 +99,13 @@ const parseTimeToSeconds = (timeStr) => {
 };
 
 // Get current video from 24-hour schedule based on ACTUAL Eastern time (synchronized for all viewers)
-// commercialTimeOffset: seconds spent in commercial breaks that should be subtracted from current time
-const getVideoFromSchedule = (schedule, failedVideoIds = new Set(), commercialTimeOffset = 0) => {
+const getVideoFromSchedule = (schedule, failedVideoIds = new Set()) => {
   if (!schedule || schedule.length === 0) {
     return { video: null, seekTime: 0, videoIndex: -1 };
   }
   
   // Use actual Eastern time for synchronized playback
-  // Subtract the commercial time offset so the schedule doesn't jump forward during commercial breaks
-  const currentSeconds = getEasternTimeSeconds() - commercialTimeOffset;
+  const currentSeconds = getEasternTimeSeconds();
   
   // Find the video that should be playing at this time
   for (let i = 0; i < schedule.length; i++) {
@@ -215,14 +213,9 @@ const LiveTV = () => {
   const [isCommercialBreak, setIsCommercialBreak] = useState(false);
   const [currentCommercialIndex, setCurrentCommercialIndex] = useState(0);
   const [commercialBreakVideos, setCommercialBreakVideos] = useState([]); // 3 random commercials
-  const [savedVideoState, setSavedVideoState] = useState(null); // Save state before commercial
-  const lastCommercialBreakRef = useRef(Date.now());
+  const [pendingNextVideo, setPendingNextVideo] = useState(null); // Video to play after commercials
   const commercialVideoRef = useRef(null);
-  const COMMERCIAL_INTERVAL = 10 * 60 * 1000; // 10 minutes in milliseconds
   const COMMERCIALS_PER_BREAK = 3;
-  const resumeFromCommercialRef = useRef(null); // Store resume position after commercial
-  const commercialBreakStartTimeRef = useRef(null); // Track when commercial break started
-  const totalCommercialTimeRef = useRef(0); // Accumulate total time spent in commercials (in seconds)
   
   const playerRef = useRef(null);
   const videoRef = useRef(null);
@@ -416,9 +409,10 @@ const LiveTV = () => {
     setFailedVideoIds(new Set());
     
     // Reset commercial time tracking when changing channels
-    totalCommercialTimeRef.current = 0;
-    commercialBreakStartTimeRef.current = null;
-    resumeFromCommercialRef.current = null;
+    // Reset commercial state when changing channels
+    setIsCommercialBreak(false);
+    setCommercialBreakVideos([]);
+    setPendingNextVideo(null);
     
     // Live stream channels - set a special video object
     if (channel.is_live_stream && channel.live_stream_youtube_id) {
@@ -447,7 +441,7 @@ const LiveTV = () => {
     
     if (channelSchedule && channelSchedule.length > 0) {
       // Use 24-hour schedule for this channel
-      const { video, seekTime: newSeekTime, videoIndex } = getVideoFromSchedule(channelSchedule, new Set(), 0);
+      const { video, seekTime: newSeekTime, videoIndex } = getVideoFromSchedule(channelSchedule, new Set());
       
       if (video) {
         console.log(`[SCHEDULED] ${channel.name} - Playing: ${video.title} at ${newSeekTime}s`);
@@ -496,75 +490,40 @@ const LiveTV = () => {
     };
     
     fetchCommercials();
-    lastCommercialBreakRef.current = Date.now(); // Reset timer on channel change
   }, [currentChannel?.id]);
 
-  // Commercial break timer - check every 30 seconds
-  useEffect(() => {
-    if (isCommercialBreak || commercials.length === 0) return;
-    
-    const checkForCommercialBreak = () => {
-      const timeSinceLastBreak = Date.now() - lastCommercialBreakRef.current;
-      
-      if (timeSinceLastBreak >= COMMERCIAL_INTERVAL && commercials.length > 0) {
-        startCommercialBreak();
+  // Start commercial break before playing next video
+  const startCommercialBreak = useCallback((nextVideoData) => {
+    if (commercials.length === 0) {
+      // No commercials available, just play next video directly
+      if (nextVideoData) {
+        console.log('No commercials, playing next video directly:', nextVideoData.video.title);
+        setCurrentVideoIndex(nextVideoData.index);
+        setCurrentVideo(nextVideoData.video);
+        setSeekTime(0);
       }
-    };
-    
-    const interval = setInterval(checkForCommercialBreak, 30000); // Check every 30 seconds
-    return () => clearInterval(interval);
-  }, [isCommercialBreak, commercials]);
-
-  // Start commercial break
-  const startCommercialBreak = useCallback(() => {
-    if (commercials.length === 0) return;
-    
-    // Record when the commercial break started
-    commercialBreakStartTimeRef.current = Date.now();
-    
-    // Save current video state - capture time immediately
-    let currentSeekTime = 0;
-    
-    // Try to get the most accurate current time
-    if (youtubePlayerRef.current?.getCurrentTime) {
-      currentSeekTime = youtubePlayerRef.current.getCurrentTime() || 0;
-      console.log('Captured YouTube time:', currentSeekTime);
-    } else if (proxyVideoRef.current && !proxyVideoRef.current.paused) {
-      currentSeekTime = proxyVideoRef.current.currentTime || 0;
-      console.log('Captured proxy video time:', currentSeekTime);
-    } else if (videoRef.current && !videoRef.current.paused) {
-      currentSeekTime = videoRef.current.currentTime || 0;
-      console.log('Captured uploaded video time:', currentSeekTime);
+      return;
     }
     
-    // Store the saved state
-    const stateToSave = {
-      video: currentVideo,
-      videoIndex: currentVideoIndex,
-      seekTime: currentSeekTime,
-      useProxy: useProxyPlayer,
-      proxyUrl: proxyVideoUrl,
-    };
-    
-    console.log('Saving video state for commercial break:', stateToSave);
-    setSavedVideoState(stateToSave);
+    // Store the next video to play after commercials
+    setPendingNextVideo(nextVideoData);
     
     // Select random commercials (up to 3)
     const shuffled = [...commercials].sort(() => Math.random() - 0.5);
     const selectedCommercials = shuffled.slice(0, Math.min(COMMERCIALS_PER_BREAK, commercials.length));
     
-    console.log(`Starting commercial break with ${selectedCommercials.length} commercials`);
+    console.log(`Starting commercial break with ${selectedCommercials.length} commercials, next video: ${nextVideoData?.video?.title}`);
     
     setCommercialBreakVideos(selectedCommercials);
     setCurrentCommercialIndex(0);
     setIsCommercialBreak(true);
     
-    // Pause regular video
+    // Pause any playing video
     if (videoRef.current) videoRef.current.pause();
     if (youtubePlayerRef.current?.pauseVideo) youtubePlayerRef.current.pauseVideo();
     if (proxyVideoRef.current) proxyVideoRef.current.pause();
     
-  }, [commercials, currentVideo, currentVideoIndex, useProxyPlayer, proxyVideoUrl]);
+  }, [commercials]);
 
   // Handle commercial video ended
   const handleCommercialEnded = useCallback(() => {
@@ -579,123 +538,25 @@ const LiveTV = () => {
     }
   }, [currentCommercialIndex, commercialBreakVideos.length]);
 
-  // End commercial break and resume regular video
+  // End commercial break and play the next video
   const endCommercialBreak = useCallback(() => {
-    console.log('Commercial break ended, resuming regular video');
+    console.log('Commercial break ended');
     
-    // Calculate how long the commercial break lasted and accumulate it
-    if (commercialBreakStartTimeRef.current) {
-      const breakDuration = Math.floor((Date.now() - commercialBreakStartTimeRef.current) / 1000);
-      totalCommercialTimeRef.current += breakDuration;
-      console.log(`Commercial break lasted ${breakDuration}s, total commercial time: ${totalCommercialTimeRef.current}s`);
-      commercialBreakStartTimeRef.current = null;
-    }
-    
-    // Store the resume time in a ref so it persists across re-renders
-    let resumeTime = 0;
-    if (savedVideoState) {
-      resumeTime = savedVideoState.seekTime;
-      
-      resumeFromCommercialRef.current = {
-        seekTime: resumeTime,
-        video: savedVideoState.video,
-        videoIndex: savedVideoState.videoIndex,
-        useProxy: savedVideoState.useProxy,
-        proxyUrl: savedVideoState.proxyUrl,
-        timestamp: Date.now()
-      };
-      
-      // CRITICAL: Update seekTimeRef so if YouTube player re-initializes, it uses the correct position
-      seekTimeRef.current = resumeTime;
-      setSeekTime(resumeTime);
-      
-      console.log('Set resume position to:', resumeTime);
-    }
-    
-    // Clear commercial state FIRST
+    // Clear commercial state
     setIsCommercialBreak(false);
     setCommercialBreakVideos([]);
     setCurrentCommercialIndex(0);
-    lastCommercialBreakRef.current = Date.now();
     setIsPaused(false);
-    setSavedVideoState(null);
     
-    // Resume video playback with aggressive retry
-    const resumePlayback = () => {
-      const targetTime = resumeFromCommercialRef.current?.seekTime ?? resumeTime;
-      console.log('Resuming playback at:', targetTime);
-      
-      // Handle uploaded video player
-      if (videoRef.current) {
-        videoRef.current.currentTime = targetTime;
-        videoRef.current.play().catch(err => console.log('Video play error:', err));
-      }
-      
-      // Handle proxy video player  
-      if (proxyVideoRef.current) {
-        proxyVideoRef.current.currentTime = targetTime;
-        proxyVideoRef.current.play().catch(err => console.log('Proxy video play error:', err));
-      }
-      
-      // Handle YouTube player - needs special attention
-      if (youtubePlayerRef.current) {
-        try {
-          const player = youtubePlayerRef.current;
-          
-          // Seek to position
-          if (player.seekTo) {
-            player.seekTo(targetTime, true);
-          }
-          
-          // Force play
-          if (player.playVideo) {
-            player.playVideo();
-          }
-        } catch (e) {
-          console.log('YouTube player resume error:', e);
-        }
-      }
-    };
-    
-    // Force check and retry if video isn't playing
-    const checkAndForcePlay = () => {
-      // Check YouTube player
-      if (youtubePlayerRef.current?.getPlayerState) {
-        try {
-          const state = youtubePlayerRef.current.getPlayerState();
-          // States: -1 (unstarted), 0 (ended), 1 (playing), 2 (paused), 3 (buffering), 5 (cued)
-          console.log('YouTube player state:', state);
-          if (state !== 1 && state !== 3) { // Not playing and not buffering
-            console.log('Player not playing, forcing play...');
-            youtubePlayerRef.current.playVideo?.();
-          }
-        } catch (e) {}
-      }
-      
-      // Check proxy video
-      if (proxyVideoRef.current && proxyVideoRef.current.paused) {
-        proxyVideoRef.current.play().catch(() => {});
-      }
-      
-      // Check uploaded video
-      if (videoRef.current && videoRef.current.paused) {
-        videoRef.current.play().catch(() => {});
-      }
-    };
-    
-    // Multiple resume attempts with increasing delays
-    setTimeout(resumePlayback, 100);
-    setTimeout(resumePlayback, 500);
-    setTimeout(checkAndForcePlay, 800);
-    setTimeout(checkAndForcePlay, 1500);
-    setTimeout(checkAndForcePlay, 2500);
-    
-    // Final cleanup
-    setTimeout(() => {
-      resumeFromCommercialRef.current = null;
-    }, 3000);
-    
-  }, [savedVideoState]);
+    // Play the pending next video
+    if (pendingNextVideo) {
+      console.log('Playing next video:', pendingNextVideo.video.title);
+      setCurrentVideoIndex(pendingNextVideo.index);
+      setCurrentVideo(pendingNextVideo.video);
+      setSeekTime(0);
+      setPendingNextVideo(null);
+    }
+  }, [pendingNextVideo]);
 
   // Track video events for analytics
   const trackVideoEvent = useCallback((eventType) => {
@@ -769,9 +630,12 @@ const LiveTV = () => {
   const isCurrentChannelLiveStream = currentChannel?.is_live_stream === true;
 
   // Play next video in playlist (called when current video ends)
+  // Now triggers commercials before playing the next video
   const playNextVideo = useCallback(() => {
     if (!currentChannel) return;
     trackVideoEvent('complete');  // Track video completion
+    
+    let nextVideoData = null;
     
     // For scheduled channels, find next slot in schedule
     if (schedules[currentChannel.id]) {
@@ -801,37 +665,37 @@ const LiveTV = () => {
       }
       
       const nextVideo = schedule[nextSlotIndex];
-      console.log('[SCHEDULED] Video ended, playing next:', nextVideo.title);
-      setCurrentVideoIndex(nextSlotIndex);
-      setCurrentVideo(nextVideo);
-      setSeekTime(0);
-      return;
+      nextVideoData = { video: nextVideo, index: nextSlotIndex };
+      console.log('[SCHEDULED] Video ended, queuing next:', nextVideo.title);
+    } else {
+      // For regular channels
+      if (!playlists[currentChannel.id]) return;
+      
+      const playlist = playlists[currentChannel.id];
+      const playableVideos = playlist.filter(v => !failedVideoIds.has(v.youtube_id));
+      
+      if (playableVideos.length === 0) {
+        toast.error('No playable videos on this channel');
+        return;
+      }
+      
+      // Find next video after current
+      const currentPlayableIndex = playableVideos.findIndex(v => v.video_id === currentVideo?.video_id);
+      const nextPlayableIndex = (currentPlayableIndex + 1) % playableVideos.length;
+      const nextVideo = playableVideos[nextPlayableIndex];
+      
+      // Find actual index in original playlist
+      const actualIndex = playlist.findIndex(v => v.video_id === nextVideo.video_id);
+      nextVideoData = { video: nextVideo, index: actualIndex };
+      console.log('Video ended, queuing next:', nextVideo.title);
     }
     
-    // For regular channels
-    if (!playlists[currentChannel.id]) return;
-    
-    const playlist = playlists[currentChannel.id];
-    const playableVideos = playlist.filter(v => !failedVideoIds.has(v.youtube_id));
-    
-    if (playableVideos.length === 0) {
-      toast.error('No playable videos on this channel');
-      return;
+    // Start commercial break (will play next video after commercials)
+    // If no commercials, startCommercialBreak will play the video directly
+    if (nextVideoData) {
+      startCommercialBreak(nextVideoData);
     }
-    
-    // Find next video after current
-    const currentPlayableIndex = playableVideos.findIndex(v => v.video_id === currentVideo?.video_id);
-    const nextPlayableIndex = (currentPlayableIndex + 1) % playableVideos.length;
-    const nextVideo = playableVideos[nextPlayableIndex];
-    
-    // Find actual index in original playlist
-    const actualIndex = playlist.findIndex(v => v.video_id === nextVideo.video_id);
-    
-    console.log('Video ended, playing next:', nextVideo.title);
-    setCurrentVideoIndex(actualIndex);
-    setCurrentVideo(nextVideo);
-    setSeekTime(0); // Start from beginning
-  }, [currentChannel, playlists, schedules, currentVideo, failedVideoIds]);
+  }, [currentChannel, playlists, schedules, currentVideo, failedVideoIds, startCommercialBreak]);
 
   // Skip to next video (for unavailable videos - only deletes from DB if admin)
   const skipToNextVideo = useCallback(async () => {

@@ -36,15 +36,11 @@ Build a TV network app named "Hush Music TV Network" with admin-only channel/vid
 - **Commercial System**:
   - New "Commercial Manager" page accessible from Dashboard
   - Per-channel commercial uploads (MP4 only)
-  - Commercial breaks: 3 random commercials play every 10 minutes
-  - Regular video pauses during commercials and resumes after
+  - **Commercials play BETWEEN videos** (after one video ends, before next starts)
+  - Up to 3 random commercials play between each video transition
   - Commercial overlay shows "COMMERCIAL 1 of 3" indicator
   - Backend: `/api/commercials/*` endpoints for CRUD operations
-  - Frontend: LiveTV.jsx modified to handle commercial breaks
-  - **Commercial Resume Fix**: Video properly resumes at correct position after commercials
-    - Added commercial break duration tracking
-    - Multiple resume attempts with state checking
-    - Updates seekTimeRef for YouTube player compatibility
+  - Frontend: LiveTV.jsx handles commercial breaks between videos
 
 ## Completed (Mar 30, 2026)
 - **Video Upload Improvements**:
