@@ -810,6 +810,16 @@ const Dashboard = () => {
             <span className="sm:hidden">Imgs</span>
           </Button>
           <Button
+            onClick={() => navigate('/commercials')}
+            variant="outline"
+            className="border-pink-500/50 text-pink-400 hover:bg-pink-500/10 whitespace-nowrap text-xs md:text-sm shrink-0"
+            data-testid="commercials-btn"
+          >
+            <Film size={16} className="mr-1 md:mr-2" />
+            <span className="hidden sm:inline">Commercials</span>
+            <span className="sm:hidden">Ads</span>
+          </Button>
+          <Button
             onClick={() => navigate('/youtube-settings')}
             variant="outline"
             className="border-red-500/50 text-red-400 hover:bg-red-500/10 whitespace-nowrap text-xs md:text-sm shrink-0"

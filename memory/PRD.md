@@ -32,6 +32,23 @@ Build a TV network app named "Hush Music TV Network" with admin-only channel/vid
 - `POST /api/schedules/regenerate-all` - Regenerate all 24h schedules
 - Admin credentials: hushmusicent419@gmail.com / $Stisdd419
 
+## Completed (Mar 31, 2026)
+- **Commercial System**:
+  - New "Commercial Manager" page accessible from Dashboard
+  - Per-channel commercial uploads (MP4 only)
+  - Commercial breaks: 3 random commercials play every 15 minutes
+  - Regular video pauses during commercials and resumes after
+  - Commercial overlay shows "COMMERCIAL 1 of 3" indicator
+  - Backend: `/api/commercials/*` endpoints for CRUD operations
+  - Frontend: LiveTV.jsx modified to handle commercial breaks
+
+## Completed (Mar 30, 2026)
+- **Video Upload Improvements**:
+  - Auto-converts MPEG-4 Part 2 codec to H.264 during upload
+  - Chunked upload retry logic (3 attempts per chunk)
+  - Increased timeouts for large files
+- **Full Data Migration** from production (44 channels, 2806 videos, 25 uploaded videos)
+
 ## Completed (Mar 15, 2026)
 - **Mobile Responsive Design ("Cellphone Mode")**:
   - Live TV: Channel sidebar as slide-in overlay with backdrop on mobile

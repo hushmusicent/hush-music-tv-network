@@ -21,6 +21,7 @@ import ScheduleEditor from './pages/ScheduleEditor';
 import BulkThumbnails from './pages/BulkThumbnails';
 import YouTubeSettings from './pages/YouTubeSettings';
 import DownloadApp from './pages/DownloadApp';
+import Commercials from './pages/Commercials';
 
 function App() {
   return (
@@ -65,6 +66,7 @@ function App() {
                   <Route path="/favorites" element={<Favorites />} />
                   <Route path="/bulk-thumbnails" element={<BulkThumbnails />} />
                   <Route path="/youtube-settings" element={<YouTubeSettings />} />
+                  <Route path="/commercials" element={<Commercials />} />
                 </Routes>
               </Layout>
             }

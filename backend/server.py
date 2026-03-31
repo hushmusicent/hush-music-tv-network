@@ -652,6 +652,18 @@ class UploadedVideoResponse(BaseModel):
     created_at: str
     storage_type: str = "r2"  # "r2" or "local"
 
+# Commercial models
+class CommercialResponse(BaseModel):
+    id: str
+    filename: str
+    original_name: str
+    url: str
+    size: int
+    duration: int = 30  # Default 30 seconds
+    thumbnail: Optional[str] = None
+    created_at: str
+    channel_id: Optional[str] = None  # If None, it's a global commercial
+
 MAX_UPLOAD_SIZE = 2 * 1024 * 1024 * 1024  # 2GB
 ALLOWED_VIDEO_EXTENSIONS = {'.mp4'}
 
@@ -1039,6 +1051,180 @@ async def update_video_duration(
         raise HTTPException(status_code=404, detail="Video not found")
     
     return {"message": "Duration updated"}
+
+
+# ===================== COMMERCIAL ROUTES =====================
+
+@api_router.post("/commercials/upload")
+async def upload_commercial(
+    file: UploadFile = File(...),
+    channel_id: Optional[str] = Form(None),
+    user: dict = Depends(require_user)
+):
+    """Upload a commercial video for a specific channel"""
+    if not user.get("is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    from r2_service import upload_to_r2, is_r2_configured
+    
+    if not is_r2_configured():
+        raise HTTPException(status_code=500, detail="R2 storage not configured")
+    
+    # Validate channel if provided
+    if channel_id:
+        channel = await db.channels.find_one({"id": channel_id})
+        if not channel:
+            raise HTTPException(status_code=404, detail="Channel not found")
+    
+    # Validate file
+    file_ext = Path(file.filename).suffix.lower()
+    if file_ext not in ALLOWED_VIDEO_EXTENSIONS:
+        raise HTTPException(status_code=400, detail="Only MP4 files are allowed")
+    
+    # Read and process file
+    content = await file.read()
+    if len(content) > MAX_UPLOAD_SIZE:
+        raise HTTPException(status_code=400, detail="File too large")
+    
+    commercial_id = str(uuid.uuid4())
+    filename = f"{commercial_id}.mp4"
+    
+    # Save temporarily for processing
+    import tempfile
+    with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp:
+        tmp.write(content)
+        tmp_path = tmp.name
+    
+    try:
+        # Convert if needed (MPEG-4 to H.264)
+        converted_path = tmp_path.replace(".mp4", "_converted.mp4")
+        if convert_to_mp4(tmp_path, converted_path):
+            upload_path = converted_path
+        else:
+            upload_path = tmp_path
+        
+        # Get duration
+        duration = 30  # Default
+        try:
+            result = subprocess.run(
+                ['ffprobe', '-v', 'error', '-show_entries', 'format=duration',
+                 '-of', 'default=noprint_wrappers=1:nokey=1', upload_path],
+                capture_output=True, text=True, timeout=30
+            )
+            if result.returncode == 0:
+                duration = int(float(result.stdout.strip()))
+        except:
+            pass
+        
+        # Upload to R2
+        with open(upload_path, "rb") as f:
+            file_content = f.read()
+        
+        r2_key = f"commercials/{filename}"
+        r2_result = upload_to_r2(file_content, r2_key, content_type="video/mp4")
+        
+        if not r2_result["success"]:
+            raise HTTPException(status_code=500, detail="Failed to upload to storage")
+        
+        # Store in database
+        commercial_doc = {
+            "id": commercial_id,
+            "filename": filename,
+            "original_name": file.filename,
+            "url": r2_result["url"],
+            "size": len(file_content),
+            "duration": duration,
+            "channel_id": channel_id,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        
+        await db.commercials.insert_one(commercial_doc)
+        
+        return serialize_doc(commercial_doc)
+        
+    finally:
+        # Cleanup temp files
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+        if os.path.exists(converted_path):
+            os.unlink(converted_path)
+
+
+@api_router.get("/commercials", response_model=List[CommercialResponse])
+async def list_commercials(
+    channel_id: Optional[str] = None,
+    user: dict = Depends(require_user)
+):
+    """List all commercials, optionally filtered by channel"""
+    if not user.get("is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    query = {}
+    if channel_id:
+        query["channel_id"] = channel_id
+    
+    commercials = await db.commercials.find(query, {"_id": 0}).sort("created_at", -1).to_list(100)
+    return serialize_doc(commercials)
+
+
+@api_router.get("/channels/{channel_id}/commercials", response_model=List[CommercialResponse])
+async def get_channel_commercials(channel_id: str):
+    """Get commercials assigned to a specific channel (public endpoint for playback)"""
+    commercials = await db.commercials.find(
+        {"channel_id": channel_id}, 
+        {"_id": 0}
+    ).to_list(100)
+    return serialize_doc(commercials)
+
+
+@api_router.delete("/commercials/{commercial_id}")
+async def delete_commercial(commercial_id: str, user: dict = Depends(require_user)):
+    """Delete a commercial"""
+    if not user.get("is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    from r2_service import delete_from_r2
+    
+    commercial = await db.commercials.find_one({"id": commercial_id})
+    if not commercial:
+        raise HTTPException(status_code=404, detail="Commercial not found")
+    
+    # Delete from R2
+    r2_key = f"commercials/{commercial['filename']}"
+    delete_from_r2(r2_key)
+    
+    # Delete from database
+    await db.commercials.delete_one({"id": commercial_id})
+    
+    return {"message": "Commercial deleted"}
+
+
+@api_router.put("/commercials/{commercial_id}/assign")
+async def assign_commercial_to_channel(
+    commercial_id: str,
+    channel_id: Optional[str] = None,
+    user: dict = Depends(require_user)
+):
+    """Assign a commercial to a channel (or remove assignment with channel_id=None)"""
+    if not user.get("is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    commercial = await db.commercials.find_one({"id": commercial_id})
+    if not commercial:
+        raise HTTPException(status_code=404, detail="Commercial not found")
+    
+    if channel_id:
+        channel = await db.channels.find_one({"id": channel_id})
+        if not channel:
+            raise HTTPException(status_code=404, detail="Channel not found")
+    
+    await db.commercials.update_one(
+        {"id": commercial_id},
+        {"$set": {"channel_id": channel_id}}
+    )
+    
+    return {"message": "Commercial assignment updated"}
+
 
 @api_router.post("/channels/{channel_id}/update-durations")
 async def update_channel_video_durations(channel_id: str, user: dict = Depends(require_user)):

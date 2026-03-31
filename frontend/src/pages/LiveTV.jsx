@@ -208,6 +208,17 @@ const LiveTV = () => {
   const [proxyVideoUrl, setProxyVideoUrl] = useState(null); // Direct video URL from proxy
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768); // Mobile detection
   
+  // Commercial break state
+  const [commercials, setCommercials] = useState([]); // Commercials for current channel
+  const [isCommercialBreak, setIsCommercialBreak] = useState(false);
+  const [currentCommercialIndex, setCurrentCommercialIndex] = useState(0);
+  const [commercialBreakVideos, setCommercialBreakVideos] = useState([]); // 3 random commercials
+  const [savedVideoState, setSavedVideoState] = useState(null); // Save state before commercial
+  const lastCommercialBreakRef = useRef(Date.now());
+  const commercialVideoRef = useRef(null);
+  const COMMERCIAL_INTERVAL = 15 * 60 * 1000; // 15 minutes in milliseconds
+  const COMMERCIALS_PER_BREAK = 3;
+  
   const playerRef = useRef(null);
   const videoRef = useRef(null);
   const youtubePlayerRef = useRef(null);
@@ -455,6 +466,116 @@ const LiveTV = () => {
     
     showOSD();
   }, [playlists, schedules, sessionStartTime]);
+
+  // Fetch commercials when channel changes
+  useEffect(() => {
+    if (!currentChannel) return;
+    
+    const fetchCommercials = async () => {
+      try {
+        const response = await fetch(`${BACKEND_URL}/api/channels/${currentChannel.id}/commercials`);
+        if (response.ok) {
+          const data = await response.json();
+          setCommercials(data);
+          console.log(`Loaded ${data.length} commercials for ${currentChannel.name}`);
+        }
+      } catch (error) {
+        console.error('Failed to fetch commercials:', error);
+        setCommercials([]);
+      }
+    };
+    
+    fetchCommercials();
+    lastCommercialBreakRef.current = Date.now(); // Reset timer on channel change
+  }, [currentChannel?.id]);
+
+  // Commercial break timer - check every 30 seconds
+  useEffect(() => {
+    if (isCommercialBreak || commercials.length === 0) return;
+    
+    const checkForCommercialBreak = () => {
+      const timeSinceLastBreak = Date.now() - lastCommercialBreakRef.current;
+      
+      if (timeSinceLastBreak >= COMMERCIAL_INTERVAL && commercials.length > 0) {
+        startCommercialBreak();
+      }
+    };
+    
+    const interval = setInterval(checkForCommercialBreak, 30000); // Check every 30 seconds
+    return () => clearInterval(interval);
+  }, [isCommercialBreak, commercials]);
+
+  // Start commercial break
+  const startCommercialBreak = useCallback(() => {
+    if (commercials.length === 0) return;
+    
+    // Save current video state
+    let currentSeekTime = 0;
+    if (videoRef.current) {
+      currentSeekTime = videoRef.current.currentTime || 0;
+    } else if (youtubePlayerRef.current?.getCurrentTime) {
+      currentSeekTime = youtubePlayerRef.current.getCurrentTime() || 0;
+    } else if (proxyVideoRef.current) {
+      currentSeekTime = proxyVideoRef.current.currentTime || 0;
+    }
+    
+    setSavedVideoState({
+      video: currentVideo,
+      videoIndex: currentVideoIndex,
+      seekTime: currentSeekTime,
+      useProxy: useProxyPlayer,
+      proxyUrl: proxyVideoUrl,
+    });
+    
+    // Select random commercials (up to 3)
+    const shuffled = [...commercials].sort(() => Math.random() - 0.5);
+    const selectedCommercials = shuffled.slice(0, Math.min(COMMERCIALS_PER_BREAK, commercials.length));
+    
+    console.log(`Starting commercial break with ${selectedCommercials.length} commercials`);
+    
+    setCommercialBreakVideos(selectedCommercials);
+    setCurrentCommercialIndex(0);
+    setIsCommercialBreak(true);
+    
+    // Pause regular video
+    if (videoRef.current) videoRef.current.pause();
+    if (youtubePlayerRef.current?.pauseVideo) youtubePlayerRef.current.pauseVideo();
+    if (proxyVideoRef.current) proxyVideoRef.current.pause();
+    
+  }, [commercials, currentVideo, currentVideoIndex, useProxyPlayer, proxyVideoUrl]);
+
+  // Handle commercial video ended
+  const handleCommercialEnded = useCallback(() => {
+    const nextIndex = currentCommercialIndex + 1;
+    
+    if (nextIndex < commercialBreakVideos.length) {
+      // Play next commercial
+      setCurrentCommercialIndex(nextIndex);
+    } else {
+      // Commercial break ended - resume regular video
+      endCommercialBreak();
+    }
+  }, [currentCommercialIndex, commercialBreakVideos.length]);
+
+  // End commercial break and resume regular video
+  const endCommercialBreak = useCallback(() => {
+    console.log('Commercial break ended, resuming regular video');
+    
+    setIsCommercialBreak(false);
+    setCommercialBreakVideos([]);
+    setCurrentCommercialIndex(0);
+    lastCommercialBreakRef.current = Date.now();
+    
+    // Restore video state
+    if (savedVideoState) {
+      setCurrentVideo(savedVideoState.video);
+      setCurrentVideoIndex(savedVideoState.videoIndex);
+      setSeekTime(savedVideoState.seekTime);
+      setUseProxyPlayer(savedVideoState.useProxy);
+      setProxyVideoUrl(savedVideoState.proxyUrl);
+      setSavedVideoState(null);
+    }
+  }, [savedVideoState]);
 
   // Track video events for analytics
   const trackVideoEvent = useCallback((eventType) => {
@@ -1249,6 +1370,41 @@ const LiveTV = () => {
             >
               <List size={20} />
             </Button>
+          )}
+
+          {/* Commercial Break Player */}
+          {isCommercialBreak && commercialBreakVideos.length > 0 && (
+            <div className="absolute inset-0 z-50 bg-black">
+              {/* Commercial video */}
+              <video
+                ref={commercialVideoRef}
+                src={commercialBreakVideos[currentCommercialIndex]?.url}
+                className="w-full h-full object-contain"
+                autoPlay
+                muted={isMuted}
+                playsInline
+                onEnded={handleCommercialEnded}
+                onError={handleCommercialEnded}
+              />
+              
+              {/* Commercial overlay info */}
+              <div className="absolute top-4 right-4 bg-black/70 backdrop-blur-sm rounded-lg px-3 py-2 z-10">
+                <div className="flex items-center gap-2 text-xs text-yellow-400">
+                  <span className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse" />
+                  COMMERCIAL {currentCommercialIndex + 1} of {commercialBreakVideos.length}
+                </div>
+              </div>
+              
+              {/* Commercial progress bar */}
+              <div className="absolute bottom-0 left-0 right-0 h-1 bg-white/20">
+                <div 
+                  className="h-full bg-yellow-400 transition-all duration-100"
+                  style={{ 
+                    width: `${((currentCommercialIndex + 1) / commercialBreakVideos.length) * 100}%` 
+                  }}
+                />
+              </div>
+            </div>
           )}
 
           {currentVideo?.youtube_id && !isUploadedVideo && !useProxyPlayer && (
