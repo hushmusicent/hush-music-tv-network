@@ -1140,7 +1140,9 @@ async def upload_commercial(
         
         await db.commercials.insert_one(commercial_doc)
         
-        return serialize_doc(commercial_doc)
+        # Return without _id field
+        response_doc = {k: v for k, v in commercial_doc.items() if k != '_id'}
+        return serialize_doc(response_doc)
         
     finally:
         # Cleanup temp files
@@ -1148,6 +1150,165 @@ async def upload_commercial(
             os.unlink(tmp_path)
         if os.path.exists(converted_path):
             os.unlink(converted_path)
+
+
+# Chunked commercial upload storage
+commercial_upload_sessions = {}
+
+@api_router.post("/commercials/upload/init-chunked")
+async def init_chunked_commercial_upload(
+    filename: str,
+    total_size: int,
+    total_chunks: int,
+    channel_id: str,
+    user: dict = Depends(require_user)
+):
+    """Initialize a chunked commercial upload session"""
+    if not user.get("is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    # Validate channel
+    channel = await db.channels.find_one({"id": channel_id})
+    if not channel:
+        raise HTTPException(status_code=404, detail="Channel not found")
+    
+    upload_id = str(uuid.uuid4())
+    chunk_dir = Path(f"/tmp/commercial_chunks/{upload_id}")
+    chunk_dir.mkdir(parents=True, exist_ok=True)
+    
+    commercial_upload_sessions[upload_id] = {
+        "filename": filename,
+        "total_size": total_size,
+        "total_chunks": total_chunks,
+        "channel_id": channel_id,
+        "chunk_dir": str(chunk_dir),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    
+    return {"upload_id": upload_id, "chunk_size": 5 * 1024 * 1024, "total_chunks": total_chunks}
+
+
+@api_router.post("/commercials/upload/chunk")
+async def upload_commercial_chunk(
+    upload_id: str = Form(...),
+    chunk_index: int = Form(...),
+    file: UploadFile = File(...),
+    user: dict = Depends(require_user)
+):
+    """Upload a single chunk for a commercial"""
+    if not user.get("is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    session = commercial_upload_sessions.get(upload_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Upload session not found")
+    
+    chunk_dir = Path(session["chunk_dir"])
+    chunk_path = chunk_dir / f"chunk_{chunk_index:05d}"
+    
+    content = await file.read()
+    with open(chunk_path, "wb") as f:
+        f.write(content)
+    
+    return {"chunk_index": chunk_index, "size": len(content)}
+
+
+@api_router.post("/commercials/upload/complete-chunked")
+async def complete_chunked_commercial_upload(
+    upload_id: str,
+    filename: str,
+    total_chunks: int,
+    channel_id: str,
+    user: dict = Depends(require_user)
+):
+    """Assemble chunks and complete commercial upload"""
+    if not user.get("is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    from r2_service import upload_to_r2, is_r2_configured
+    
+    if not is_r2_configured():
+        raise HTTPException(status_code=500, detail="R2 storage not configured")
+    
+    session = commercial_upload_sessions.get(upload_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Upload session not found")
+    
+    chunk_dir = Path(session["chunk_dir"])
+    
+    # Assemble chunks
+    assembled_path = chunk_dir / "assembled.mp4"
+    with open(assembled_path, "wb") as outfile:
+        for i in range(total_chunks):
+            chunk_path = chunk_dir / f"chunk_{i:05d}"
+            if not chunk_path.exists():
+                raise HTTPException(status_code=400, detail=f"Missing chunk {i}")
+            with open(chunk_path, "rb") as chunk_file:
+                outfile.write(chunk_file.read())
+    
+    assembled_size = assembled_path.stat().st_size
+    logger.info(f"Assembled {total_chunks} chunks into {assembled_size} bytes for commercial {filename}")
+    
+    try:
+        # Convert if needed
+        converted_path = str(assembled_path).replace(".mp4", "_converted.mp4")
+        if convert_to_mp4(str(assembled_path), converted_path):
+            upload_path = converted_path
+        else:
+            upload_path = str(assembled_path)
+        
+        # Get duration
+        duration = 30
+        try:
+            result = subprocess.run(
+                ['ffprobe', '-v', 'error', '-show_entries', 'format=duration',
+                 '-of', 'default=noprint_wrappers=1:nokey=1', upload_path],
+                capture_output=True, text=True, timeout=30
+            )
+            if result.returncode == 0:
+                duration = int(float(result.stdout.strip()))
+        except:
+            pass
+        
+        # Upload to R2
+        commercial_id = str(uuid.uuid4())
+        r2_filename = f"{commercial_id}.mp4"
+        
+        with open(upload_path, "rb") as f:
+            file_content = f.read()
+        
+        r2_key = f"commercials/{r2_filename}"
+        r2_result = upload_to_r2(file_content, r2_key, content_type="video/mp4")
+        
+        if not r2_result["success"]:
+            raise HTTPException(status_code=500, detail="Failed to upload to storage")
+        
+        # Store in database
+        commercial_doc = {
+            "id": commercial_id,
+            "filename": r2_filename,
+            "original_name": filename,
+            "url": r2_result["url"],
+            "size": len(file_content),
+            "duration": duration,
+            "channel_id": channel_id,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        
+        await db.commercials.insert_one(commercial_doc)
+        
+        # Clean up session
+        del commercial_upload_sessions[upload_id]
+        
+        # Return without _id
+        response_doc = {k: v for k, v in commercial_doc.items() if k != '_id'}
+        return serialize_doc(response_doc)
+        
+    finally:
+        # Cleanup temp files
+        import shutil
+        if chunk_dir.exists():
+            shutil.rmtree(chunk_dir)
 
 
 @api_router.get("/commercials", response_model=List[CommercialResponse])

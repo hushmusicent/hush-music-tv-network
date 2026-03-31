@@ -68,28 +68,89 @@ const Commercials = () => {
     setUploadProgress(10);
 
     try {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('channel_id', uploadChannelId);
+      const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB chunks
+      const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+      
+      // For small files (< 10MB), use direct upload
+      if (file.size < 10 * 1024 * 1024) {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('channel_id', uploadChannelId);
 
-      setUploadProgress(30);
+        setUploadProgress(30);
 
-      const response = await api.post('/commercials/upload', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-        timeout: 600000, // 10 minutes for conversion
-        onUploadProgress: (progressEvent) => {
-          const percent = Math.round((progressEvent.loaded / progressEvent.total) * 60) + 30;
-          setUploadProgress(Math.min(percent, 90));
+        const response = await api.post('/commercials/upload', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+          timeout: 600000,
+          onUploadProgress: (progressEvent) => {
+            const percent = Math.round((progressEvent.loaded / progressEvent.total) * 60) + 30;
+            setUploadProgress(Math.min(percent, 90));
+          }
+        });
+
+        setUploadProgress(100);
+        setCommercials(prev => [response.data, ...prev]);
+        toast.success('Commercial uploaded successfully!');
+      } else {
+        // For larger files, use chunked upload
+        // Step 1: Initialize chunked upload
+        const initResp = await api.post('/commercials/upload/init-chunked', null, {
+          params: { 
+            filename: file.name, 
+            total_size: file.size, 
+            total_chunks: totalChunks,
+            channel_id: uploadChannelId
+          }
+        });
+        
+        const { upload_id } = initResp.data;
+        setUploadProgress(15);
+        
+        // Step 2: Upload chunks with retry
+        for (let i = 0; i < totalChunks; i++) {
+          const start = i * CHUNK_SIZE;
+          const end = Math.min(start + CHUNK_SIZE, file.size);
+          const chunk = file.slice(start, end);
+          
+          const formData = new FormData();
+          formData.append('upload_id', upload_id);
+          formData.append('chunk_index', i.toString());
+          formData.append('file', chunk, `chunk_${i}`);
+          
+          let retries = 0;
+          while (retries < 3) {
+            try {
+              await api.post('/commercials/upload/chunk', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' },
+                timeout: 120000,
+              });
+              break;
+            } catch (err) {
+              retries++;
+              if (retries >= 3) throw new Error(`Failed to upload chunk ${i + 1}`);
+              await new Promise(r => setTimeout(r, 1000 * retries));
+            }
+          }
+          
+          const percent = Math.round(((i + 1) / totalChunks) * 70) + 15;
+          setUploadProgress(percent);
         }
-      });
-
-      setUploadProgress(100);
-      setCommercials(prev => [response.data, ...prev]);
-      toast.success('Commercial uploaded successfully!');
+        
+        // Step 3: Complete upload
+        setUploadProgress(90);
+        const completeResp = await api.post('/commercials/upload/complete-chunked', null, {
+          params: { upload_id, filename: file.name, total_chunks: totalChunks, channel_id: uploadChannelId },
+          timeout: 600000,
+        });
+        
+        setUploadProgress(100);
+        setCommercials(prev => [completeResp.data, ...prev]);
+        toast.success('Commercial uploaded successfully!');
+      }
       
     } catch (error) {
       console.error('Upload failed:', error);
-      toast.error(error.response?.data?.detail || 'Failed to upload commercial');
+      toast.error(error.response?.data?.detail || error.message || 'Failed to upload commercial');
     } finally {
       setUploading(false);
       setUploadProgress(0);
