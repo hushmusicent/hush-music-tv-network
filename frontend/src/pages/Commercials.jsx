@@ -12,7 +12,7 @@ import {
   ArrowLeft, Upload, Trash2, Tv, Video, Clock, Film,
   Loader2, Plus, Play, AlertCircle, Globe, Check, Edit, X, Save
 } from 'lucide-react';
-import api from '../lib/api';
+import api, { uploadAPI } from '../lib/api';
 
 const Commercials = () => {
   const navigate = useNavigate();
@@ -86,7 +86,7 @@ const Commercials = () => {
       // Upload the commercial as a video first, then register it as a commercial
       setUploadProgress(10);
       
-      const uploadResponse = await api.uploadVideo(file, (percent) => {
+      const uploadResponse = await uploadAPI.uploadVideo(file, (percent) => {
         setUploadProgress(Math.round(percent * 0.8) + 10); // 10-90%
       });
       
