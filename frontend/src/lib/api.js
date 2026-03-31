@@ -20,15 +20,26 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Handle auth errors
+// Handle auth errors and network timeouts
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    // Handle auth errors
     if (error.response?.status === 401) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       window.dispatchEvent(new Event('auth-logout'));
     }
+    
+    // Handle Cloudflare timeout (524) and other network errors
+    if (error.response?.status === 524) {
+      error.message = 'Request timed out. The file may be too large or the server is busy. Please try again.';
+    } else if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+      error.message = 'Request timed out. Please try again with a smaller file or check your connection.';
+    } else if (!error.response && error.message === 'Network Error') {
+      error.message = 'Network error. Please check your connection and try again.';
+    }
+    
     return Promise.reject(error);
   }
 );

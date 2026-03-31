@@ -267,11 +267,18 @@ const ChannelCreator = () => {
     setUploading(true);
     setUploadProgress(0);
 
+    // Create abort controller for timeout
+    const abortController = new AbortController();
+    const timeoutId = setTimeout(() => {
+      abortController.abort();
+    }, 15 * 60 * 1000); // 15 minute total timeout
+
     try {
       const response = await uploadAPI.uploadVideo(file, (progress) => {
         setUploadProgress(progress);
       });
 
+      clearTimeout(timeoutId);
       const uploadedVideo = response.data;
       
       // Add to uploaded videos list
@@ -279,8 +286,21 @@ const ChannelCreator = () => {
       
       toast.success('Video uploaded successfully!');
     } catch (error) {
+      clearTimeout(timeoutId);
       console.error('Upload failed:', error);
-      const errorMsg = error.response?.data?.detail || error.message || 'Failed to upload video';
+      
+      // Handle specific error types
+      let errorMsg = 'Failed to upload video';
+      if (error.name === 'AbortError' || error.code === 'ERR_CANCELED') {
+        errorMsg = 'Upload timed out. Please try with a smaller file.';
+      } else if (error.response?.status === 524) {
+        errorMsg = 'Server timeout. The file may be too large. Try a smaller file or compress the video.';
+      } else if (error.response?.data?.detail) {
+        errorMsg = error.response.data.detail;
+      } else if (error.message) {
+        errorMsg = error.message;
+      }
+      
       toast.error(errorMsg);
     } finally {
       setUploading(false);

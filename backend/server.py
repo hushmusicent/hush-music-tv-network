@@ -842,12 +842,11 @@ async def complete_chunked_upload(
         out_filename = f"{video_id}.mp4"
         final_size = os.path.getsize(final_path)
         
-        # Upload to R2
+        # Upload to R2 using streaming (more efficient for large files)
         if is_r2_configured():
+            from r2_service import upload_file_to_r2
             object_key = f"videos/{out_filename}"
-            with open(str(final_path), "rb") as f:
-                file_content = f.read()
-            result = upload_to_r2(file_content, object_key, "video/mp4")
+            result = upload_file_to_r2(str(final_path), object_key, "video/mp4")
             if not result["success"]:
                 raise HTTPException(status_code=500, detail=f"Cloud upload failed: {result.get('error')}")
             video_url = result["url"]
@@ -1338,11 +1337,11 @@ async def complete_chunked_commercial_upload(
         commercial_id = str(uuid.uuid4())
         r2_filename = f"{commercial_id}.mp4"
         
-        with open(upload_path, "rb") as f:
-            file_content = f.read()
-        
+        # Use streaming upload for efficiency
+        from r2_service import upload_file_to_r2
         r2_key = f"commercials/{r2_filename}"
-        r2_result = upload_to_r2(file_content, r2_key, content_type="video/mp4")
+        file_size = os.path.getsize(upload_path)
+        r2_result = upload_file_to_r2(upload_path, r2_key, content_type="video/mp4")
         
         if not r2_result["success"]:
             raise HTTPException(status_code=500, detail="Failed to upload to storage")
@@ -1356,7 +1355,7 @@ async def complete_chunked_commercial_upload(
             "filename": r2_filename,
             "original_name": filename,
             "url": r2_result["url"],
-            "size": len(file_content),
+            "size": file_size,
             "duration": duration,
             "channel_ids": channel_ids,
             "is_global": is_global,
