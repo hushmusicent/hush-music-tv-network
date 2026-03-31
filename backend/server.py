@@ -1145,11 +1145,12 @@ async def upload_commercial(
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
         
+        # Create copy for response before insert (insert_one modifies the dict)
+        response_doc = dict(commercial_doc)
+        
         await db.commercials.insert_one(commercial_doc)
         
-        # Return without _id field
-        response_doc = {k: v for k, v in commercial_doc.items() if k != '_id'}
-        return serialize_doc(response_doc)
+        return response_doc
         
     finally:
         # Cleanup temp files
@@ -1307,14 +1308,15 @@ async def complete_chunked_commercial_upload(
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
         
+        # Create copy for response before insert (insert_one modifies the dict)
+        response_doc = dict(commercial_doc)
+        
         await db.commercials.insert_one(commercial_doc)
         
         # Clean up session
         del commercial_upload_sessions[upload_id]
         
-        # Return without _id
-        response_doc = {k: v for k, v in commercial_doc.items() if k != '_id'}
-        return serialize_doc(response_doc)
+        return response_doc
         
     finally:
         # Cleanup temp files
