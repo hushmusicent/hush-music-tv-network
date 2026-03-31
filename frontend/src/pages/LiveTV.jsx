@@ -99,13 +99,15 @@ const parseTimeToSeconds = (timeStr) => {
 };
 
 // Get current video from 24-hour schedule based on ACTUAL Eastern time (synchronized for all viewers)
-const getVideoFromSchedule = (schedule, failedVideoIds = new Set()) => {
+// commercialTimeOffset: seconds spent in commercial breaks that should be subtracted from current time
+const getVideoFromSchedule = (schedule, failedVideoIds = new Set(), commercialTimeOffset = 0) => {
   if (!schedule || schedule.length === 0) {
     return { video: null, seekTime: 0, videoIndex: -1 };
   }
   
   // Use actual Eastern time for synchronized playback
-  const currentSeconds = getEasternTimeSeconds();
+  // Subtract the commercial time offset so the schedule doesn't jump forward during commercial breaks
+  const currentSeconds = getEasternTimeSeconds() - commercialTimeOffset;
   
   // Find the video that should be playing at this time
   for (let i = 0; i < schedule.length; i++) {
@@ -218,6 +220,9 @@ const LiveTV = () => {
   const commercialVideoRef = useRef(null);
   const COMMERCIAL_INTERVAL = 10 * 60 * 1000; // 10 minutes in milliseconds
   const COMMERCIALS_PER_BREAK = 3;
+  const resumeFromCommercialRef = useRef(null); // Store resume position after commercial
+  const commercialBreakStartTimeRef = useRef(null); // Track when commercial break started
+  const totalCommercialTimeRef = useRef(0); // Accumulate total time spent in commercials (in seconds)
   
   const playerRef = useRef(null);
   const videoRef = useRef(null);
@@ -410,6 +415,11 @@ const LiveTV = () => {
     setCurrentChannel(channel);
     setFailedVideoIds(new Set());
     
+    // Reset commercial time tracking when changing channels
+    totalCommercialTimeRef.current = 0;
+    commercialBreakStartTimeRef.current = null;
+    resumeFromCommercialRef.current = null;
+    
     // Live stream channels - set a special video object
     if (channel.is_live_stream && channel.live_stream_youtube_id) {
       setCurrentVideo({
@@ -437,7 +447,7 @@ const LiveTV = () => {
     
     if (channelSchedule && channelSchedule.length > 0) {
       // Use 24-hour schedule for this channel
-      const { video, seekTime: newSeekTime, videoIndex } = getVideoFromSchedule(channelSchedule, new Set());
+      const { video, seekTime: newSeekTime, videoIndex } = getVideoFromSchedule(channelSchedule, new Set(), 0);
       
       if (video) {
         console.log(`[SCHEDULED] ${channel.name} - Playing: ${video.title} at ${newSeekTime}s`);
@@ -509,6 +519,9 @@ const LiveTV = () => {
   const startCommercialBreak = useCallback(() => {
     if (commercials.length === 0) return;
     
+    // Record when the commercial break started
+    commercialBreakStartTimeRef.current = Date.now();
+    
     // Save current video state - capture time immediately
     let currentSeekTime = 0;
     
@@ -570,46 +583,77 @@ const LiveTV = () => {
   const endCommercialBreak = useCallback(() => {
     console.log('Commercial break ended, resuming regular video');
     
+    // Calculate how long the commercial break lasted and accumulate it
+    if (commercialBreakStartTimeRef.current) {
+      const breakDuration = Math.floor((Date.now() - commercialBreakStartTimeRef.current) / 1000);
+      totalCommercialTimeRef.current += breakDuration;
+      console.log(`Commercial break lasted ${breakDuration}s, total commercial time: ${totalCommercialTimeRef.current}s`);
+      commercialBreakStartTimeRef.current = null;
+    }
+    
+    // Store the resume time in a ref so it persists across re-renders
+    if (savedVideoState) {
+      const resumeTime = savedVideoState.seekTime;
+      
+      resumeFromCommercialRef.current = {
+        seekTime: resumeTime,
+        video: savedVideoState.video,
+        videoIndex: savedVideoState.videoIndex,
+        useProxy: savedVideoState.useProxy,
+        proxyUrl: savedVideoState.proxyUrl,
+        timestamp: Date.now()
+      };
+      
+      // CRITICAL: Update seekTimeRef so if YouTube player re-initializes, it uses the correct position
+      seekTimeRef.current = resumeTime;
+      setSeekTime(resumeTime);
+      
+      console.log('Set resume position to:', resumeTime);
+    }
+    
     setIsCommercialBreak(false);
     setCommercialBreakVideos([]);
     setCurrentCommercialIndex(0);
     lastCommercialBreakRef.current = Date.now();
     
-    // Restore video state and force seek
-    if (savedVideoState) {
-      const resumeTime = savedVideoState.seekTime;
-      console.log(`Resuming video at ${resumeTime} seconds`);
-      
-      setCurrentVideo(savedVideoState.video);
-      setCurrentVideoIndex(savedVideoState.videoIndex);
-      setUseProxyPlayer(savedVideoState.useProxy);
-      setProxyVideoUrl(savedVideoState.proxyUrl);
-      
-      // Use a ref to track that we need to seek after commercial
-      // Set seekTime which will be picked up by the video player
-      setSeekTime(resumeTime);
-      
-      // Also directly seek the video elements after a short delay
-      setTimeout(() => {
+    // Don't change video/index - let the current video continue
+    // Just clear the saved state
+    setSavedVideoState(null);
+    
+    // Force seek after a delay to let the video player settle
+    // Use multiple timeouts to ensure the seek really sticks
+    const performSeek = (attemptNum) => {
+      const resumeData = resumeFromCommercialRef.current;
+      if (resumeData && Date.now() - resumeData.timestamp < 10000) {
+        const resumeTime = resumeData.seekTime;
+        console.log(`Force seeking to resume position (attempt ${attemptNum}):`, resumeTime);
+        
         if (videoRef.current) {
           videoRef.current.currentTime = resumeTime;
           videoRef.current.play().catch(() => {});
-          console.log('Seeked uploaded video to', resumeTime);
         }
         if (proxyVideoRef.current) {
           proxyVideoRef.current.currentTime = resumeTime;
           proxyVideoRef.current.play().catch(() => {});
-          console.log('Seeked proxy video to', resumeTime);
         }
         if (youtubePlayerRef.current?.seekTo) {
           youtubePlayerRef.current.seekTo(resumeTime, true);
-          youtubePlayerRef.current.playVideo();
-          console.log('Seeked YouTube video to', resumeTime);
+          if (youtubePlayerRef.current.playVideo) {
+            youtubePlayerRef.current.playVideo();
+          }
         }
-      }, 500);
-      
-      setSavedVideoState(null);
-    }
+        
+        // Clear the resume ref after the final attempt
+        if (attemptNum >= 3) {
+          resumeFromCommercialRef.current = null;
+        }
+      }
+    };
+    
+    // Multiple seek attempts to ensure it works
+    setTimeout(() => performSeek(1), 300);
+    setTimeout(() => performSeek(2), 800);
+    setTimeout(() => performSeek(3), 1500);
   }, [savedVideoState]);
 
   // Track video events for analytics
