@@ -671,19 +671,26 @@ ALLOWED_VIDEO_EXTENSIONS = {'.mp4'}
 def convert_to_mp4(input_path: str, output_path: str) -> bool:
     """Convert video to browser-compatible H.264 MP4 with faststart."""
     try:
+        # Check if ffmpeg and ffprobe are available
         ffmpeg_path = shutil.which('ffmpeg')
-        if not ffmpeg_path:
-            logger.warning("ffmpeg not found - skipping conversion")
+        ffprobe_path = shutil.which('ffprobe')
+        
+        if not ffmpeg_path or not ffprobe_path:
+            logger.warning("ffmpeg/ffprobe not found - skipping conversion")
             return False
         
         # Check input video codec
-        probe = subprocess.run(
-            ['ffprobe', '-v', 'error', '-select_streams', 'v:0',
-             '-show_entries', 'stream=codec_name', '-of', 'csv=p=0', input_path],
-            capture_output=True, text=True, timeout=30
-        )
-        video_codec = probe.stdout.strip().lower()
-        logger.info(f"Input video codec: {video_codec}")
+        try:
+            probe = subprocess.run(
+                ['ffprobe', '-v', 'error', '-select_streams', 'v:0',
+                 '-show_entries', 'stream=codec_name', '-of', 'csv=p=0', input_path],
+                capture_output=True, text=True, timeout=30
+            )
+            video_codec = probe.stdout.strip().lower()
+            logger.info(f"Input video codec: {video_codec}")
+        except Exception as e:
+            logger.warning(f"ffprobe failed: {e} - skipping conversion")
+            return False
         
         # If already H.264, just remux with faststart
         if video_codec in ('h264', 'hevc', 'h265'):
@@ -713,7 +720,10 @@ def convert_to_mp4(input_path: str, output_path: str) -> bool:
         logger.error("FFmpeg conversion timed out")
         return False
     except FileNotFoundError:
-        logger.error("ffmpeg not found")
+        logger.warning("ffmpeg/ffprobe not found - skipping conversion")
+        return False
+    except Exception as e:
+        logger.warning(f"Conversion error: {e} - skipping")
         return False
 
 @api_router.get("/storage/status")
@@ -814,13 +824,16 @@ async def complete_chunked_upload(
         file_size = os.path.getsize(assembled_path)
         logger.info(f"Assembled {total_chunks} chunks into {file_size} bytes for {filename}")
         
-        # Convert to browser-compatible MP4 if needed
+        # Convert to browser-compatible MP4 if needed (optional - works without ffmpeg)
         final_path = assembled_path
         if convert_to_mp4(str(assembled_path), str(converted_path)):
             final_path = converted_path
             logger.info(f"Converted {filename} to MP4 ({os.path.getsize(converted_path)} bytes)")
-        elif file_ext != '.mp4':
-            raise HTTPException(status_code=500, detail=f"Failed to convert {file_ext} to MP4")
+        else:
+            # ffmpeg not available or conversion failed - use original file
+            # This is fine for MP4 files; other formats may not play in browser
+            if file_ext != '.mp4':
+                logger.warning(f"Could not convert {file_ext} to MP4 - uploading original (may not play in browser)")
         
         # Extract duration from final file
         video_duration = get_video_duration(str(final_path))
