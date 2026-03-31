@@ -227,7 +227,7 @@ const Commercials = () => {
               Commercial Manager
             </h1>
             <p className="text-gray-400 mt-1 text-sm md:text-base">
-              Upload and manage commercials for your channels • Plays every 15 minutes
+              Upload and manage commercials for your channels • Plays every 10 minutes
             </p>
           </div>
         </div>
@@ -303,7 +303,7 @@ const Commercials = () => {
               <div className="text-sm text-yellow-200">
                 <p className="font-medium">Commercial Break Info:</p>
                 <p className="text-yellow-200/70">
-                  3 random commercials will play every 15 minutes on each channel.
+                  3 random commercials will play every 10 minutes on each channel.
                   Regular video pauses during commercials and resumes after.
                 </p>
               </div>

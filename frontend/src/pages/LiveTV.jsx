@@ -216,7 +216,7 @@ const LiveTV = () => {
   const [savedVideoState, setSavedVideoState] = useState(null); // Save state before commercial
   const lastCommercialBreakRef = useRef(Date.now());
   const commercialVideoRef = useRef(null);
-  const COMMERCIAL_INTERVAL = 15 * 60 * 1000; // 15 minutes in milliseconds
+  const COMMERCIAL_INTERVAL = 10 * 60 * 1000; // 10 minutes in milliseconds
   const COMMERCIALS_PER_BREAK = 3;
   
   const playerRef = useRef(null);
