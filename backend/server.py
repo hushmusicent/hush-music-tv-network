@@ -1195,7 +1195,7 @@ async def init_chunked_commercial_upload(
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     
-    return {"upload_id": upload_id, "chunk_size": 3 * 1024 * 1024, "total_chunks": total_chunks}
+    return {"upload_id": upload_id, "chunk_size": 1 * 1024 * 1024, "total_chunks": total_chunks}
 
 
 @api_router.post("/commercials/upload/chunk")

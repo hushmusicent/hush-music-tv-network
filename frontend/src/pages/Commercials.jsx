@@ -78,12 +78,12 @@ const Commercials = () => {
     setUploadProgress(10);
 
     try {
-      const CHUNK_SIZE = 3 * 1024 * 1024; // 3MB chunks (reduced from 5MB for stability)
+      const CHUNK_SIZE = 1 * 1024 * 1024; // 1MB chunks for maximum stability
       const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
       const channelIdsStr = isGlobal ? '' : selectedChannelIds.join(',');
       
-      // For small files (< 5MB), use direct upload
-      if (file.size < 5 * 1024 * 1024) {
+      // For small files (< 3MB), use direct upload
+      if (file.size < 3 * 1024 * 1024) {
         const formData = new FormData();
         formData.append('file', file);
         formData.append('channel_ids', channelIdsStr);
@@ -131,17 +131,19 @@ const Commercials = () => {
           formData.append('file', chunk, `chunk_${i}`);
           
           let retries = 0;
-          while (retries < 3) {
+          const maxRetries = 5;
+          while (retries < maxRetries) {
             try {
               await api.post('/commercials/upload/chunk', formData, {
                 headers: { 'Content-Type': 'multipart/form-data' },
-                timeout: 120000,
+                timeout: 60000, // 60 seconds per chunk
               });
               break;
             } catch (err) {
               retries++;
-              if (retries >= 3) throw new Error(`Failed to upload chunk ${i + 1}`);
-              await new Promise(r => setTimeout(r, 1000 * retries));
+              console.log(`Chunk ${i} failed, retry ${retries}/${maxRetries}`);
+              if (retries >= maxRetries) throw new Error(`Failed to upload chunk ${i + 1} after ${maxRetries} attempts`);
+              await new Promise(r => setTimeout(r, 2000 * retries)); // Longer delay between retries
             }
           }
           
