@@ -78,90 +78,34 @@ const Commercials = () => {
     setUploadProgress(10);
 
     try {
-      const CHUNK_SIZE = 1 * 1024 * 1024; // 1MB chunks for maximum stability
+      const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB chunks (same as video uploads)
       const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
       const channelIdsStr = isGlobal ? '' : selectedChannelIds.join(',');
       
-      // For small files (< 3MB), use direct upload
-      if (file.size < 3 * 1024 * 1024) {
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('channel_ids', channelIdsStr);
-        formData.append('is_global', isGlobal.toString());
-
-        setUploadProgress(30);
-
-        const response = await api.post('/commercials/upload', formData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-          timeout: 600000,
-          onUploadProgress: (progressEvent) => {
-            const percent = Math.round((progressEvent.loaded / progressEvent.total) * 60) + 30;
-            setUploadProgress(Math.min(percent, 90));
-          }
-        });
-
-        setUploadProgress(100);
-        setCommercials(prev => [response.data, ...prev]);
-        toast.success('Commercial uploaded successfully!');
-      } else {
-        // For larger files, use chunked upload
-        // Step 1: Initialize chunked upload
-        const initResp = await api.post('/commercials/upload/init-chunked', null, {
-          params: { 
-            filename: file.name, 
-            total_size: file.size, 
-            total_chunks: totalChunks,
-            channel_ids: channelIdsStr,
-            is_global: isGlobal
-          }
-        });
-        
-        const { upload_id } = initResp.data;
-        setUploadProgress(15);
-        
-        // Step 2: Upload chunks with retry
-        for (let i = 0; i < totalChunks; i++) {
-          const start = i * CHUNK_SIZE;
-          const end = Math.min(start + CHUNK_SIZE, file.size);
-          const chunk = file.slice(start, end);
-          
-          const formData = new FormData();
-          formData.append('upload_id', upload_id);
-          formData.append('chunk_index', i.toString());
-          formData.append('file', chunk, `chunk_${i}`);
-          
-          let retries = 0;
-          const maxRetries = 5;
-          while (retries < maxRetries) {
-            try {
-              await api.post('/commercials/upload/chunk', formData, {
-                headers: { 'Content-Type': 'multipart/form-data' },
-                timeout: 60000, // 60 seconds per chunk
-              });
-              break;
-            } catch (err) {
-              retries++;
-              console.log(`Chunk ${i} failed, retry ${retries}/${maxRetries}`);
-              if (retries >= maxRetries) throw new Error(`Failed to upload chunk ${i + 1} after ${maxRetries} attempts`);
-              await new Promise(r => setTimeout(r, 2000 * retries)); // Longer delay between retries
-            }
-          }
-          
-          const percent = Math.round(((i + 1) / totalChunks) * 70) + 15;
-          setUploadProgress(percent);
-        }
-        
-        // Step 3: Complete upload
-        setUploadProgress(90);
-        const completeResp = await api.post('/commercials/upload/complete-chunked', null, {
-          params: { upload_id, filename: file.name, total_chunks: totalChunks },
-          timeout: 600000,
-        });
-        
-        setUploadProgress(100);
-        setCommercials(prev => [completeResp.data, ...prev]);
-        toast.success('Commercial uploaded successfully!');
-      }
+      // Use the existing video upload API which is more reliable
+      // Upload the commercial as a video first, then register it as a commercial
+      setUploadProgress(10);
+      
+      const uploadResponse = await api.uploadVideo(file, (percent) => {
+        setUploadProgress(Math.round(percent * 0.8) + 10); // 10-90%
+      });
+      
+      setUploadProgress(92);
+      
+      // Now register this uploaded video as a commercial
+      const registerResp = await api.post('/commercials/register', {
+        video_id: uploadResponse.data.id,
+        video_url: uploadResponse.data.url,
+        original_name: file.name,
+        duration: uploadResponse.data.duration || 30,
+        size: file.size,
+        channel_ids: isGlobal ? [] : selectedChannelIds,
+        is_global: isGlobal
+      });
+      
+      setUploadProgress(100);
+      setCommercials(prev => [registerResp.data, ...prev]);
+      toast.success('Commercial uploaded successfully!');
       
     } catch (error) {
       console.error('Upload failed:', error);

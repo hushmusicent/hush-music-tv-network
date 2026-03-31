@@ -1160,6 +1160,48 @@ async def upload_commercial(
             os.unlink(converted_path)
 
 
+class CommercialRegister(BaseModel):
+    video_id: str
+    video_url: str
+    original_name: str
+    duration: int = 30
+    size: int = 0
+    channel_ids: List[str] = []
+    is_global: bool = False
+
+
+@api_router.post("/commercials/register")
+async def register_commercial(
+    data: CommercialRegister,
+    user: dict = Depends(require_user)
+):
+    """Register an already-uploaded video as a commercial"""
+    if not user.get("is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    commercial_id = str(uuid.uuid4())
+    
+    # Determine if global
+    is_global = data.is_global or len(data.channel_ids) == 0
+    
+    commercial_doc = {
+        "id": commercial_id,
+        "filename": f"{data.video_id}.mp4",
+        "original_name": data.original_name,
+        "url": data.video_url,
+        "size": data.size,
+        "duration": data.duration,
+        "channel_ids": [] if is_global else data.channel_ids,
+        "is_global": is_global,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    
+    response_doc = dict(commercial_doc)
+    await db.commercials.insert_one(commercial_doc)
+    
+    return response_doc
+
+
 # Chunked commercial upload storage
 commercial_upload_sessions = {}
 
