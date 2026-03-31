@@ -78,12 +78,12 @@ const Commercials = () => {
     setUploadProgress(10);
 
     try {
-      const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB chunks
+      const CHUNK_SIZE = 3 * 1024 * 1024; // 3MB chunks (reduced from 5MB for stability)
       const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
       const channelIdsStr = isGlobal ? '' : selectedChannelIds.join(',');
       
-      // For small files (< 10MB), use direct upload
-      if (file.size < 10 * 1024 * 1024) {
+      // For small files (< 5MB), use direct upload
+      if (file.size < 5 * 1024 * 1024) {
         const formData = new FormData();
         formData.append('file', file);
         formData.append('channel_ids', channelIdsStr);
