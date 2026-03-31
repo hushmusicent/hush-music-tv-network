@@ -592,8 +592,9 @@ const LiveTV = () => {
     }
     
     // Store the resume time in a ref so it persists across re-renders
+    let resumeTime = 0;
     if (savedVideoState) {
-      const resumeTime = savedVideoState.seekTime;
+      resumeTime = savedVideoState.seekTime;
       
       resumeFromCommercialRef.current = {
         seekTime: resumeTime,
@@ -611,49 +612,89 @@ const LiveTV = () => {
       console.log('Set resume position to:', resumeTime);
     }
     
+    // Clear commercial state FIRST
     setIsCommercialBreak(false);
     setCommercialBreakVideos([]);
     setCurrentCommercialIndex(0);
     lastCommercialBreakRef.current = Date.now();
-    
-    // Don't change video/index - let the current video continue
-    // Just clear the saved state
+    setIsPaused(false);
     setSavedVideoState(null);
     
-    // Force seek after a delay to let the video player settle
-    // Use multiple timeouts to ensure the seek really sticks
-    const performSeek = (attemptNum) => {
-      const resumeData = resumeFromCommercialRef.current;
-      if (resumeData && Date.now() - resumeData.timestamp < 10000) {
-        const resumeTime = resumeData.seekTime;
-        console.log(`Force seeking to resume position (attempt ${attemptNum}):`, resumeTime);
-        
-        if (videoRef.current) {
-          videoRef.current.currentTime = resumeTime;
-          videoRef.current.play().catch(() => {});
-        }
-        if (proxyVideoRef.current) {
-          proxyVideoRef.current.currentTime = resumeTime;
-          proxyVideoRef.current.play().catch(() => {});
-        }
-        if (youtubePlayerRef.current?.seekTo) {
-          youtubePlayerRef.current.seekTo(resumeTime, true);
-          if (youtubePlayerRef.current.playVideo) {
-            youtubePlayerRef.current.playVideo();
+    // Resume video playback with aggressive retry
+    const resumePlayback = () => {
+      const targetTime = resumeFromCommercialRef.current?.seekTime ?? resumeTime;
+      console.log('Resuming playback at:', targetTime);
+      
+      // Handle uploaded video player
+      if (videoRef.current) {
+        videoRef.current.currentTime = targetTime;
+        videoRef.current.play().catch(err => console.log('Video play error:', err));
+      }
+      
+      // Handle proxy video player  
+      if (proxyVideoRef.current) {
+        proxyVideoRef.current.currentTime = targetTime;
+        proxyVideoRef.current.play().catch(err => console.log('Proxy video play error:', err));
+      }
+      
+      // Handle YouTube player - needs special attention
+      if (youtubePlayerRef.current) {
+        try {
+          const player = youtubePlayerRef.current;
+          
+          // Seek to position
+          if (player.seekTo) {
+            player.seekTo(targetTime, true);
           }
-        }
-        
-        // Clear the resume ref after the final attempt
-        if (attemptNum >= 3) {
-          resumeFromCommercialRef.current = null;
+          
+          // Force play
+          if (player.playVideo) {
+            player.playVideo();
+          }
+        } catch (e) {
+          console.log('YouTube player resume error:', e);
         }
       }
     };
     
-    // Multiple seek attempts to ensure it works
-    setTimeout(() => performSeek(1), 300);
-    setTimeout(() => performSeek(2), 800);
-    setTimeout(() => performSeek(3), 1500);
+    // Force check and retry if video isn't playing
+    const checkAndForcePlay = () => {
+      // Check YouTube player
+      if (youtubePlayerRef.current?.getPlayerState) {
+        try {
+          const state = youtubePlayerRef.current.getPlayerState();
+          // States: -1 (unstarted), 0 (ended), 1 (playing), 2 (paused), 3 (buffering), 5 (cued)
+          console.log('YouTube player state:', state);
+          if (state !== 1 && state !== 3) { // Not playing and not buffering
+            console.log('Player not playing, forcing play...');
+            youtubePlayerRef.current.playVideo?.();
+          }
+        } catch (e) {}
+      }
+      
+      // Check proxy video
+      if (proxyVideoRef.current && proxyVideoRef.current.paused) {
+        proxyVideoRef.current.play().catch(() => {});
+      }
+      
+      // Check uploaded video
+      if (videoRef.current && videoRef.current.paused) {
+        videoRef.current.play().catch(() => {});
+      }
+    };
+    
+    // Multiple resume attempts with increasing delays
+    setTimeout(resumePlayback, 100);
+    setTimeout(resumePlayback, 500);
+    setTimeout(checkAndForcePlay, 800);
+    setTimeout(checkAndForcePlay, 1500);
+    setTimeout(checkAndForcePlay, 2500);
+    
+    // Final cleanup
+    setTimeout(() => {
+      resumeFromCommercialRef.current = null;
+    }, 3000);
+    
   }, [savedVideoState]);
 
   // Track video events for analytics
