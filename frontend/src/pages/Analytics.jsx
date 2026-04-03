@@ -12,10 +12,8 @@ import {
   ArrowLeft,
   Clock,
   Calendar,
-  CalendarDays,
   Globe,
   MapPin,
-  User,
   Tv,
   Play,
   ChevronDown,
@@ -124,32 +122,6 @@ const Analytics = () => {
     );
   };
 
-  const PieChartSimple = ({ data, label, colors }) => {
-    const entries = Object.entries(data || {}).filter(([_, v]) => v > 0);
-    const total = entries.reduce((sum, [_, v]) => sum + v, 0) || 1;
-    const defaultColors = ['#8b5cf6', '#06b6d4', '#22c55e', '#eab308', '#ef4444', '#ec4899', '#6366f1'];
-    
-    return (
-      <div className="bg-gray-900/50 border border-gray-800 rounded-xl p-4 md:p-6">
-        <h3 className="text-white font-semibold mb-4">{label}</h3>
-        <div className="space-y-2">
-          {entries.map(([key, value], idx) => {
-            const percentage = ((value / total) * 100).toFixed(1);
-            const color = (colors && colors[key]) || defaultColors[idx % defaultColors.length];
-            return (
-              <div key={key} className="flex items-center gap-3">
-                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} />
-                <span className="text-gray-300 text-sm flex-1 capitalize">{key}</span>
-                <span className="text-gray-400 text-sm">{value}</span>
-                <span className="text-gray-500 text-xs w-12 text-right">{percentage}%</span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    );
-  };
-
   return (
     <div className="min-h-screen bg-gray-950 px-4 md:px-8 lg:px-12 py-6" data-testid="analytics-page">
       {/* Header */}
@@ -184,7 +156,7 @@ const Analytics = () => {
         {[
           { id: 'overview', label: 'Overview', icon: BarChart3 },
           { id: 'time', label: 'Time Analysis', icon: Clock },
-          { id: 'demographics', label: 'Demographics', icon: Users },
+          { id: 'demographics', label: 'Geographic', icon: Globe },
           { id: 'commercials', label: 'Commercials', icon: Play }
         ].map(tab => (
           <Button
@@ -296,35 +268,6 @@ const Analytics = () => {
       {/* Demographics Tab */}
       {activeTab === 'demographics' && stats && (
         <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Age Distribution */}
-            <PieChartSimple 
-              data={stats.demographics?.age_groups} 
-              label="Age Distribution"
-              colors={{
-                "18-24": "#8b5cf6",
-                "25-34": "#06b6d4",
-                "35-44": "#22c55e",
-                "45-54": "#eab308",
-                "55-64": "#ef4444",
-                "65+": "#ec4899",
-                "unknown": "#6b7280"
-              }}
-            />
-
-            {/* Gender Distribution */}
-            <PieChartSimple 
-              data={stats.demographics?.genders} 
-              label="Gender Distribution"
-              colors={{
-                "male": "#3b82f6",
-                "female": "#ec4899",
-                "other": "#8b5cf6",
-                "unknown": "#6b7280"
-              }}
-            />
-          </div>
-
           {/* Geographic Data */}
           <div className="bg-gray-900/50 border border-gray-800 rounded-xl p-4 md:p-6">
             <div 
@@ -338,17 +281,20 @@ const Analytics = () => {
               {expandedSections.geographic ? <ChevronUp size={18} className="text-gray-400" /> : <ChevronDown size={18} className="text-gray-400" />}
             </div>
             {expandedSections.geographic && (
-              <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-6">
                 {/* Countries */}
-                <div>
-                  <h4 className="text-gray-400 text-sm mb-2 flex items-center gap-1">
+                <div className="bg-gray-800/30 rounded-lg p-4">
+                  <h4 className="text-gray-400 text-sm mb-3 flex items-center gap-2">
                     <Globe size={14} /> Top Countries
                   </h4>
-                  <div className="space-y-1">
-                    {Object.entries(stats.demographics?.geographic?.countries || {}).map(([country, count]) => (
-                      <div key={country} className="flex justify-between text-sm">
-                        <span className="text-gray-300">{country}</span>
-                        <span className="text-purple-400">{count}</span>
+                  <div className="space-y-2">
+                    {Object.entries(stats.demographics?.geographic?.countries || {}).map(([country, count], idx) => (
+                      <div key={country} className="flex justify-between text-sm items-center">
+                        <span className="text-gray-300 flex items-center gap-2">
+                          <span className="text-gray-500 w-4">{idx + 1}.</span>
+                          {country}
+                        </span>
+                        <span className="text-purple-400 font-mono">{count}</span>
                       </div>
                     ))}
                     {Object.keys(stats.demographics?.geographic?.countries || {}).length === 0 && (
@@ -358,15 +304,18 @@ const Analytics = () => {
                 </div>
 
                 {/* Regions */}
-                <div>
-                  <h4 className="text-gray-400 text-sm mb-2 flex items-center gap-1">
+                <div className="bg-gray-800/30 rounded-lg p-4">
+                  <h4 className="text-gray-400 text-sm mb-3 flex items-center gap-2">
                     <MapPin size={14} /> Top Regions
                   </h4>
-                  <div className="space-y-1">
-                    {Object.entries(stats.demographics?.geographic?.regions || {}).map(([region, count]) => (
-                      <div key={region} className="flex justify-between text-sm">
-                        <span className="text-gray-300">{region}</span>
-                        <span className="text-purple-400">{count}</span>
+                  <div className="space-y-2">
+                    {Object.entries(stats.demographics?.geographic?.regions || {}).map(([region, count], idx) => (
+                      <div key={region} className="flex justify-between text-sm items-center">
+                        <span className="text-gray-300 flex items-center gap-2">
+                          <span className="text-gray-500 w-4">{idx + 1}.</span>
+                          {region}
+                        </span>
+                        <span className="text-purple-400 font-mono">{count}</span>
                       </div>
                     ))}
                     {Object.keys(stats.demographics?.geographic?.regions || {}).length === 0 && (
@@ -376,15 +325,18 @@ const Analytics = () => {
                 </div>
 
                 {/* Cities */}
-                <div>
-                  <h4 className="text-gray-400 text-sm mb-2 flex items-center gap-1">
+                <div className="bg-gray-800/30 rounded-lg p-4">
+                  <h4 className="text-gray-400 text-sm mb-3 flex items-center gap-2">
                     <MapPin size={14} /> Top Cities
                   </h4>
-                  <div className="space-y-1">
-                    {Object.entries(stats.demographics?.geographic?.cities || {}).map(([city, count]) => (
-                      <div key={city} className="flex justify-between text-sm">
-                        <span className="text-gray-300">{city}</span>
-                        <span className="text-purple-400">{count}</span>
+                  <div className="space-y-2">
+                    {Object.entries(stats.demographics?.geographic?.cities || {}).map(([city, count], idx) => (
+                      <div key={city} className="flex justify-between text-sm items-center">
+                        <span className="text-gray-300 flex items-center gap-2">
+                          <span className="text-gray-500 w-4">{idx + 1}.</span>
+                          {city}
+                        </span>
+                        <span className="text-purple-400 font-mono">{count}</span>
                       </div>
                     ))}
                     {Object.keys(stats.demographics?.geographic?.cities || {}).length === 0 && (
@@ -396,11 +348,10 @@ const Analytics = () => {
             )}
           </div>
 
-          {/* Note about demographics */}
-          <div className="bg-blue-900/20 border border-blue-800/50 rounded-xl p-4">
-            <p className="text-blue-300 text-sm">
-              <strong>Note:</strong> Geographic data (country, region, city) is automatically collected from viewer IP addresses. 
-              Age and gender data requires viewers to optionally provide it via a profile survey.
+          {/* Info about auto-collection */}
+          <div className="bg-green-900/20 border border-green-800/50 rounded-xl p-4">
+            <p className="text-green-300 text-sm">
+              Geographic data is automatically collected from viewer IP addresses - no survey required.
             </p>
           </div>
         </div>
@@ -450,16 +401,23 @@ const Analytics = () => {
                 </div>
               </div>
 
-              {/* Commercial Demographics */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <PieChartSimple 
-                  data={commercialStats.demographics?.age_groups} 
-                  label="Commercial Viewers by Age"
-                />
-                <PieChartSimple 
-                  data={commercialStats.demographics?.genders} 
-                  label="Commercial Viewers by Gender"
-                />
+              {/* Commercial Geographic Distribution */}
+              <div className="bg-gray-900/50 border border-gray-800 rounded-xl p-4 md:p-6">
+                <h3 className="text-white font-semibold mb-4 flex items-center gap-2">
+                  <Globe size={18} />
+                  Commercial Viewers by Location
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {Object.entries(commercialStats.demographics?.countries || {}).map(([country, count]) => (
+                    <div key={country} className="flex justify-between text-sm bg-gray-800/30 rounded p-2">
+                      <span className="text-gray-300">{country}</span>
+                      <span className="text-purple-400 font-mono">{count}</span>
+                    </div>
+                  ))}
+                  {Object.keys(commercialStats.demographics?.countries || {}).length === 0 && (
+                    <p className="text-gray-500 text-sm col-span-3">No geographic data yet</p>
+                  )}
+                </div>
               </div>
             </>
           ) : (
