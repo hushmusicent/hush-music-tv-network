@@ -539,6 +539,26 @@ const LiveTV = () => {
     
   }, [commercials]);
 
+  // End commercial break and play the next video
+  const endCommercialBreak = useCallback(() => {
+    console.log('Commercial break ended');
+    
+    // Clear commercial state
+    setIsCommercialBreak(false);
+    setCommercialBreakVideos([]);
+    setCurrentCommercialIndex(0);
+    setIsPaused(false);
+    
+    // Play the pending next video
+    if (pendingNextVideo) {
+      console.log('Playing next video:', pendingNextVideo.video.title);
+      setCurrentVideoIndex(pendingNextVideo.index);
+      setCurrentVideo(pendingNextVideo.video);
+      setSeekTime(0);
+      setPendingNextVideo(null);
+    }
+  }, [pendingNextVideo]);
+
   // Handle commercial video ended
   const handleCommercialEnded = useCallback(() => {
     // Track commercial completion
@@ -579,26 +599,6 @@ const LiveTV = () => {
       endCommercialBreak();
     }
   }, [currentCommercialIndex, commercialBreakVideos, currentChannel, endCommercialBreak]);
-
-  // End commercial break and play the next video
-  const endCommercialBreak = useCallback(() => {
-    console.log('Commercial break ended');
-    
-    // Clear commercial state
-    setIsCommercialBreak(false);
-    setCommercialBreakVideos([]);
-    setCurrentCommercialIndex(0);
-    setIsPaused(false);
-    
-    // Play the pending next video
-    if (pendingNextVideo) {
-      console.log('Playing next video:', pendingNextVideo.video.title);
-      setCurrentVideoIndex(pendingNextVideo.index);
-      setCurrentVideo(pendingNextVideo.video);
-      setSeekTime(0);
-      setPendingNextVideo(null);
-    }
-  }, [pendingNextVideo]);
 
   // Track video events for analytics
   const trackVideoEvent = useCallback((eventType) => {
