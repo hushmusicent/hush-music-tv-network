@@ -518,6 +518,20 @@ const LiveTV = () => {
     setCurrentCommercialIndex(0);
     setIsCommercialBreak(true);
     
+    // Track first commercial play
+    if (selectedCommercials.length > 0 && currentChannel) {
+      try {
+        analyticsAPI.recordCommercial(
+          selectedCommercials[0].id,
+          currentChannel.id,
+          getViewerId(),
+          'play'
+        );
+      } catch (e) {
+        console.log('Failed to track commercial play:', e);
+      }
+    }
+    
     // Pause any playing video
     if (videoRef.current) videoRef.current.pause();
     if (youtubePlayerRef.current?.pauseVideo) youtubePlayerRef.current.pauseVideo();
@@ -527,16 +541,44 @@ const LiveTV = () => {
 
   // Handle commercial video ended
   const handleCommercialEnded = useCallback(() => {
+    // Track commercial completion
+    const currentCommercial = commercialBreakVideos[currentCommercialIndex];
+    if (currentCommercial && currentChannel) {
+      try {
+        analyticsAPI.recordCommercial(
+          currentCommercial.id,
+          currentChannel.id,
+          getViewerId(),
+          'complete'
+        );
+      } catch (e) {
+        console.log('Failed to track commercial complete:', e);
+      }
+    }
+    
     const nextIndex = currentCommercialIndex + 1;
     
     if (nextIndex < commercialBreakVideos.length) {
-      // Play next commercial
+      // Play next commercial - track the play event
       setCurrentCommercialIndex(nextIndex);
+      const nextCommercial = commercialBreakVideos[nextIndex];
+      if (nextCommercial && currentChannel) {
+        try {
+          analyticsAPI.recordCommercial(
+            nextCommercial.id,
+            currentChannel.id,
+            getViewerId(),
+            'play'
+          );
+        } catch (e) {
+          console.log('Failed to track commercial play:', e);
+        }
+      }
     } else {
       // Commercial break ended - resume regular video
       endCommercialBreak();
     }
-  }, [currentCommercialIndex, commercialBreakVideos.length]);
+  }, [currentCommercialIndex, commercialBreakVideos, currentChannel, endCommercialBreak]);
 
   // End commercial break and play the next video
   const endCommercialBreak = useCallback(() => {

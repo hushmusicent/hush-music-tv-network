@@ -3623,10 +3623,28 @@ class ViewEvent(BaseModel):
     video_id: Optional[str] = None  # Video being watched
     video_title: Optional[str] = None
     event_type: str = "view"  # view, skip, complete
+    # Demographics (optional - collected from user profile or survey)
+    age_group: Optional[str] = None  # "18-24", "25-34", "35-44", "45-54", "55-64", "65+"
+    gender: Optional[str] = None  # "male", "female", "other", "prefer_not_to_say"
+    country: Optional[str] = None
+    region: Optional[str] = None
+    city: Optional[str] = None
+
+class CommercialEvent(BaseModel):
+    commercial_id: str
+    channel_id: str
+    viewer_id: str
+    event_type: str = "play"  # play, complete, skip
+    # Demographics
+    age_group: Optional[str] = None
+    gender: Optional[str] = None
+    country: Optional[str] = None
+    region: Optional[str] = None
+    city: Optional[str] = None
 
 @api_router.post("/analytics/view")
 async def record_view(event: ViewEvent):
-    """Record a channel view/skip/complete event"""
+    """Record a channel view/skip/complete event with demographics"""
     now = datetime.now(timezone.utc)
     view_doc = {
         "id": str(uuid.uuid4()),
@@ -3637,26 +3655,99 @@ async def record_view(event: ViewEvent):
         "event_type": event.event_type,
         "timestamp": now.isoformat(),
         "hour": now.hour,
+        "day_of_week": now.weekday(),  # 0=Monday, 6=Sunday
+        "day": now.day,
+        "month": now.month,
+        "year": now.year,
+        "week": now.isocalendar()[1],
+        # Demographics
+        "age_group": event.age_group,
+        "gender": event.gender,
+        "country": event.country,
+        "region": event.region,
+        "city": event.city,
     }
     await db.views.insert_one(view_doc)
     return {"status": "recorded"}
 
+@api_router.post("/analytics/commercial")
+async def record_commercial_event(event: CommercialEvent):
+    """Record a commercial play/complete/skip event"""
+    now = datetime.now(timezone.utc)
+    commercial_doc = {
+        "id": str(uuid.uuid4()),
+        "commercial_id": event.commercial_id,
+        "channel_id": event.channel_id,
+        "viewer_id": event.viewer_id,
+        "event_type": event.event_type,
+        "timestamp": now.isoformat(),
+        "hour": now.hour,
+        "day_of_week": now.weekday(),
+        "day": now.day,
+        "month": now.month,
+        "year": now.year,
+        "week": now.isocalendar()[1],
+        # Demographics
+        "age_group": event.age_group,
+        "gender": event.gender,
+        "country": event.country,
+        "region": event.region,
+        "city": event.city,
+    }
+    await db.commercial_analytics.insert_one(commercial_doc)
+    return {"status": "recorded"}
+
 @api_router.get("/analytics/stats")
 async def get_analytics(user: dict = Depends(require_user)):
-    """Get analytics stats (admin only)"""
+    """Get comprehensive analytics stats (admin only)"""
     if not user.get("is_admin", False):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     now = datetime.now(timezone.utc)
     last_24h = now - timedelta(hours=24)
+    last_7d = now - timedelta(days=7)
+    last_30d = now - timedelta(days=30)
     last_5min = now - timedelta(minutes=5)
     
     # Get all views
-    all_views = await db.views.find({}, {"_id": 0}).to_list(10000)
+    all_views = await db.views.find({}, {"_id": 0}).to_list(50000)
     
-    # Filter by time
-    views_24h = []
+    # Initialize time-based containers
     views_5min = []
+    views_24h = []
+    views_7d = []
+    views_30d = []
+    views_this_year = []
+    
+    # Demographics aggregation
+    age_groups = {"18-24": 0, "25-34": 0, "35-44": 0, "45-54": 0, "55-64": 0, "65+": 0, "unknown": 0}
+    genders = {"male": 0, "female": 0, "other": 0, "unknown": 0}
+    countries = {}
+    regions = {}
+    cities = {}
+    
+    # Hourly distribution (0-23)
+    hourly_views = {str(i): 0 for i in range(24)}
+    
+    # Daily distribution (last 7 days)
+    daily_views = {}
+    for i in range(7):
+        day = (now - timedelta(days=i)).strftime("%Y-%m-%d")
+        daily_views[day] = 0
+    
+    # Weekly distribution (last 4 weeks)
+    weekly_views = {}
+    for i in range(4):
+        week_start = now - timedelta(weeks=i)
+        week_key = f"Week {week_start.isocalendar()[1]}"
+        weekly_views[week_key] = 0
+    
+    # Monthly distribution (last 12 months)
+    monthly_views = {}
+    for i in range(12):
+        month = now - timedelta(days=i*30)
+        month_key = month.strftime("%Y-%m")
+        monthly_views[month_key] = 0
     
     for view in all_views:
         try:
@@ -3664,18 +3755,68 @@ async def get_analytics(user: dict = Depends(require_user)):
             if view_time.tzinfo is None:
                 view_time = view_time.replace(tzinfo=timezone.utc)
             
-            if view_time >= last_24h:
-                views_24h.append(view)
+            # Time-based filtering
             if view_time >= last_5min:
                 views_5min.append(view)
+            if view_time >= last_24h:
+                views_24h.append(view)
+                # Hourly distribution
+                hourly_views[str(view_time.hour)] += 1
+            if view_time >= last_7d:
+                views_7d.append(view)
+                # Daily distribution
+                day_key = view_time.strftime("%Y-%m-%d")
+                if day_key in daily_views:
+                    daily_views[day_key] += 1
+            if view_time >= last_30d:
+                views_30d.append(view)
+                # Weekly distribution
+                week_key = f"Week {view_time.isocalendar()[1]}"
+                if week_key in weekly_views:
+                    weekly_views[week_key] += 1
+            if view_time.year == now.year:
+                views_this_year.append(view)
+                # Monthly distribution
+                month_key = view_time.strftime("%Y-%m")
+                if month_key in monthly_views:
+                    monthly_views[month_key] += 1
+            
+            # Demographics aggregation (from all time)
+            age = view.get("age_group")
+            if age and age in age_groups:
+                age_groups[age] += 1
+            else:
+                age_groups["unknown"] += 1
+            
+            gender = view.get("gender")
+            if gender and gender in genders:
+                genders[gender] += 1
+            else:
+                genders["unknown"] += 1
+            
+            country = view.get("country")
+            if country:
+                countries[country] = countries.get(country, 0) + 1
+            
+            region = view.get("region")
+            if region:
+                regions[region] = regions.get(region, 0) + 1
+            
+            city = view.get("city")
+            if city:
+                cities[city] = cities.get(city, 0) + 1
+                
         except Exception:
             continue
     
     # Count unique viewers
-    unique_24h = len(set(v["viewer_id"] for v in views_24h))
     unique_5min = len(set(v["viewer_id"] for v in views_5min))
+    unique_24h = len(set(v["viewer_id"] for v in views_24h))
+    unique_7d = len(set(v["viewer_id"] for v in views_7d))
+    unique_30d = len(set(v["viewer_id"] for v in views_30d))
+    unique_year = len(set(v["viewer_id"] for v in views_this_year))
     
-    # Views per channel
+    # Views per channel (last 24h)
     channel_views = {}
     for view in views_24h:
         cid = view["channel_id"]
@@ -3698,14 +3839,205 @@ async def get_analytics(user: dict = Depends(require_user)):
             "unique_viewers": len(stats["unique_viewers"])
         })
     
-    # Sort by total views
     channel_stats.sort(key=lambda x: x["total_views"], reverse=True)
     
+    # Sort geographic data
+    top_countries = sorted(countries.items(), key=lambda x: x[1], reverse=True)[:10]
+    top_regions = sorted(regions.items(), key=lambda x: x[1], reverse=True)[:10]
+    top_cities = sorted(cities.items(), key=lambda x: x[1], reverse=True)[:10]
+    
     return {
-        "viewers_24h": unique_24h,
+        # Current/Recent
         "current_viewers": unique_5min,
+        "viewers_24h": unique_24h,
         "total_views_24h": len(views_24h),
+        
+        # Time-based stats
+        "time_stats": {
+            "hourly": {
+                "viewers": unique_24h,
+                "views": len(views_24h),
+                "distribution": hourly_views
+            },
+            "daily": {
+                "viewers": unique_7d,
+                "views": len(views_7d),
+                "distribution": daily_views
+            },
+            "weekly": {
+                "viewers": unique_30d,
+                "views": len(views_30d),
+                "distribution": weekly_views
+            },
+            "monthly": {
+                "viewers": unique_year,
+                "views": len(views_this_year),
+                "distribution": monthly_views
+            },
+            "yearly": {
+                "total_views": len(all_views),
+                "unique_viewers": len(set(v["viewer_id"] for v in all_views))
+            }
+        },
+        
+        # Demographics
+        "demographics": {
+            "age_groups": age_groups,
+            "genders": genders,
+            "geographic": {
+                "countries": dict(top_countries),
+                "regions": dict(top_regions),
+                "cities": dict(top_cities)
+            }
+        },
+        
+        # Channel stats
         "channel_stats": channel_stats
+    }
+
+@api_router.get("/analytics/commercials")
+async def get_commercial_analytics(user: dict = Depends(require_user)):
+    """Get commercial analytics stats (admin only)"""
+    if not user.get("is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    now = datetime.now(timezone.utc)
+    last_24h = now - timedelta(hours=24)
+    last_7d = now - timedelta(days=7)
+    last_30d = now - timedelta(days=30)
+    
+    # Get all commercial events
+    all_events = await db.commercial_analytics.find({}, {"_id": 0}).to_list(50000)
+    
+    events_24h = []
+    events_7d = []
+    events_30d = []
+    
+    # Demographics
+    age_groups = {"18-24": 0, "25-34": 0, "35-44": 0, "45-54": 0, "55-64": 0, "65+": 0, "unknown": 0}
+    genders = {"male": 0, "female": 0, "other": 0, "unknown": 0}
+    countries = {}
+    
+    # Hourly distribution
+    hourly_plays = {str(i): 0 for i in range(24)}
+    
+    # Daily distribution
+    daily_plays = {}
+    for i in range(7):
+        day = (now - timedelta(days=i)).strftime("%Y-%m-%d")
+        daily_plays[day] = 0
+    
+    # Weekly distribution
+    weekly_plays = {}
+    for i in range(4):
+        week_start = now - timedelta(weeks=i)
+        week_key = f"Week {week_start.isocalendar()[1]}"
+        weekly_plays[week_key] = 0
+    
+    # Monthly distribution
+    monthly_plays = {}
+    for i in range(12):
+        month = now - timedelta(days=i*30)
+        month_key = month.strftime("%Y-%m")
+        monthly_plays[month_key] = 0
+    
+    # Per-commercial stats
+    commercial_stats = {}
+    
+    for event in all_events:
+        try:
+            event_time = datetime.fromisoformat(event["timestamp"].replace("Z", "+00:00"))
+            if event_time.tzinfo is None:
+                event_time = event_time.replace(tzinfo=timezone.utc)
+            
+            # Time filtering
+            if event_time >= last_24h:
+                events_24h.append(event)
+                hourly_plays[str(event_time.hour)] += 1
+            if event_time >= last_7d:
+                events_7d.append(event)
+                day_key = event_time.strftime("%Y-%m-%d")
+                if day_key in daily_plays:
+                    daily_plays[day_key] += 1
+            if event_time >= last_30d:
+                events_30d.append(event)
+                week_key = f"Week {event_time.isocalendar()[1]}"
+                if week_key in weekly_plays:
+                    weekly_plays[week_key] += 1
+                month_key = event_time.strftime("%Y-%m")
+                if month_key in monthly_plays:
+                    monthly_plays[month_key] += 1
+            
+            # Per-commercial tracking
+            cid = event.get("commercial_id")
+            if cid:
+                if cid not in commercial_stats:
+                    commercial_stats[cid] = {"plays": 0, "completes": 0, "skips": 0}
+                if event.get("event_type") == "play":
+                    commercial_stats[cid]["plays"] += 1
+                elif event.get("event_type") == "complete":
+                    commercial_stats[cid]["completes"] += 1
+                elif event.get("event_type") == "skip":
+                    commercial_stats[cid]["skips"] += 1
+            
+            # Demographics
+            age = event.get("age_group")
+            if age and age in age_groups:
+                age_groups[age] += 1
+            else:
+                age_groups["unknown"] += 1
+            
+            gender = event.get("gender")
+            if gender and gender in genders:
+                genders[gender] += 1
+            else:
+                genders["unknown"] += 1
+            
+            country = event.get("country")
+            if country:
+                countries[country] = countries.get(country, 0) + 1
+                
+        except Exception:
+            continue
+    
+    # Get commercial names
+    commercials = await db.commercials.find({}, {"_id": 0, "id": 1, "original_name": 1}).to_list(100)
+    commercial_names = {c["id"]: c.get("original_name", "Unknown") for c in commercials}
+    
+    # Format commercial stats
+    formatted_commercial_stats = []
+    for cid, stats in commercial_stats.items():
+        formatted_commercial_stats.append({
+            "commercial_id": cid,
+            "commercial_name": commercial_names.get(cid, "Unknown"),
+            **stats,
+            "completion_rate": round(stats["completes"] / stats["plays"] * 100, 1) if stats["plays"] > 0 else 0
+        })
+    
+    formatted_commercial_stats.sort(key=lambda x: x["plays"], reverse=True)
+    
+    top_countries = sorted(countries.items(), key=lambda x: x[1], reverse=True)[:10]
+    
+    return {
+        "total_plays_24h": len(events_24h),
+        "total_plays_7d": len(events_7d),
+        "total_plays_30d": len(events_30d),
+        "total_plays_all_time": len(all_events),
+        
+        "time_stats": {
+            "hourly": hourly_plays,
+            "daily": daily_plays,
+            "weekly": weekly_plays,
+            "monthly": monthly_plays
+        },
+        
+        "demographics": {
+            "age_groups": age_groups,
+            "genders": genders,
+            "countries": dict(top_countries)
+        },
+        
+        "commercial_stats": formatted_commercial_stats
     }
 
 

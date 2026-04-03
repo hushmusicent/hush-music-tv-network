@@ -202,9 +202,25 @@ export const uploadAPI = {
 
 // Analytics API
 export const analyticsAPI = {
-  recordView: (channelId, viewerId, videoId, videoTitle, eventType = 'view') => 
-    api.post('/analytics/view', { channel_id: channelId, viewer_id: viewerId, video_id: videoId, video_title: videoTitle, event_type: eventType }),
+  recordView: (channelId, viewerId, videoId, videoTitle, eventType = 'view', demographics = {}) => 
+    api.post('/analytics/view', { 
+      channel_id: channelId, 
+      viewer_id: viewerId, 
+      video_id: videoId, 
+      video_title: videoTitle, 
+      event_type: eventType,
+      ...demographics
+    }),
+  recordCommercial: (commercialId, channelId, viewerId, eventType = 'play', demographics = {}) =>
+    api.post('/analytics/commercial', {
+      commercial_id: commercialId,
+      channel_id: channelId,
+      viewer_id: viewerId,
+      event_type: eventType,
+      ...demographics
+    }),
   getStats: () => api.get('/analytics/stats'),
+  getCommercialStats: () => api.get('/analytics/commercials'),
   getChannelStats: (channelId) => api.get(`/analytics/channel/${channelId}`),
 };
 

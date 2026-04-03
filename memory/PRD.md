@@ -32,6 +32,18 @@ Build a TV network app named "Hush Music TV Network" with admin-only channel/vid
 - `POST /api/schedules/regenerate-all` - Regenerate all 24h schedules
 - Admin credentials: hushmusicent419@gmail.com / $Stisdd419
 
+## Completed (Apr 3, 2026)
+- **Enhanced Analytics Dashboard**:
+  - **Overview Tab**: Current viewers, 24h views, unique viewers, all-time views, channel performance
+  - **Time Analysis Tab**: Hourly/Daily/Weekly/Monthly distribution charts with selectors
+  - **Demographics Tab**: Age groups, gender distribution, geographic data (countries, regions, cities)
+  - **Commercials Tab**: Commercial plays tracking, completion rates, per-commercial performance stats
+  - Backend: `POST /api/analytics/view` with demographics (age_group, gender, country, region, city)
+  - Backend: `POST /api/analytics/commercial` for commercial play/complete/skip events
+  - Backend: `GET /api/analytics/stats` returns comprehensive time-based and demographic data
+  - Backend: `GET /api/analytics/commercials` returns commercial-specific analytics
+  - Frontend: Complete rewrite of Analytics.jsx with 4 tabs and interactive charts
+
 ## Completed (Mar 31, 2026)
 - **Commercial System**:
   - New "Commercial Manager" page accessible from Dashboard

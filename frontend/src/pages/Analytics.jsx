@@ -10,43 +10,43 @@ import {
   TrendingUp,
   RefreshCw,
   ArrowLeft,
-  Radio,
   Clock,
-  SkipForward,
-  ChevronRight,
-  X,
-  UserPlus,
-  UserCheck
+  Calendar,
+  CalendarDays,
+  Globe,
+  MapPin,
+  User,
+  Tv,
+  Play,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 
 const Analytics = () => {
   const navigate = useNavigate();
   const { user, isAuthenticated, loading: authLoading } = useAuth();
   const [stats, setStats] = useState(null);
+  const [commercialStats, setCommercialStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [selectedChannel, setSelectedChannel] = useState(null);
-  const [channelDetail, setChannelDetail] = useState(null);
-  const [detailLoading, setDetailLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState('overview'); // overview, time, demographics, commercials
+  const [timeRange, setTimeRange] = useState('daily'); // hourly, daily, weekly, monthly
+  const [expandedSections, setExpandedSections] = useState({
+    channels: true,
+    demographics: true,
+    geographic: true
+  });
 
   useEffect(() => {
-    // Wait for auth to finish loading before checking permissions
     if (authLoading) return;
-    
-    // First check if user is authenticated at all
     if (!isAuthenticated) {
       navigate('/login');
       return;
     }
-    
-    // Only redirect if we have user data AND they're not admin
-    // This prevents redirect when user object is still being populated
     if (user && user.is_admin === false) {
       navigate('/');
       return;
     }
-    
-    // Load stats if user is admin (or user.is_admin is undefined/true)
     if (user?.is_admin) {
       loadStats();
     }
@@ -55,8 +55,12 @@ const Analytics = () => {
   const loadStats = async () => {
     try {
       setRefreshing(true);
-      const response = await analyticsAPI.getStats();
-      setStats(response.data);
+      const [statsRes, commercialRes] = await Promise.all([
+        analyticsAPI.getStats(),
+        analyticsAPI.getCommercialStats().catch(() => ({ data: null }))
+      ]);
+      setStats(statsRes.data);
+      setCommercialStats(commercialRes.data);
     } catch (error) {
       console.error('Failed to load analytics:', error);
     } finally {
@@ -65,320 +69,408 @@ const Analytics = () => {
     }
   };
 
-  const loadChannelDetail = async (channelId, channelName) => {
-    setSelectedChannel({ id: channelId, name: channelName });
-    setDetailLoading(true);
-    try {
-      const response = await analyticsAPI.getChannelStats(channelId);
-      setChannelDetail(response.data);
-    } catch (error) {
-      console.error('Failed to load channel analytics:', error);
-    } finally {
-      setDetailLoading(false);
-    }
+  const toggleSection = (section) => {
+    setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
   };
 
-  // Show loading while auth is being checked or user data is loading
   if (authLoading || !user || loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex items-center justify-center min-h-screen bg-gray-950">
         <div className="text-center">
-          <BarChart3 size={48} className="mx-auto mb-4 text-primary animate-pulse" />
+          <BarChart3 size={48} className="mx-auto mb-4 text-purple-500 animate-pulse" />
           <p className="text-gray-400">Loading analytics...</p>
         </div>
       </div>
     );
   }
 
+  const StatCard = ({ icon: Icon, label, value, subValue, color = "purple" }) => (
+    <div className="bg-gray-900/50 border border-gray-800 rounded-xl p-4 md:p-6">
+      <div className="flex items-center gap-3 mb-2">
+        <div className={`p-2 rounded-lg bg-${color}-500/20`}>
+          <Icon size={20} className={`text-${color}-400`} />
+        </div>
+        <span className="text-gray-400 text-sm">{label}</span>
+      </div>
+      <p className="text-2xl md:text-3xl font-bold text-white">{value}</p>
+      {subValue && <p className="text-sm text-gray-500 mt-1">{subValue}</p>}
+    </div>
+  );
+
+  const BarChartSimple = ({ data, label, maxBars = 24 }) => {
+    const entries = Object.entries(data || {}).slice(0, maxBars);
+    const maxValue = Math.max(...entries.map(([_, v]) => v), 1);
+    
+    return (
+      <div className="bg-gray-900/50 border border-gray-800 rounded-xl p-4 md:p-6">
+        <h3 className="text-white font-semibold mb-4">{label}</h3>
+        <div className="flex items-end gap-1 h-32">
+          {entries.map(([key, value]) => (
+            <div key={key} className="flex-1 flex flex-col items-center">
+              <div 
+                className="w-full bg-purple-500 rounded-t min-h-[2px]"
+                style={{ height: `${(value / maxValue) * 100}%` }}
+                title={`${key}: ${value}`}
+              />
+              <span className="text-[10px] text-gray-500 mt-1 rotate-45 origin-left">{key.slice(-2)}</span>
+            </div>
+          ))}
+        </div>
+        <div className="flex justify-between text-xs text-gray-500 mt-2">
+          <span>0</span>
+          <span>{maxValue}</span>
+        </div>
+      </div>
+    );
+  };
+
+  const PieChartSimple = ({ data, label, colors }) => {
+    const entries = Object.entries(data || {}).filter(([_, v]) => v > 0);
+    const total = entries.reduce((sum, [_, v]) => sum + v, 0) || 1;
+    const defaultColors = ['#8b5cf6', '#06b6d4', '#22c55e', '#eab308', '#ef4444', '#ec4899', '#6366f1'];
+    
+    return (
+      <div className="bg-gray-900/50 border border-gray-800 rounded-xl p-4 md:p-6">
+        <h3 className="text-white font-semibold mb-4">{label}</h3>
+        <div className="space-y-2">
+          {entries.map(([key, value], idx) => {
+            const percentage = ((value / total) * 100).toFixed(1);
+            const color = (colors && colors[key]) || defaultColors[idx % defaultColors.length];
+            return (
+              <div key={key} className="flex items-center gap-3">
+                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} />
+                <span className="text-gray-300 text-sm flex-1 capitalize">{key}</span>
+                <span className="text-gray-400 text-sm">{value}</span>
+                <span className="text-gray-500 text-xs w-12 text-right">{percentage}%</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
   return (
-    <div className="min-h-screen px-6 md:px-12 lg:px-16 py-8" data-testid="analytics-page">
+    <div className="min-h-screen bg-gray-950 px-4 md:px-8 lg:px-12 py-6" data-testid="analytics-page">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
         <div className="flex items-center gap-4">
           <Button
             variant="ghost"
             onClick={() => navigate('/dashboard')}
-            className="p-2"
+            className="text-gray-400 hover:text-white"
+            data-testid="back-to-dashboard"
           >
             <ArrowLeft size={20} />
           </Button>
           <div>
-            <h1 className="font-heading text-4xl md:text-5xl tracking-tight flex items-center gap-3">
-              <BarChart3 size={36} className="text-primary" />
-              Analytics
-            </h1>
-            <p className="text-gray-400 mt-2">
-              Track your channel performance and viewer engagement
-            </p>
+            <h1 className="text-2xl md:text-3xl font-bold text-white">Analytics Dashboard</h1>
+            <p className="text-gray-500 text-sm">Comprehensive viewer insights</p>
           </div>
         </div>
-
         <Button
           onClick={loadStats}
           disabled={refreshing}
-          className="bg-primary hover:bg-primary-hover"
+          className="bg-purple-600 hover:bg-purple-700"
+          data-testid="refresh-analytics"
         >
-          <RefreshCw size={16} className={`mr-2 ${refreshing ? 'animate-spin' : ''}`} />
-          Refresh
+          <RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} />
+          <span className="ml-2">Refresh</span>
         </Button>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        {/* Current Viewers */}
-        <div className="bg-surface rounded-xl border border-white/10 p-6">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-green-500/20 rounded-lg">
-              <Users size={24} className="text-green-400" />
-            </div>
-            <div>
-              <p className="text-sm text-gray-400">Current Viewers</p>
-              <p className="text-3xl font-bold text-green-400">
-                {stats?.current_viewers || 0}
-              </p>
-              <p className="text-xs text-gray-500">Active in last 5 minutes</p>
-            </div>
-          </div>
-        </div>
-
-        {/* 24h Viewers */}
-        <div className="bg-surface rounded-xl border border-white/10 p-6">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-blue-500/20 rounded-lg">
-              <Eye size={24} className="text-blue-400" />
-            </div>
-            <div>
-              <p className="text-sm text-gray-400">Viewers (24h)</p>
-              <p className="text-3xl font-bold text-blue-400">
-                {stats?.viewers_24h || 0}
-              </p>
-              <p className="text-xs text-gray-500">Unique viewers</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Total Views */}
-        <div className="bg-surface rounded-xl border border-white/10 p-6">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-purple-500/20 rounded-lg">
-              <TrendingUp size={24} className="text-purple-400" />
-            </div>
-            <div>
-              <p className="text-sm text-gray-400">Total Views (24h)</p>
-              <p className="text-3xl font-bold text-purple-400">
-                {stats?.total_views_24h || 0}
-              </p>
-              <p className="text-xs text-gray-500">All channel views</p>
-            </div>
-          </div>
-        </div>
+      {/* Tabs */}
+      <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
+        {[
+          { id: 'overview', label: 'Overview', icon: BarChart3 },
+          { id: 'time', label: 'Time Analysis', icon: Clock },
+          { id: 'demographics', label: 'Demographics', icon: Users },
+          { id: 'commercials', label: 'Commercials', icon: Play }
+        ].map(tab => (
+          <Button
+            key={tab.id}
+            variant={activeTab === tab.id ? 'default' : 'ghost'}
+            onClick={() => setActiveTab(tab.id)}
+            className={activeTab === tab.id ? 'bg-purple-600' : 'text-gray-400'}
+            data-testid={`tab-${tab.id}`}
+          >
+            <tab.icon size={16} className="mr-2" />
+            {tab.label}
+          </Button>
+        ))}
       </div>
 
-      {/* Channel Stats */}
-      <div className="bg-surface rounded-xl border border-white/10 p-6">
-        <h2 className="font-heading text-xl mb-6 flex items-center gap-2">
-          <Radio size={20} className="text-primary" />
-          Channel Performance (Last 24 Hours)
-        </h2>
-
-        {stats?.channel_stats?.length > 0 ? (
-          <div className="space-y-4">
-            {stats.channel_stats.map((channel, index) => {
-              const maxViews = stats.channel_stats[0]?.total_views || 1;
-              const percentage = (channel.total_views / maxViews) * 100;
-              
-              return (
-                <button
-                  key={channel.channel_id}
-                  onClick={() => loadChannelDetail(channel.channel_id, channel.channel_name)}
-                  className="w-full text-left space-y-2 group hover:bg-white/5 rounded-lg p-2 -m-2 transition-colors"
-                  data-testid={`channel-stat-${channel.channel_id}`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <span className="text-sm font-medium text-gray-400 w-6">
-                        #{index + 1}
-                      </span>
-                      <span className="font-medium group-hover:text-primary transition-colors">{channel.channel_name}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-right">
-                      <div>
-                        <span className="text-primary font-bold">{channel.total_views}</span>
-                        <span className="text-gray-500 text-sm ml-1">views</span>
-                        <span className="text-gray-400 text-sm ml-3">
-                          ({channel.unique_viewers} unique)
-                        </span>
-                      </div>
-                      <ChevronRight size={14} className="text-gray-500 group-hover:text-primary transition-colors" />
-                    </div>
-                  </div>
-                  <div className="h-2 bg-black/30 rounded-full overflow-hidden">
-                    <div 
-                      className="h-full bg-gradient-to-r from-primary to-purple-500 rounded-full transition-all duration-500"
-                      style={{ width: `${percentage}%` }}
-                    />
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="text-center py-12">
-            <Eye size={48} className="mx-auto mb-4 text-gray-600" />
-            <p className="text-gray-400">No viewing data yet</p>
-            <p className="text-gray-500 text-sm mt-2">
-              Analytics will appear as viewers watch your channels
-            </p>
-          </div>
-        )}
-      </div>
-
-      {/* Channel Detail Panel */}
-      {selectedChannel && (
-        <div className="mt-6 bg-surface rounded-xl border border-white/10 p-6" data-testid="channel-detail-analytics">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="font-heading text-xl flex items-center gap-2">
-              <BarChart3 size={20} className="text-primary" />
-              {selectedChannel.name}
-            </h2>
-            <Button variant="ghost" size="sm" onClick={() => { setSelectedChannel(null); setChannelDetail(null); }}>
-              <X size={16} />
-            </Button>
+      {/* Overview Tab */}
+      {activeTab === 'overview' && stats && (
+        <div className="space-y-6">
+          {/* Key Metrics */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <StatCard icon={Users} label="Current Viewers" value={stats.current_viewers || 0} color="green" />
+            <StatCard icon={Eye} label="Views (24h)" value={stats.total_views_24h || 0} color="blue" />
+            <StatCard icon={Users} label="Unique (24h)" value={stats.viewers_24h || 0} color="purple" />
+            <StatCard 
+              icon={TrendingUp} 
+              label="All Time Views" 
+              value={stats.time_stats?.yearly?.total_views || 0} 
+              color="yellow" 
+            />
           </div>
 
-          {detailLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <RefreshCw size={24} className="animate-spin text-primary" />
+          {/* Channel Stats */}
+          <div className="bg-gray-900/50 border border-gray-800 rounded-xl p-4 md:p-6">
+            <div 
+              className="flex items-center justify-between cursor-pointer"
+              onClick={() => toggleSection('channels')}
+            >
+              <h3 className="text-white font-semibold flex items-center gap-2">
+                <Tv size={18} />
+                Channel Performance (24h)
+              </h3>
+              {expandedSections.channels ? <ChevronUp size={18} className="text-gray-400" /> : <ChevronDown size={18} className="text-gray-400" />}
             </div>
-          ) : channelDetail ? (
-            <div className="space-y-6">
-              {/* Summary Cards */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="bg-black/20 rounded-lg p-4">
-                  <div className="flex items-center gap-2 text-xs text-gray-400 mb-1">
-                    <Eye size={12} /> 7-Day Views
+            {expandedSections.channels && (
+              <div className="mt-4 space-y-2 max-h-80 overflow-y-auto">
+                {(stats.channel_stats || []).map((channel, idx) => (
+                  <div key={channel.channel_id} className="flex items-center gap-3 p-2 rounded hover:bg-gray-800/50">
+                    <span className="text-gray-500 w-6 text-sm">{idx + 1}</span>
+                    <span className="text-white flex-1 truncate">{channel.channel_name}</span>
+                    <span className="text-purple-400 font-mono">{channel.total_views} views</span>
+                    <span className="text-gray-500 text-sm">{channel.unique_viewers} unique</span>
                   </div>
-                  <p className="text-2xl font-bold text-blue-400">{channelDetail.total_views_7d}</p>
-                </div>
-                <div className="bg-black/20 rounded-lg p-4">
-                  <div className="flex items-center gap-2 text-xs text-gray-400 mb-1">
-                    <Users size={12} /> Unique Viewers
-                  </div>
-                  <p className="text-2xl font-bold text-green-400">{channelDetail.unique_viewers_7d}</p>
-                </div>
-                <div className="bg-black/20 rounded-lg p-4">
-                  <div className="flex items-center gap-2 text-xs text-gray-400 mb-1">
-                    <UserPlus size={12} /> New Viewers
-                  </div>
-                  <p className="text-2xl font-bold text-cyan-400">{channelDetail.new_viewers}</p>
-                </div>
-                <div className="bg-black/20 rounded-lg p-4">
-                  <div className="flex items-center gap-2 text-xs text-gray-400 mb-1">
-                    <UserCheck size={12} /> Returning
-                  </div>
-                  <p className="text-2xl font-bold text-purple-400">{channelDetail.returning_viewers}</p>
-                </div>
-              </div>
-
-              {/* Peak Hours Heatmap */}
-              <div>
-                <h3 className="text-sm font-medium text-gray-400 mb-3 flex items-center gap-2">
-                  <Clock size={14} /> Peak Hours (Last 7 Days)
-                </h3>
-                <div className="flex gap-[2px] items-end h-24">
-                  {channelDetail.peak_hours?.map((count, hour) => {
-                    const max = Math.max(...channelDetail.peak_hours, 1);
-                    const pct = (count / max) * 100;
-                    return (
-                      <div key={hour} className="flex-1 flex flex-col items-center gap-1 group relative">
-                        <div 
-                          className="w-full rounded-t transition-all bg-gradient-to-t from-blue-600 to-blue-400 hover:from-blue-500 hover:to-blue-300 min-h-[2px]"
-                          style={{ height: `${Math.max(pct, 2)}%` }}
-                        />
-                        {hour % 3 === 0 && (
-                          <span className="text-[9px] text-gray-500">{hour === 0 ? '12a' : hour <= 12 ? `${hour}${hour === 12 ? 'p' : 'a'}` : `${hour - 12}p`}</span>
-                        )}
-                        <div className="absolute bottom-full mb-1 bg-black/90 text-[10px] text-white px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-10">
-                          {hour}:00 - {count} views
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Daily Timeline */}
-              <div>
-                <h3 className="text-sm font-medium text-gray-400 mb-3 flex items-center gap-2">
-                  <TrendingUp size={14} /> Daily Views (Last 7 Days)
-                </h3>
-                <div className="flex gap-2 items-end h-20">
-                  {channelDetail.daily_timeline?.map((day) => {
-                    const max = Math.max(...channelDetail.daily_timeline.map(d => d.views), 1);
-                    const pct = (day.views / max) * 100;
-                    const label = new Date(day.date + 'T12:00:00').toLocaleDateString('en', { weekday: 'short' });
-                    return (
-                      <div key={day.date} className="flex-1 flex flex-col items-center gap-1">
-                        <span className="text-[10px] text-gray-400">{day.views}</span>
-                        <div 
-                          className="w-full rounded-t bg-gradient-to-t from-purple-600 to-purple-400 min-h-[2px]"
-                          style={{ height: `${Math.max(pct, 2)}%` }}
-                        />
-                        <span className="text-[10px] text-gray-500">{label}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Most Viewed & Most Skipped */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {channelDetail.most_viewed?.length > 0 && (
-                  <div>
-                    <h3 className="text-sm font-medium text-gray-400 mb-3 flex items-center gap-2">
-                      <Eye size={14} /> Most Watched Videos
-                    </h3>
-                    <div className="space-y-2">
-                      {channelDetail.most_viewed.slice(0, 8).map((v, i) => (
-                        <div key={i} className="flex items-center gap-2 text-xs bg-black/20 rounded px-2 py-1.5">
-                          <span className="text-gray-500 w-4">{i + 1}</span>
-                          <span className="truncate flex-1">{v.title}</span>
-                          <span className="text-green-400 font-medium">{v.views}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {channelDetail.most_skipped?.length > 0 && (
-                  <div>
-                    <h3 className="text-sm font-medium text-gray-400 mb-3 flex items-center gap-2">
-                      <SkipForward size={14} className="text-red-400" /> Most Skipped Videos
-                    </h3>
-                    <div className="space-y-2">
-                      {channelDetail.most_skipped.slice(0, 8).map((v, i) => (
-                        <div key={i} className="flex items-center gap-2 text-xs bg-black/20 rounded px-2 py-1.5">
-                          <span className="text-gray-500 w-4">{i + 1}</span>
-                          <span className="truncate flex-1">{v.title}</span>
-                          <span className="text-red-400 font-medium">{v.skips} skips</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+                ))}
+                {(!stats.channel_stats || stats.channel_stats.length === 0) && (
+                  <p className="text-gray-500 text-center py-4">No channel data yet</p>
                 )}
               </div>
-            </div>
-          ) : null}
+            )}
+          </div>
         </div>
       )}
 
-      {/* Info */}
-      <div className="mt-6 text-sm text-gray-500">
-        <p>
-          Viewer data is collected anonymously when users watch channels. 
-          Current viewers shows activity in the last 5 minutes.
-        </p>
-      </div>
+      {/* Time Analysis Tab */}
+      {activeTab === 'time' && stats && (
+        <div className="space-y-6">
+          {/* Time Range Selector */}
+          <div className="flex gap-2 flex-wrap">
+            {['hourly', 'daily', 'weekly', 'monthly'].map(range => (
+              <Button
+                key={range}
+                variant={timeRange === range ? 'default' : 'outline'}
+                onClick={() => setTimeRange(range)}
+                className={timeRange === range ? 'bg-purple-600' : 'border-gray-700 text-gray-300'}
+                size="sm"
+              >
+                {range.charAt(0).toUpperCase() + range.slice(1)}
+              </Button>
+            ))}
+          </div>
+
+          {/* Time Stats Summary */}
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            <StatCard 
+              icon={Clock} 
+              label={`${timeRange.charAt(0).toUpperCase() + timeRange.slice(1)} Views`}
+              value={stats.time_stats?.[timeRange]?.views || 0}
+            />
+            <StatCard 
+              icon={Users} 
+              label={`${timeRange.charAt(0).toUpperCase() + timeRange.slice(1)} Unique`}
+              value={stats.time_stats?.[timeRange]?.viewers || 0}
+            />
+            <StatCard 
+              icon={Calendar} 
+              label="Yearly Total"
+              value={stats.time_stats?.yearly?.total_views || 0}
+            />
+          </div>
+
+          {/* Distribution Chart */}
+          <BarChartSimple 
+            data={stats.time_stats?.[timeRange]?.distribution} 
+            label={`${timeRange.charAt(0).toUpperCase() + timeRange.slice(1)} Distribution`}
+            maxBars={timeRange === 'hourly' ? 24 : timeRange === 'daily' ? 7 : timeRange === 'weekly' ? 4 : 12}
+          />
+        </div>
+      )}
+
+      {/* Demographics Tab */}
+      {activeTab === 'demographics' && stats && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Age Distribution */}
+            <PieChartSimple 
+              data={stats.demographics?.age_groups} 
+              label="Age Distribution"
+              colors={{
+                "18-24": "#8b5cf6",
+                "25-34": "#06b6d4",
+                "35-44": "#22c55e",
+                "45-54": "#eab308",
+                "55-64": "#ef4444",
+                "65+": "#ec4899",
+                "unknown": "#6b7280"
+              }}
+            />
+
+            {/* Gender Distribution */}
+            <PieChartSimple 
+              data={stats.demographics?.genders} 
+              label="Gender Distribution"
+              colors={{
+                "male": "#3b82f6",
+                "female": "#ec4899",
+                "other": "#8b5cf6",
+                "unknown": "#6b7280"
+              }}
+            />
+          </div>
+
+          {/* Geographic Data */}
+          <div className="bg-gray-900/50 border border-gray-800 rounded-xl p-4 md:p-6">
+            <div 
+              className="flex items-center justify-between cursor-pointer"
+              onClick={() => toggleSection('geographic')}
+            >
+              <h3 className="text-white font-semibold flex items-center gap-2">
+                <Globe size={18} />
+                Geographic Distribution
+              </h3>
+              {expandedSections.geographic ? <ChevronUp size={18} className="text-gray-400" /> : <ChevronDown size={18} className="text-gray-400" />}
+            </div>
+            {expandedSections.geographic && (
+              <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Countries */}
+                <div>
+                  <h4 className="text-gray-400 text-sm mb-2 flex items-center gap-1">
+                    <Globe size={14} /> Top Countries
+                  </h4>
+                  <div className="space-y-1">
+                    {Object.entries(stats.demographics?.geographic?.countries || {}).map(([country, count]) => (
+                      <div key={country} className="flex justify-between text-sm">
+                        <span className="text-gray-300">{country}</span>
+                        <span className="text-purple-400">{count}</span>
+                      </div>
+                    ))}
+                    {Object.keys(stats.demographics?.geographic?.countries || {}).length === 0 && (
+                      <p className="text-gray-500 text-sm">No data yet</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Regions */}
+                <div>
+                  <h4 className="text-gray-400 text-sm mb-2 flex items-center gap-1">
+                    <MapPin size={14} /> Top Regions
+                  </h4>
+                  <div className="space-y-1">
+                    {Object.entries(stats.demographics?.geographic?.regions || {}).map(([region, count]) => (
+                      <div key={region} className="flex justify-between text-sm">
+                        <span className="text-gray-300">{region}</span>
+                        <span className="text-purple-400">{count}</span>
+                      </div>
+                    ))}
+                    {Object.keys(stats.demographics?.geographic?.regions || {}).length === 0 && (
+                      <p className="text-gray-500 text-sm">No data yet</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Cities */}
+                <div>
+                  <h4 className="text-gray-400 text-sm mb-2 flex items-center gap-1">
+                    <MapPin size={14} /> Top Cities
+                  </h4>
+                  <div className="space-y-1">
+                    {Object.entries(stats.demographics?.geographic?.cities || {}).map(([city, count]) => (
+                      <div key={city} className="flex justify-between text-sm">
+                        <span className="text-gray-300">{city}</span>
+                        <span className="text-purple-400">{count}</span>
+                      </div>
+                    ))}
+                    {Object.keys(stats.demographics?.geographic?.cities || {}).length === 0 && (
+                      <p className="text-gray-500 text-sm">No data yet</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Note about demographics */}
+          <div className="bg-blue-900/20 border border-blue-800/50 rounded-xl p-4">
+            <p className="text-blue-300 text-sm">
+              <strong>Note:</strong> Demographic data (age, gender, location) is collected when viewers provide it. 
+              Enable the viewer survey feature to collect more demographic insights.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Commercials Tab */}
+      {activeTab === 'commercials' && (
+        <div className="space-y-6">
+          {commercialStats ? (
+            <>
+              {/* Commercial Key Metrics */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <StatCard icon={Play} label="Plays (24h)" value={commercialStats.total_plays_24h || 0} color="green" />
+                <StatCard icon={Eye} label="Plays (7d)" value={commercialStats.total_plays_7d || 0} color="blue" />
+                <StatCard icon={Calendar} label="Plays (30d)" value={commercialStats.total_plays_30d || 0} color="purple" />
+                <StatCard icon={TrendingUp} label="All Time" value={commercialStats.total_plays_all_time || 0} color="yellow" />
+              </div>
+
+              {/* Commercial Time Distribution */}
+              <BarChartSimple 
+                data={commercialStats.time_stats?.daily} 
+                label="Daily Commercial Plays (Last 7 Days)"
+                maxBars={7}
+              />
+
+              {/* Per-Commercial Stats */}
+              <div className="bg-gray-900/50 border border-gray-800 rounded-xl p-4 md:p-6">
+                <h3 className="text-white font-semibold mb-4 flex items-center gap-2">
+                  <Play size={18} />
+                  Commercial Performance
+                </h3>
+                <div className="space-y-2 max-h-80 overflow-y-auto">
+                  {(commercialStats.commercial_stats || []).map((commercial, idx) => (
+                    <div key={commercial.commercial_id} className="flex items-center gap-3 p-3 rounded bg-gray-800/30 hover:bg-gray-800/50">
+                      <span className="text-gray-500 w-6 text-sm">{idx + 1}</span>
+                      <span className="text-white flex-1 truncate">{commercial.commercial_name}</span>
+                      <div className="flex gap-4 text-sm">
+                        <span className="text-green-400">{commercial.plays} plays</span>
+                        <span className="text-blue-400">{commercial.completes} complete</span>
+                        <span className="text-yellow-400">{commercial.completion_rate}% rate</span>
+                      </div>
+                    </div>
+                  ))}
+                  {(!commercialStats.commercial_stats || commercialStats.commercial_stats.length === 0) && (
+                    <p className="text-gray-500 text-center py-4">No commercial data yet</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Commercial Demographics */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <PieChartSimple 
+                  data={commercialStats.demographics?.age_groups} 
+                  label="Commercial Viewers by Age"
+                />
+                <PieChartSimple 
+                  data={commercialStats.demographics?.genders} 
+                  label="Commercial Viewers by Gender"
+                />
+              </div>
+            </>
+          ) : (
+            <div className="text-center py-12">
+              <Play size={48} className="mx-auto mb-4 text-gray-600" />
+              <p className="text-gray-400">No commercial analytics data available yet</p>
+              <p className="text-gray-500 text-sm mt-2">Commercial analytics will appear once commercials start playing</p>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };
