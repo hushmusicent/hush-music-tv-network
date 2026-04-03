@@ -399,8 +399,8 @@ const Analytics = () => {
           {/* Note about demographics */}
           <div className="bg-blue-900/20 border border-blue-800/50 rounded-xl p-4">
             <p className="text-blue-300 text-sm">
-              <strong>Note:</strong> Demographic data (age, gender, location) is collected when viewers provide it. 
-              Enable the viewer survey feature to collect more demographic insights.
+              <strong>Note:</strong> Geographic data (country, region, city) is automatically collected from viewer IP addresses. 
+              Age and gender data requires viewers to optionally provide it via a profile survey.
             </p>
           </div>
         </div>

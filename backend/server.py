@@ -3617,13 +3617,72 @@ async def health():
 
 # ===================== ANALYTICS =====================
 
+import httpx
+
+# Cache for IP geolocation to avoid repeated API calls
+ip_geo_cache = {}
+
+async def get_geo_from_ip(ip_address: str) -> dict:
+    """Get geographic info from IP address using free API"""
+    if not ip_address or ip_address in ('127.0.0.1', 'localhost', '::1'):
+        return {}
+    
+    # Check cache first
+    if ip_address in ip_geo_cache:
+        return ip_geo_cache[ip_address]
+    
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            # Using ip-api.com (free, no key required, 45 req/min limit)
+            response = await client.get(f"http://ip-api.com/json/{ip_address}?fields=status,country,regionName,city")
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("status") == "success":
+                    result = {
+                        "country": data.get("country"),
+                        "region": data.get("regionName"),
+                        "city": data.get("city")
+                    }
+                    # Cache the result
+                    ip_geo_cache[ip_address] = result
+                    # Limit cache size
+                    if len(ip_geo_cache) > 10000:
+                        # Remove oldest entries
+                        keys_to_remove = list(ip_geo_cache.keys())[:5000]
+                        for key in keys_to_remove:
+                            del ip_geo_cache[key]
+                    return result
+    except Exception as e:
+        logger.warning(f"IP geolocation failed for {ip_address}: {e}")
+    
+    return {}
+
+def get_client_ip(request: Request) -> str:
+    """Extract real client IP from request headers"""
+    # Check X-Forwarded-For header (set by reverse proxies/load balancers)
+    forwarded_for = request.headers.get("x-forwarded-for")
+    if forwarded_for:
+        # X-Forwarded-For can contain multiple IPs, first one is the client
+        return forwarded_for.split(",")[0].strip()
+    
+    # Check X-Real-IP header
+    real_ip = request.headers.get("x-real-ip")
+    if real_ip:
+        return real_ip.strip()
+    
+    # Fall back to direct client IP
+    if request.client:
+        return request.client.host
+    
+    return ""
+
 class ViewEvent(BaseModel):
     channel_id: str
     viewer_id: str  # Anonymous viewer ID (from frontend)
     video_id: Optional[str] = None  # Video being watched
     video_title: Optional[str] = None
     event_type: str = "view"  # view, skip, complete
-    # Demographics (optional - collected from user profile or survey)
+    # Demographics (optional - can be provided by frontend or auto-detected)
     age_group: Optional[str] = None  # "18-24", "25-34", "35-44", "45-54", "55-64", "65+"
     gender: Optional[str] = None  # "male", "female", "other", "prefer_not_to_say"
     country: Optional[str] = None
@@ -3643,9 +3702,26 @@ class CommercialEvent(BaseModel):
     city: Optional[str] = None
 
 @api_router.post("/analytics/view")
-async def record_view(event: ViewEvent):
-    """Record a channel view/skip/complete event with demographics"""
+async def record_view(event: ViewEvent, request: Request):
+    """Record a channel view/skip/complete event with auto-detected demographics"""
     now = datetime.now(timezone.utc)
+    
+    # Auto-detect geographic info from IP if not provided
+    country = event.country
+    region = event.region
+    city = event.city
+    
+    if not country or not region or not city:
+        client_ip = get_client_ip(request)
+        if client_ip:
+            geo_info = await get_geo_from_ip(client_ip)
+            if not country:
+                country = geo_info.get("country")
+            if not region:
+                region = geo_info.get("region")
+            if not city:
+                city = geo_info.get("city")
+    
     view_doc = {
         "id": str(uuid.uuid4()),
         "channel_id": event.channel_id,
@@ -3663,17 +3739,34 @@ async def record_view(event: ViewEvent):
         # Demographics
         "age_group": event.age_group,
         "gender": event.gender,
-        "country": event.country,
-        "region": event.region,
-        "city": event.city,
+        "country": country,
+        "region": region,
+        "city": city,
     }
     await db.views.insert_one(view_doc)
     return {"status": "recorded"}
 
 @api_router.post("/analytics/commercial")
-async def record_commercial_event(event: CommercialEvent):
-    """Record a commercial play/complete/skip event"""
+async def record_commercial_event(event: CommercialEvent, request: Request):
+    """Record a commercial play/complete/skip event with auto-detected demographics"""
     now = datetime.now(timezone.utc)
+    
+    # Auto-detect geographic info from IP if not provided
+    country = event.country
+    region = event.region
+    city = event.city
+    
+    if not country or not region or not city:
+        client_ip = get_client_ip(request)
+        if client_ip:
+            geo_info = await get_geo_from_ip(client_ip)
+            if not country:
+                country = geo_info.get("country")
+            if not region:
+                region = geo_info.get("region")
+            if not city:
+                city = geo_info.get("city")
+    
     commercial_doc = {
         "id": str(uuid.uuid4()),
         "commercial_id": event.commercial_id,
@@ -3690,9 +3783,9 @@ async def record_commercial_event(event: CommercialEvent):
         # Demographics
         "age_group": event.age_group,
         "gender": event.gender,
-        "country": event.country,
-        "region": event.region,
-        "city": event.city,
+        "country": country,
+        "region": region,
+        "city": city,
     }
     await db.commercial_analytics.insert_one(commercial_doc)
     return {"status": "recorded"}
