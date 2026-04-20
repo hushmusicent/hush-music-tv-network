@@ -769,6 +769,46 @@ async def init_chunked_upload(
         "total_chunks": total_chunks,
     }
 
+async def background_r2_upload(video_id: str, local_path: str, object_key: str):
+    """Background task to upload large files to R2 without blocking the response"""
+    try:
+        logger.info(f"Background R2 upload started for {video_id}")
+        from r2_service import upload_file_to_r2
+        
+        result = upload_file_to_r2(local_path, object_key, "video/mp4")
+        
+        if result["success"]:
+            # Update database with R2 URL
+            await db.uploaded_videos.update_one(
+                {"id": video_id},
+                {
+                    "$set": {
+                        "url": result["url"],
+                        "storage_type": "r2",
+                        "r2_pending": False
+                    },
+                    "$unset": {"local_path": ""}
+                }
+            )
+            logger.info(f"Background R2 upload completed for {video_id}: {result['url']}")
+            
+            # Clean up local file
+            try:
+                import os
+                if os.path.exists(local_path):
+                    os.remove(local_path)
+            except Exception as e:
+                logger.warning(f"Failed to cleanup local file {local_path}: {e}")
+        else:
+            logger.error(f"Background R2 upload failed for {video_id}: {result.get('error')}")
+            # Keep local file as fallback
+            await db.uploaded_videos.update_one(
+                {"id": video_id},
+                {"$set": {"storage_type": "local", "r2_error": result.get('error')}}
+            )
+    except Exception as e:
+        logger.error(f"Background R2 upload exception for {video_id}: {e}")
+
 @api_router.post("/upload/video/chunk")
 async def upload_chunk(
     upload_id: str = Form(...),
@@ -842,22 +882,69 @@ async def complete_chunked_upload(
         out_filename = f"{video_id}.mp4"
         final_size = os.path.getsize(final_path)
         
-        # Upload to R2 using streaming (more efficient for large files)
+        # For large files (>50MB), save locally first and upload to R2 in background
+        # This prevents Cloudflare timeout (error 550/524)
+        now = datetime.now(timezone.utc).isoformat()
+        
         if is_r2_configured():
             from r2_service import upload_file_to_r2
             object_key = f"videos/{out_filename}"
-            result = upload_file_to_r2(str(final_path), object_key, "video/mp4")
-            if not result["success"]:
-                raise HTTPException(status_code=500, detail=f"Cloud upload failed: {result.get('error')}")
-            video_url = result["url"]
+            
+            # For files over 50MB, use background upload approach
+            if final_size > 50 * 1024 * 1024:  # 50MB
+                logger.info(f"Large file ({final_size} bytes) - using background upload")
+                
+                # Save to a persistent location for background upload
+                persistent_path = UPLOADS_DIR / out_filename
+                import shutil
+                shutil.copy(str(final_path), str(persistent_path))
+                
+                # Create pending record with local URL first
+                video_doc = {
+                    "id": video_id,
+                    "filename": out_filename,
+                    "original_name": filename,
+                    "url": f"/api/videos/{out_filename}",  # Temporary local URL
+                    "r2_pending": True,  # Flag for background upload
+                    "r2_object_key": object_key,
+                    "local_path": str(persistent_path),
+                    "size": final_size,
+                    "duration": video_duration,
+                    "thumbnail": None,
+                    "owner_id": user["id"],
+                    "storage_type": "pending_r2",
+                    "created_at": now
+                }
+                await db.uploaded_videos.insert_one(video_doc)
+                
+                # Start background upload task
+                asyncio.create_task(background_r2_upload(video_id, str(persistent_path), object_key))
+                
+                return {
+                    "id": video_id,
+                    "filename": out_filename,
+                    "original_name": filename,
+                    "url": f"/api/videos/{out_filename}",
+                    "size": final_size,
+                    "duration": video_duration,
+                    "thumbnail": None,
+                    "created_at": now,
+                    "storage_type": "pending_r2",
+                    "message": "Upload successful! Video is being processed to cloud storage."
+                }
+            else:
+                # Small files - upload directly
+                result = upload_file_to_r2(str(final_path), object_key, "video/mp4")
+                if not result["success"]:
+                    raise HTTPException(status_code=500, detail=f"Cloud upload failed: {result.get('error')}")
+                video_url = result["url"]
         else:
             file_path = UPLOADS_DIR / out_filename
             import shutil
             shutil.move(str(final_path), str(file_path))
             video_url = f"/api/videos/{out_filename}"
         
-        # Store in database
-        now = datetime.now(timezone.utc).isoformat()
+        # Store in database (for small files or no R2)
         video_doc = {
             "id": video_id,
             "filename": out_filename,
