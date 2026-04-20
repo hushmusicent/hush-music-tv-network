@@ -5,6 +5,7 @@ from fastapi.responses import StreamingResponse, RedirectResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
+import asyncio
 # ffmpeg/ffprobe: use system binary if available, otherwise Python fallback
 def ensure_ffmpeg():
     pass  # No-op, rely on system ffmpeg or Python fallback
