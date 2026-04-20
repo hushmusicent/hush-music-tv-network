@@ -98,7 +98,7 @@ export const seedAPI = {
 // Video Upload API
 export const uploadAPI = {
   uploadVideo: async (file, onProgress) => {
-    const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB chunks
+    const CHUNK_SIZE = 3 * 1024 * 1024; // 3MB chunks (smaller for better reliability)
     const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
     
     // Try chunked upload for files > 8MB, single upload for smaller files
@@ -106,7 +106,8 @@ export const uploadAPI = {
       try {
         // Step 1: Initialize chunked upload
         const initResp = await api.post('/upload/video/init-chunked', null, {
-          params: { filename: file.name, total_size: file.size, total_chunks: totalChunks }
+          params: { filename: file.name, total_size: file.size, total_chunks: totalChunks },
+          timeout: 30000, // 30 second timeout for init
         });
         const { upload_id } = initResp.data;
         
@@ -121,23 +122,29 @@ export const uploadAPI = {
           formData.append('chunk_index', i.toString());
           formData.append('file', chunk, `chunk_${i}`);
           
-          // Retry up to 3 times per chunk
+          // Retry up to 5 times per chunk with exponential backoff
           let retries = 0;
-          const maxRetries = 3;
+          const maxRetries = 5;
+          let lastError = null;
+          
           while (retries < maxRetries) {
             try {
               await api.post('/upload/video/chunk', formData, {
                 headers: { 'Content-Type': 'multipart/form-data' },
-                timeout: 120000, // 2 minutes per chunk
+                timeout: 180000, // 3 minutes per chunk
               });
               break; // Success, exit retry loop
             } catch (chunkErr) {
+              lastError = chunkErr;
               retries++;
+              console.log(`Chunk ${i + 1}/${totalChunks} failed (attempt ${retries}/${maxRetries}):`, chunkErr.message);
+              
               if (retries >= maxRetries) {
-                throw new Error(`Failed to upload chunk ${i + 1}/${totalChunks} after ${maxRetries} attempts`);
+                const errorMsg = lastError?.response?.data?.detail || lastError?.message || 'Unknown error';
+                throw new Error(`Failed to upload chunk ${i + 1}/${totalChunks} after ${maxRetries} attempts: ${errorMsg}`);
               }
-              // Wait before retry
-              await new Promise(resolve => setTimeout(resolve, 1000 * retries));
+              // Exponential backoff: 2s, 4s, 8s, 16s
+              await new Promise(resolve => setTimeout(resolve, 2000 * Math.pow(2, retries - 1)));
             }
           }
           
