@@ -92,3 +92,13 @@ frontend/node_modules/.cache/default-development/11.pack
 frontend/node_modules/.cache/default-development/13.pack
 frontend/node_modules/.cache/default-development/5.pack
 backend/uploads/videos/d6f8570e-6a34-4b98-bcf0-7d5896a7239b.mp4
+-e 
+# Environment and credential files
+.env
+.env.*
+*.env
+credentials.json
+*.pem
+*.key
+.credentials
+frontend/node_modules/.cache/default-development/12.pack
