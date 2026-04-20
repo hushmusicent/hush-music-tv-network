@@ -740,7 +740,7 @@ async def get_storage_status(user: dict = Depends(require_user)):
 CHUNK_UPLOADS_DIR = Path("/tmp/video_chunks")
 CHUNK_UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
-CHUNK_SIZE = 3 * 1024 * 1024  # 3MB chunks (smaller for better reliability through proxies)
+CHUNK_SIZE = 10 * 1024 * 1024  # 10MB chunks (max reliable size for Cloudflare)
 
 @api_router.post("/upload/video/init-chunked")
 async def init_chunked_upload(

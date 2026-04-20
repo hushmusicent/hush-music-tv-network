@@ -98,7 +98,7 @@ export const seedAPI = {
 // Video Upload API
 export const uploadAPI = {
   uploadVideo: async (file, onProgress) => {
-    const CHUNK_SIZE = 3 * 1024 * 1024; // 3MB chunks (smaller for better reliability)
+    const CHUNK_SIZE = 10 * 1024 * 1024; // 10MB chunks (max reliable for Cloudflare)
     const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
     
     // Try chunked upload for files > 8MB, single upload for smaller files
