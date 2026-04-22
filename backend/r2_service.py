@@ -268,3 +268,46 @@ def test_r2_connection() -> dict:
             "error_code": error_code,
             "configured": True
         }
+
+def generate_presigned_upload_url(object_key: str, content_type: str = "video/mp4", expires_in: int = 3600) -> dict:
+    """
+    Generate a presigned URL for direct browser upload to R2.
+    This bypasses Cloudflare proxy limits - browser uploads directly to R2.
+    
+    Args:
+        object_key: The key (path) where the file will be stored in R2
+        content_type: MIME type of the file
+        expires_in: URL expiration time in seconds (default 1 hour)
+    
+    Returns:
+        dict with upload_url and public_url on success
+    """
+    client = get_r2_client()
+    if not client:
+        return {"success": False, "error": "R2 not configured"}
+    
+    try:
+        # Generate presigned URL for PUT operation
+        upload_url = client.generate_presigned_url(
+            'put_object',
+            Params={
+                'Bucket': R2_BUCKET_NAME,
+                'Key': object_key,
+                'ContentType': content_type,
+            },
+            ExpiresIn=expires_in
+        )
+        
+        # Public URL where file will be accessible after upload
+        public_url = f"{R2_PUBLIC_URL}/{object_key}"
+        
+        return {
+            "success": True,
+            "upload_url": upload_url,
+            "public_url": public_url,
+            "object_key": object_key,
+            "expires_in": expires_in
+        }
+    except ClientError as e:
+        logger.error(f"Failed to generate presigned URL: {e}")
+        return {"success": False, "error": str(e)}

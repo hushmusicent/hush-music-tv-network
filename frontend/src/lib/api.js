@@ -97,11 +97,64 @@ export const seedAPI = {
 
 // Video Upload API
 export const uploadAPI = {
+  // Direct R2 upload for large files (500MB+) - bypasses Cloudflare proxy
+  uploadVideoDirect: async (file, onProgress) => {
+    try {
+      // Step 1: Get presigned URL
+      if (onProgress) onProgress(5);
+      const urlResp = await api.post('/upload/video/get-presigned-url', null, {
+        params: { filename: file.name, file_size: file.size },
+        timeout: 30000,
+      });
+      
+      const { video_id, upload_url, public_url } = urlResp.data;
+      console.log('Got presigned URL for direct upload:', video_id);
+      
+      // Step 2: Upload directly to R2 (bypasses Cloudflare proxy)
+      if (onProgress) onProgress(10);
+      
+      await fetch(upload_url, {
+        method: 'PUT',
+        body: file,
+        headers: {
+          'Content-Type': 'video/mp4',
+        },
+      }).then(response => {
+        if (!response.ok) {
+          throw new Error(`Direct upload failed: ${response.status} ${response.statusText}`);
+        }
+      });
+      
+      if (onProgress) onProgress(90);
+      
+      // Step 3: Register the video in database
+      const registerResp = await api.post('/upload/video/register-direct', {
+        video_id,
+        filename: file.name,
+        public_url,
+        file_size: file.size,
+        duration: 0, // Duration will be extracted later or manually set
+      });
+      
+      if (onProgress) onProgress(100);
+      return registerResp;
+    } catch (err) {
+      console.error('Direct upload failed:', err);
+      throw err;
+    }
+  },
+
   uploadVideo: async (file, onProgress) => {
-    const CHUNK_SIZE = 10 * 1024 * 1024; // 10MB chunks (max reliable for Cloudflare)
+    const CHUNK_SIZE = 10 * 1024 * 1024; // 10MB chunks
     const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
     
-    // Try chunked upload for files > 8MB, single upload for smaller files
+    // For very large files (500MB+), use direct R2 upload
+    if (file.size > 500 * 1024 * 1024) {
+      console.log('Large file detected, using direct R2 upload...');
+      return uploadAPI.uploadVideoDirect(file, onProgress);
+    }
+    
+    // Regular chunked upload for files 8MB - 500MB
     if (file.size > 8 * 1024 * 1024) {
       try {
         // Step 1: Initialize chunked upload

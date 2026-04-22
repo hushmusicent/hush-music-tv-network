@@ -742,6 +742,98 @@ CHUNK_UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
 CHUNK_SIZE = 10 * 1024 * 1024  # 10MB chunks (max reliable size for Cloudflare)
 
+# ===================== DIRECT R2 UPLOAD (For Large Files) =====================
+
+@api_router.post("/upload/video/get-presigned-url")
+async def get_presigned_upload_url(
+    filename: str = Query(...),
+    file_size: int = Query(...),
+    user: dict = Depends(require_user)
+):
+    """
+    Get a presigned URL for direct upload to R2 storage.
+    Use this for large files (500MB+) to bypass Cloudflare proxy limits.
+    Browser uploads directly to R2, then registers the video.
+    """
+    if not user.get("is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    if file_size > 5 * 1024 * 1024 * 1024:  # 5GB limit for direct upload
+        raise HTTPException(status_code=413, detail="File too large. Maximum 5GB for direct upload")
+    
+    file_ext = Path(filename).suffix.lower()
+    if file_ext not in ALLOWED_VIDEO_EXTENSIONS:
+        raise HTTPException(status_code=400, detail=f"Unsupported format. Allowed: {', '.join(sorted(ALLOWED_VIDEO_EXTENSIONS))}")
+    
+    if not is_r2_configured():
+        raise HTTPException(status_code=500, detail="Cloud storage not configured")
+    
+    from r2_service import generate_presigned_upload_url
+    
+    # Generate unique video ID and object key
+    video_id = str(uuid.uuid4())
+    object_key = f"videos/{video_id}.mp4"
+    
+    result = generate_presigned_upload_url(object_key, "video/mp4", expires_in=7200)  # 2 hour expiry
+    
+    if not result["success"]:
+        raise HTTPException(status_code=500, detail=f"Failed to generate upload URL: {result.get('error')}")
+    
+    return {
+        "video_id": video_id,
+        "upload_url": result["upload_url"],
+        "public_url": result["public_url"],
+        "object_key": object_key,
+        "expires_in": result["expires_in"],
+        "original_filename": filename
+    }
+
+@api_router.post("/upload/video/register-direct")
+async def register_direct_upload(
+    video_id: str = Body(...),
+    filename: str = Body(...),
+    public_url: str = Body(...),
+    file_size: int = Body(...),
+    duration: int = Body(default=0),
+    user: dict = Depends(require_user)
+):
+    """
+    Register a video after direct R2 upload.
+    Call this after the browser successfully uploads to the presigned URL.
+    """
+    if not user.get("is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    now = datetime.now(timezone.utc).isoformat()
+    
+    video_doc = {
+        "id": video_id,
+        "filename": f"{video_id}.mp4",
+        "original_name": filename,
+        "url": public_url,
+        "size": file_size,
+        "duration": duration,
+        "thumbnail": None,
+        "owner_id": user["id"],
+        "storage_type": "r2_direct",
+        "created_at": now
+    }
+    
+    await db.uploaded_videos.insert_one(video_doc)
+    
+    return {
+        "id": video_id,
+        "filename": f"{video_id}.mp4",
+        "original_name": filename,
+        "url": public_url,
+        "size": file_size,
+        "duration": duration,
+        "created_at": now,
+        "message": "Video registered successfully"
+    }
+
+# ===================== CHUNKED UPLOAD =====================
+
 @api_router.post("/upload/video/init-chunked")
 async def init_chunked_upload(
     filename: str = Query(...),
