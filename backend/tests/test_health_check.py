@@ -11,7 +11,7 @@ import requests
 import os
 import time
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://hush-music-tv-2.preview.emergentagent.com')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://hush-music-tv-3.preview.emergentagent.com')
 
 # Test credentials
 TEST_EMAIL = "hushmusicent419@gmail.com"

@@ -1,81 +1,67 @@
 <analysis>**original_problem_statement:**
-The user wants to create a TV network application named Hush Music TV Network.
-
+The user wants to create a TV network application named Hush Music TV Network. 
 **PRODUCT REQUIREMENTS:**
-*   Build a TV network app named Hush Music TV Network.
-*   Implement an admin-only system to manage all channels and videos, including channel reordering and video reordering within channels.
-*   Migrate channels, videos, and channel order from an existing application.
-*   Implement an analytics page for viewer statistics.
-*   Create a dynamic Go Live feature where any channel can be switched to a persistent, synchronized 24-hour schedule.
-*   The Live TV experience should include a channel changer, OSD, play/pause, and auto-hiding controls.
-*   The system must handle age-restricted or unavailable YouTube videos using a backend proxy with .
-*   An administrative dashboard should allow for editing, including tools to fix video metadata (titles, durations).
-*   The application should be an installable Progressive Web App (PWA).
-*   Handle large video uploads (>100MB) by implementing chunked uploads.
-*   Support uploading and playing various video formats (e.g., MKV, AVI) by auto-converting them to web-compatible MP4.
-*   Make the application responsive and viewable on mobile devices (cellphone mode).
-*   Fix various bugs related to playback, data integrity, and feature functionality.
+* Build a TV network app named Hush Music TV Network with 24-hour synchronized scheduling.
+* Admin-only system to manage channels, videos, and commercial assignments.
+* Analytics page for viewer statistics (Geographic, Time-based tracking, Commercial tracking).
+* Commercials System: Commercials play *between* videos (no longer interrupting mid-video).
+* Handle large video uploads (>500MB) bypassing proxy timeouts (using chunked uploads, background R2 syncing, and direct R2 presigned URLs).
+* Amazon Fire TV and Appstore wrapper for the web application.
 
-**User's preferred language**: English
+**User's preferred language**: English (INSTRUCT next agent to respond in English only)
 
-**what currently exists?**
-A full-stack React/FastAPI/MongoDB application for Hush Music TV Network. It includes a Live TV page, an admin dashboard, Cloudflare R2 storage, a  proxy, YouTube API integration, and embedding. The application supports large file uploads via chunking. However, a recent attempt to add multi-format video conversion using  has caused critical deployment failures on the user's production environment. The feature was removed to stabilize the build, meaning the app currently only reliably supports MP4 uploads.
+**what currently exists?** 
+A React/FastAPI/MongoDB application with 45 migrated channels and 3,800+ videos. It features a Live TV player that seamlessly transitions between YouTube content, uploaded videos, and assigned commercials. It includes a robust upload ecosystem handling Cloudflare proxy limits (via background tasks and presigned R2 URLs), an IP-based geolocation Analytics dashboard, and an Amazon Fire TV wrapper ready for export.
 
 **Last working item**:
-*   **Last item agent was working**: The user reported Build wont load after a new deployment. The agent determined that the  package, added to handle video conversions, was too large (~100MB) and caused the server to time out during startup in the production environment. The agent's last action was to remove  and all related video conversion code to resolve the deployment failure.
-*   **Status**: IN PROGRESS
-*   **Agent Testing Done**: N (The removal of the dependency was just completed).
-*   **Which testing method agent to use?**: manual testing by curl. The agent needs to first confirm the backend starts without timing out.  should return a channel list.
-*   **User Testing Done**: N
+    - Last item agent was working: Debugging why uploaded videos (specifically The Parkers) show as a black screen on the Gen Z Channel. The agent realized the  field was missing in the database for these videos, ran a script to set  on 1,483 videos, but the LiveTV player still showed a black screen.
+    - Status: IN PROGRESS
+    - Agent Testing Done: Y (Screenshot tool only)
+    - Which testing method agent to use? Frontend testing agent / screenshot tool.
+    - User Testing Done: N
 
-**All Pending/In progress Issue list**:
-*   **Issue 1**: Production Deployment Fails / Build wont load. (Priority: P0)
-
-**Issues Detail**:
-*   **Issue 1: Production Deployment Fails / Build wont load**
-    *   **Attempted fixes**:
-        1.  Initial attempt using  on server startup caused a timeout because it downloads ~100MB of binaries synchronously.
-        2.  A second attempt to lazy-load  also resulted in a timeout on production.
-        3.  The latest fix was to completely remove the  dependency and the associated video conversion logic from .
-    *   **Next debug checklist**:
-        1.  Verify with the user that the latest deployment (without ) loads successfully.
-        2.  Acknowledge to the user that removing the dependency has disabled the upload and play all video formats feature as a necessary trade-off to get the application working again.
-        3.  Discuss alternative strategies for video conversion with the user (e.g., a separate offline processing worker, checking if  can be pre-installed in the production environment's base image).
-    *   **Why fix this issue and what will be achieved with the fix?**: This is a showstopper issue preventing the user from deploying any new changes. Fixing it makes the application deployable and operational again, at the cost of a recently added feature.
-    *   **Status**: IN PROGRESS
-    *   **Is recurring issue?**: Y (This is the second time a deployment has failed due to this issue).
-    *   **Should Test frontend/backend/both after fix?**: backend (verifying server startup).
-    *   **Blocked on other issue**: None.
+**All Pending/In progress Issue list**: 
+  Issue 1: Uploaded videos displaying a black screen in Live TV (P0)
+  
+  Issues Detail:
+  - Issue 1: 
+     - Attempted fixes: The agent found that uploaded videos were missing  in the database. They updated  to save the  field going forward, and ran a script to backfill  on 1,483 existing channel videos. However, playback still resulted in a black screen.
+     - Next debug checklist: Check . Review the  evaluation logic (). Check how  is being set for  URLs. Ensure the R2 URL () is properly accessible without CORS issues, or if the local fallback  is failing to serve the file.
+     - Why fix this issue and what will be achieved with the fix? Uploaded content is a core requirement; if it stays black, the Gen Z channel (and others relying on uploaded MP4s) is broken.
+     - Status: IN PROGRESS
+     - Is recurring issue? N
+     - Should Test frontend/backend/both after fix? frontend
+     - Blocked on other issue: None
 
 **In progress Task List**:
-*   None.
+  *None*
 
 **Upcoming and Future Tasks**
-*   **Upcoming Tasks**:
-    *   **Re-implement Multi-Format Video Uploads (P1)**: The feature to convert non-MP4 videos on upload was removed to fix the deployment. A new, production-safe solution needs to be designed and implemented.
-*   **Future Tasks**:
-    *   **Implement Cellphone Mode / Responsive Design (P1)**: The user requested that the application layout adapt to mobile screen sizes for better viewing. This requires a review and update of the frontend components, particularly , to ensure they are responsive.
-    *   **Refactor  (P2)**: The main backend file is extremely large and complex. It should be broken down into smaller, more manageable FastAPI routers (e.g., , , ).
+    Upcoming Tasks:
+    - Refactor  (P0) - This file is now over 4,800 lines long and handles Auth, Channels, Videos, Analytics, Uploads, and R2 services. It must be broken down into smaller routers.
+    - Refactor  (P1) - The component is over 1,800 lines and mixes UI, schedule calculation, proxy handling, and commercial insertion logic.
+    
+    Future Tasks:
+    - Multi-format video uploads (P2) - Currently restricted to MP4. MKV/AVI support requires backend conversion (ffmpeg).
+    - Live broadcasting feature (P2) - Allowing direct mobile-to-channel live streaming.
 
 **Completed work in this session**
-- **Critical Bug Fixes**:
-  - Resolved a major playback bug in  that caused videos to restart every 5 seconds.
-  - Fixed failed proxy error messages by replacing them with silent, automatic skipping of unplayable videos.
-  - Resolved an issue where Find duration buttons on the admin dashboard were timing out or failing.
-  - Fixed slow startup for uploaded videos by batch-processing and de-fragmenting all fragmented MP4 files in R2 storage.
-- **Feature Implementations & Enhancements**:
-  - **Chunked Uploads**: Implemented a chunked file upload system to allow users to upload large files (>100MB) without hitting proxy limits.
-  - **Metadata Correction**: Created a robust backend endpoint to fetch and update correct titles and durations for all YouTube and uploaded videos across the entire library.
-- **Data Management**:
-  - Performed multiple full data migrations from the user's production environment to the preview environment, syncing channels, videos, and metadata.
+- Commercials refactored to play *between* videos instead of interrupting them (DONE)
+- Fixed commercial loop bug where failing YouTube videos repeatedly triggered commercials (DONE)
+- Analytics Dashboard built with automatic IP-based Geolocation using  (DONE)
+- Large file upload timeout fixes (524/550/520) via background  R2 uploads (DONE)
+- Direct R2 Presigned URL uploads added for files >500MB/2hrs (DONE)
+- Chunked uploads optimized (10MB chunks, 5 retries with exponential backoff) (DONE)
+- Amazon Fire TV App wrapper created in  (DONE)
+- Repeated full data migrations from production (syncing 45 channels, 3800+ videos) (DONE)
 
 **Earlier issues found/mentioned but not fixed**
-*   None.
+  *None. All explicit issues raised by the user were addressed.*
 
 **Known issue recurrence from previous fork**
-*   **Issue recurrence in previous fork**: Production deployment failures due to server startup timeouts.
-*   **Recurrence count**: 2
-*   **Status**: IN PROGRESS (This is the current P0 issue).
+  - Issue recurrence in previous fork: Large file upload failures / Cloudflare timeouts.
+  - Recurrence count: 5 (Errors 524, 550, 520, 500, chunks failed).
+  - Status: RESOLVED (Mitigated by introducing background background tasks, increasing retries, and adding Presigned R2 URLs). Next agent must be careful not to regress upload logic.
 
 **Code Architecture**
 
@@ -83,77 +69,75 @@ A full-stack React/FastAPI/MongoDB application for Hush Music TV Network. It inc
 **Key Technical Concepts**
 *   **Frontend**: React, Tailwind CSS, Shadcn UI
 *   **Backend**: FastAPI, MongoDB ()
-*   **Cloud Storage**: Cloudflare R2 ()
-*   **Video Processing**:  (proxy),  (used for one-off de-fragmenting task, removed as a live dependency).
-*   **File Uploads**: Chunked file uploading to bypass ingress size limits.
+*   **Cloud Storage**: Cloudflare R2 () with presigned URLs
+*   **Analytics**: IP-based Geolocation ()
+*   **Video Playback**: Custom schedule-sync algorithm ensuring 24/7 continuous timeline.
+*   **Amazon Integration**: Web App Wrapper configuration for Fire TV / Amazon Appstore.
 
 **key DB schema**
-*   **channels**: 
-*   **schedules**: 
-*   **video_object**: 
+  - : 
+  - : 
+  - : 
+  - :  (Analytics tracking)
 
 **changes in tech stack**
-*   ****: Added to provide  binaries for video conversion, but subsequently **removed** as it was causing production deployment failures.
+  - Added  for calling external geolocation API ().
+  - Added Amazon Fire TV wrapper ecosystem.
 
 **All files of reference**
-*   : **(CRITICAL)** Heavily modified to add chunked uploads, metadata correction, and the now-removed video conversion logic. The removal of  and its associated code was the last change.
-*   : Modified to include the new chunked upload functions (, , ).
-*   : Modified to use the new chunked upload flow and accept all video file types in the file picker.
-*   : Core playback logic was successfully fixed. Awaiting responsiveness improvements.
+  - : Heavily updated with analytics, background tasks for uploads, and presigned URLs.
+  - : Commercial logic refactored entirely. Video error handling changed from  to  to fix commercial loops.
+  - : Completely overhauled to remove surveys and rely on IP Geolocation.
+  - : Upload logic expanded to handle presigned URLs and 10MB chunking.
+  - : Added .
 
-**Areas that need refactoring**:
-*   ****: **(URGENT)** This file has become critically oversized and complex. The upload logic (both single and chunked), metadata fixing, admin tasks, and core API routes are all intertwined. It must be broken into separate routers and utility files.
-*   **Video Upload Logic**: The frontend and backend now have parallel logic for single-file and chunked uploads. This could be simplified and made more robust.
+**Areas that need refactoring**: 
+  -  is critically bloated (4800+ lines).
+  -  is extremely complex.
 
 **key api endpoints**
-*   : Initializes a chunked upload session.
-*   : Uploads a single file chunk.
-*   : Assembles chunks into a final file.
-*   : Fetches correct titles/durations for all videos.
-*   : Fixes metadata for YouTube videos.
-*   : Fixes metadata for uploaded videos.
+  -  (New: Presigned URL generator)
+  -  &  (New: IP geolocation analytics)
+  -  (Updated with background tasks)
 
 **Critical Info for New Agent**
-*   Your immediate priority is to confirm with the user that the Build wont load issue is resolved after you removed the  package.
-*   You must clearly communicate the trade-off: the build is now stable, but the feature for uploading non-MP4 videos has been disabled.
-*   The next steps are to work with the user on a new plan for multi-format video support and then address their request for mobile responsiveness (cellphone mode). Do not attempt to re-add  without a clear, production-safe strategy.
+  - **Upload Logic Overhaul**: Uploads now utilize a hybrid approach to bypass Cloudflare timeouts. Large files use background tasks or presigned URLs. Do not revert  or  logic.
+  - **Commercial System Change**: Commercials no longer interrupt videos mid-play. They strictly play *between* videos.
+  - ** Field Requirement**: LiveTV now strictly requires  on channel videos to distinguish them from YouTube videos.
+  - **Production Discrepancy**: The user frequently tests on their production deployment which lacks the preview's latest code. If the user complains about an issue that works in preview, remind them to deploy.
 
 **documents and test reports created in this job**
-*    (updated)
-*   
+  -  (Created)
+  -  (Created)
+  -  (Updated)
 
-**Last 10 User Messages and any pending HUMAN messages**
-1.  ****: IN PROGRESS - User reported the app is failing to deploy. The agent identified  as the cause and removed it.
-2.  ****: NOT STARTED - User requested responsive design for mobile devices.
-3.  ****: RESOLVED (by removing the feature) - User reported that video conversion was failing. This led to the discovery that  was not available in production, and the attempt to fix it caused the deployment to fail.
-4.  ****: RESOLVED - Agent fixed a bug in the chunked upload logic related to temporary directory paths.
-5.  ****: RESOLVED - User reported large file uploads were failing. The agent identified an ingress proxy limit and implemented chunked uploads to fix it.
-6.  ****: RESOLVED - Agent identified and de-fragmented 25 fragmented videos on that channel.
-7.  ****: RESOLVED - Agent fixed the backend endpoints, installed , and added a Python fallback for duration detection.
-8.  ****: RESOLVED - Agent found that production schedules had old data and regenerated them after pushing corrected metadata.
-9.  ****: RESOLVED - Agent identified that fragmented MP4s from  were the cause and implemented a batch process to de-fragment all uploaded videos in R2.
-10. ****: RESOLVED - This was the initial report that led to the investigation and fixing of fragmented MP4s.
+**Last 10 User Messages and any pending HUMAN messages** 
+ 1. Migrate all the videos, all uploaded videos, all channels and the channel orders (DONE)
+ 2. Now check the Gen Z Channel (DONE - Agent checked, video player was black)
+ 3. https://... migrate all the uploaded videos (DONE - Already in DB)
+ 4. Its not playing the new uploaded videos (DONE - Agent explained they weren't assigned to channels)
+ 5. None (DONE - in response to creating a new channel)
+ 6. The new videos I added to the Gen Z channel and YouTV channels dont play (DONE - fixed missing  field bug when saving channel videos)
+ 7. Gen z channel not playing The Parkers Video (IN PROGRESS)
+ *Pending Action*: Fix the black screen issue when LiveTV attempts to play uploaded videos with .
 
 **Project Health Check:**
-*   **Broken**: The core feature of auto-converting non-MP4 video formats is disabled. The application's production deployment was unstable and may still be depending on user verification.
+  - Broken: Uploaded videos playing as a black screen in .
 
 **3rd Party Integrations**
-*   **Cloudflare R2**: via .
-*   **YouTube iFrame API**: via .
-*   **yt-dlp**: Used on the backend for the video proxy.
-*   **YouTube Data API v3**: via .
-*   ****: Not currently integrated as a live dependency, but required for any future video conversion feature.
+  - Cloudflare R2 (Storage) — requires User credentials (already in )
+  - YouTube Data API — requires User credentials (already in )
+  - IP-API (ip-api.com) — Free tier, no key required (used for Geolocation analytics).
 
 **Testing status**
-*   **Testing agent used after significant changes**: YES, to verify the initial playback fix.
-*   **Troubleshoot agent used after agent stuck in loop**: NO
-*   **Test files created**: None.
-*   **Known regressions**: The feature to upload and auto-convert non-MP4 videos was intentionally removed to fix a P0 deployment bug.
+  - Testing agent used after significant changes: NO (Agent relied entirely on the screenshot tool for massive refactors to Analytics, Uploads, and LiveTV).
+  - Troubleshoot agent used after agent stuck in loop: NO
+  - Test files created: None
+  - Known regressions: Uploaded  video playback in  is currently rendering a black screen.
 
 **Credentials to test flow:**
-*   **Admin Email**: 
-*   **Admin Password**: 
+  - Read  for admin login to test Analytics and Dashboard features.
 
 **What agent forgot to execute**
-*   The agent has not yet started work on the user's request to make the application responsive for mobile devices (cellphone mode).
-*   The agent had to roll back the all video formats feature, so that task remains functionally incomplete.</analysis>
+  - The agent entirely bypassed using  despite making massive core logic changes to the upload system, analytics tracking, and commercial loops. 
+  - The agent missed checking the network requests or console logs during the final black screen issue on the Gen Z channel to see *why* the video wasn't playing (e.g., a 404 on the video URL, or an unhandled React error).</analysis>
