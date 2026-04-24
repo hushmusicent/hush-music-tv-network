@@ -1518,8 +1518,8 @@ const LiveTV = () => {
                 onEnded={playNextVideo}
                 onError={(e) => {
                   console.error('Video error:', e.target.error, 'src:', e.target.src);
-                  // Skip to next video on error
-                  playNextVideo();
+                  // Skip to next video on error (without commercials)
+                  skipToNextVideo();
                 }}
                 onLoadedData={() => {
                   console.log('Video loaded, attempting play');
