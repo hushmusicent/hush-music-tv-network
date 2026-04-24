@@ -434,6 +434,7 @@ const ChannelCreator = () => {
             thumbnail: video.thumbnail,
             duration: video.duration,
             video_url: video.video_url || null,
+            type: video.type || (video.video_url ? 'uploaded' : 'youtube'),
           });
         }
         
@@ -450,6 +451,7 @@ const ChannelCreator = () => {
             thumbnail: video.thumbnail,
             duration: video.duration,
             video_url: video.video_url || null,
+            type: video.type || (video.video_url ? 'uploaded' : 'youtube'),
           });
         }
         

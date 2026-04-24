@@ -159,6 +159,7 @@ class VideoItem(BaseModel):
     thumbnail: Optional[str] = None
     duration: int = 0  # in seconds
     order: int = 0
+    type: str = "youtube"  # "youtube" or "uploaded"
 
 class VideoCreate(BaseModel):
     youtube_id: Optional[str] = None
@@ -166,6 +167,7 @@ class VideoCreate(BaseModel):
     thumbnail: Optional[str] = None
     duration: int = 0
     video_url: Optional[str] = None  # For uploaded videos
+    type: str = "youtube"  # "youtube" or "uploaded"
 
 class ScheduleSlot(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -436,6 +438,11 @@ async def add_video_to_channel(channel_id: str, data: VideoCreate, user: dict = 
     if channel["owner_id"] != user["id"] and not user.get("is_admin", False):
         raise HTTPException(status_code=403, detail="Not authorized")
     
+    # Determine video type
+    video_type = data.type
+    if not video_type:
+        video_type = "uploaded" if data.video_url else "youtube"
+    
     # Determine thumbnail based on video type
     thumbnail = data.thumbnail
     if not thumbnail:
@@ -450,7 +457,8 @@ async def add_video_to_channel(channel_id: str, data: VideoCreate, user: dict = 
         title=data.title,
         thumbnail=thumbnail,
         duration=data.duration,
-        order=len(channel.get("videos", []))
+        order=len(channel.get("videos", [])),
+        type=video_type
     )
     
     await db.channels.update_one(
