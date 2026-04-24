@@ -892,7 +892,29 @@ async def background_r2_upload(video_id: str, local_path: str, object_key: str):
                 }
             )
             logger.info(f"Background R2 upload completed for {video_id}: {result['url']}")
-            
+
+            # Also rewrite any channel videos that reference the old /api/videos/ URL
+            try:
+                uploaded = await db.uploaded_videos.find_one({"id": video_id}, {"_id": 0, "filename": 1})
+                if uploaded and uploaded.get("filename"):
+                    local_url = f"/api/videos/{uploaded['filename']}"
+                    channels_updated = 0
+                    async for ch in db.channels.find({"videos.video_url": local_url}, {"_id": 0}):
+                        changed = False
+                        for v in ch.get("videos", []):
+                            if v.get("video_url") == local_url:
+                                v["video_url"] = result["url"]
+                                if not v.get("type"):
+                                    v["type"] = "uploaded"
+                                changed = True
+                        if changed:
+                            await db.channels.update_one({"id": ch["id"]}, {"$set": {"videos": ch["videos"]}})
+                            channels_updated += 1
+                    if channels_updated:
+                        logger.info(f"Rewrote {local_url} -> R2 in {channels_updated} channels")
+            except Exception as e:
+                logger.warning(f"Failed to rewrite channel URLs for {video_id}: {e}")
+
             # Clean up local file
             try:
                 import os

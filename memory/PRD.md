@@ -32,6 +32,13 @@ Build a TV network app named "Hush Music TV Network" with admin-only channel/vid
 - `POST /api/schedules/regenerate-all` - Regenerate all 24h schedules
 - Admin credentials: hushmusicent419@gmail.com / $Stisdd419
 
+## Completed (Apr 24, 2026)
+- **Fixed black-screen for uploaded videos on Gen Z / YouTv / Scary TV channels**
+  - Root cause: 183 uploaded videos across 3 channels had stale `/api/videos/{filename}` local paths in `channels.videos[]` and `schedules.videos[]` instead of the Cloudflare R2 public URL. Local files no longer existed (migrated to R2), causing 404 → `MEDIA_ERR_SRC_NOT_SUPPORTED` → infinite skip loop → black screen.
+  - DB migration: rewrote `/api/videos/{fn}` → `https://pub-49c62121e99b4925aa056a6df47d707e.r2.dev/videos/{fn}` in `channels` (3 channels, 183 videos) and `schedules` (7 schedules, 90 slots). All 183 filenames verified present in R2.
+  - Prevention: `background_r2_upload()` in `server.py` now automatically rewrites any channel video entries pointing to the temporary `/api/videos/{filename}` URL to the final R2 URL after the background upload completes.
+  - Verified in real Chrome (headless): Gen Z → Reba_2001_2 plays (1280x720, readyState=4, duration=1234s, paused=false).
+
 ## Completed (Apr 3, 2026)
 - **Enhanced Analytics Dashboard**:
   - **Overview Tab**: Current viewers, 24h views, unique viewers, all-time views, channel performance
