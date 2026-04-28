@@ -1938,6 +1938,122 @@ async def update_youtube_video_durations(channel_id: str, user: dict = Depends(r
         "errors": errors[:10]
     }
 
+@api_router.post("/admin/heal-channel-urls")
+async def heal_channel_urls(user: dict = Depends(require_user)):
+    """
+    Heal stale channel video URLs:
+    - Rewrite '/api/videos/{filename}' → R2 public URL when R2 is configured.
+    - Verify the R2 file actually exists. If missing, mark for removal.
+    - Backfill `type='uploaded'` on videos with an R2 video_url but no type.
+    Idempotent. Safe to run after every migration / upload.
+    """
+    if not user.get("is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    if not is_r2_configured():
+        raise HTTPException(status_code=400, detail="R2 storage not configured")
+
+    from r2_service import R2_PUBLIC_URL, get_r2_client, R2_BUCKET_NAME
+
+    s3 = get_r2_client()
+    public = (R2_PUBLIC_URL or "").rstrip("/")
+
+    # Cache R2 object existence checks
+    r2_exists_cache = {}
+
+    def r2_exists(filename):
+        if filename in r2_exists_cache:
+            return r2_exists_cache[filename]
+        try:
+            s3.head_object(Bucket=R2_BUCKET_NAME, Key=f"videos/{filename}")
+            r2_exists_cache[filename] = True
+        except Exception:
+            r2_exists_cache[filename] = False
+        return r2_exists_cache[filename]
+
+    rewritten = 0
+    type_backfilled = 0
+    channels_changed = 0
+    missing_in_r2 = []  # entries we couldn't heal — R2 file genuinely gone
+    removed_videos = 0
+
+    async for ch in db.channels.find({}, {"_id": 0}):
+        changed = False
+        new_videos = []
+        for v in ch.get("videos", []):
+            url = v.get("video_url") or ""
+            if url.startswith("/api/videos/"):
+                fn = url.replace("/api/videos/", "")
+                if r2_exists(fn):
+                    v["video_url"] = f"{public}/videos/{fn}"
+                    if not v.get("type"):
+                        v["type"] = "uploaded"
+                        type_backfilled += 1
+                    rewritten += 1
+                    changed = True
+                    new_videos.append(v)
+                else:
+                    missing_in_r2.append({
+                        "channel": ch.get("name"),
+                        "title": v.get("title"),
+                        "filename": fn,
+                    })
+                    removed_videos += 1
+                    changed = True
+                    # Skip adding => removed from channel
+                    continue
+            elif url.startswith("http") and not v.get("type"):
+                # Backfill type for already-R2 videos missing type
+                v["type"] = "uploaded"
+                type_backfilled += 1
+                changed = True
+                new_videos.append(v)
+            else:
+                new_videos.append(v)
+
+        if changed:
+            for i, v in enumerate(new_videos):
+                v["order"] = i
+            await db.channels.update_one({"id": ch["id"]}, {"$set": {"videos": new_videos}})
+            channels_changed += 1
+
+    # Same fix for schedules cache
+    sched_changed = 0
+    sched_slots_rewritten = 0
+    async for s in db.schedules.find({}):
+        slot_changed = False
+        new_slots = []
+        for v in s.get("videos", []):
+            url = v.get("video_url") or ""
+            if url.startswith("/api/videos/"):
+                fn = url.replace("/api/videos/", "")
+                if r2_exists(fn):
+                    v["video_url"] = f"{public}/videos/{fn}"
+                    if not v.get("type"):
+                        v["type"] = "uploaded"
+                    sched_slots_rewritten += 1
+                    slot_changed = True
+                    new_slots.append(v)
+                else:
+                    slot_changed = True
+                    continue  # drop missing
+            else:
+                new_slots.append(v)
+        if slot_changed:
+            await db.schedules.update_one({"_id": s["_id"]}, {"$set": {"videos": new_slots}})
+            sched_changed += 1
+
+    return {
+        "channels_changed": channels_changed,
+        "video_urls_rewritten": rewritten,
+        "type_backfilled": type_backfilled,
+        "missing_in_r2_removed": removed_videos,
+        "schedules_changed": sched_changed,
+        "schedule_slots_rewritten": sched_slots_rewritten,
+        "missing_r2_files": missing_in_r2[:50],
+    }
+
+
 @api_router.post("/admin/fix-all-video-metadata")
 async def fix_all_video_metadata(user: dict = Depends(require_user)):
     """
