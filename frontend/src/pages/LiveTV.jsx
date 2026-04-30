@@ -1326,8 +1326,12 @@ const LiveTV = () => {
                           }
                           alt={channel.name}
                           className="w-full h-full object-cover"
+                          onError={(e) => { e.target.style.display = 'none'; }}
                         />
                       )}
+                      <div className="absolute inset-0 -z-10 flex items-center justify-center">
+                        <Tv size={20} className="text-primary/50" />
+                      </div>
                       {!channel.thumbnail && (
                         <div className="w-full h-full flex items-center justify-center">
                           <Tv size={20} className="text-primary/50" />

@@ -119,6 +119,7 @@ const SortableChannelItem = ({ channel, index }) => {
           src={channel.thumbnail || 'https://images.unsplash.com/photo-1576307302704-b6142d572612?w=400'}
           alt={channel.name}
           className="w-full h-full object-cover"
+          onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1576307302704-b6142d572612?w=400'; }}
         />
       </div>
       
@@ -1004,6 +1005,7 @@ const Dashboard = () => {
                           src={channel.thumbnail || channel.videos?.[0]?.thumbnail || 'https://images.unsplash.com/photo-1576307302704-b6142d572612?w=400'}
                           alt={channel.name}
                           className="w-full h-full object-cover"
+                          onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1576307302704-b6142d572612?w=400'; }}
                         />
                       </div>
                       
