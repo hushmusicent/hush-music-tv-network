@@ -437,11 +437,37 @@ async def add_video_to_channel(channel_id: str, data: VideoCreate, user: dict = 
     # Admin can add videos to any channel
     if channel["owner_id"] != user["id"] and not user.get("is_admin", False):
         raise HTTPException(status_code=403, detail="Not authorized")
+
+    # Defensive: if the incoming video_url is a stale /api/videos/{filename} path
+    # but R2 has a matching public URL (or the file exists in R2 directly),
+    # rewrite to the R2 URL so playback never breaks.
+    incoming_url = data.video_url or ""
+    if incoming_url.startswith("/api/videos/") and is_r2_configured():
+        from r2_service import R2_PUBLIC_URL, get_r2_client, R2_BUCKET_NAME
+        filename = incoming_url.replace("/api/videos/", "")
+        # First try uploaded_videos collection (it may have already been updated to R2)
+        uploaded = await db.uploaded_videos.find_one(
+            {"filename": filename}, {"_id": 0, "url": 1, "storage_type": 1}
+        )
+        if uploaded and (uploaded.get("url") or "").startswith("http"):
+            data.video_url = uploaded["url"]
+        else:
+            # Fall back to checking R2 directly
+            try:
+                get_r2_client().head_object(Bucket=R2_BUCKET_NAME, Key=f"videos/{filename}")
+                data.video_url = f"{(R2_PUBLIC_URL or '').rstrip('/')}/videos/{filename}"
+            except Exception:
+                pass  # Leave as-is; background_r2_upload will fix it later
     
     # Determine video type
+    # Auto-detect: if a video_url was provided (or was rewritten to one), this is
+    # an uploaded video. Only YouTube videos lack a video_url. The model default
+    # of "youtube" is overridden whenever a real URL is present.
     video_type = data.type
-    if not video_type:
-        video_type = "uploaded" if data.video_url else "youtube"
+    if data.video_url and (not video_type or video_type == "youtube"):
+        video_type = "uploaded"
+    elif not video_type:
+        video_type = "youtube"
     
     # Determine thumbnail based on video type
     thumbnail = data.thumbnail
