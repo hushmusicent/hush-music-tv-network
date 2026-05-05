@@ -174,7 +174,9 @@ async def main():
 
     print("\nChannel order (sort_order ASC):")
     async for ch in db.channels.find({}, {"_id": 0, "name": 1, "sort_order": 1, "videos": 1}).sort("sort_order", 1):
-        print(f"  {ch.get('sort_order'):>4}  {ch.get('name'):30}  ({len(ch.get('videos', []))} videos)")
+        so = ch.get('sort_order')
+        so_str = f"{so:>4}" if isinstance(so, int) else "  --"
+        print(f"  {so_str}  {ch.get('name'):30}  ({len(ch.get('videos', []))} videos)")
 
     mongo.close()
     print("\nMigration complete.")
