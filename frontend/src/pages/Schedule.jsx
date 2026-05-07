@@ -86,26 +86,15 @@ const Schedule = () => {
 
   useEffect(() => {
     if (authLoading) return;
-    
-    if (!isAuthenticated) {
-      navigate('/login');
-      return;
-    }
-    
-    if (user && user.is_admin === false) {
-      navigate('/');
-      return;
-    }
-    
-    if (user?.is_admin) {
-      loadSchedules();
-    }
-  }, [isAuthenticated, user, authLoading, navigate]);
+    // TV Guide is public — load schedules regardless of auth state.
+    loadSchedules();
+  }, [isAuthenticated, user, authLoading]);
 
   const loadSchedules = async () => {
     try {
       setLoading(true);
-      const response = await api.get('/api/schedule/channels');
+      // Use the public endpoint so the TV Guide works without login.
+      const response = await api.get('/api/schedule/live');
       setSchedules(response.data.schedules || []);
       setCurrentDate(response.data.date);
     } catch (error) {
@@ -315,7 +304,7 @@ const Schedule = () => {
     return markers;
   };
 
-  if (authLoading || !user || loading) {
+  if (authLoading || loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
         <div className="text-center">
@@ -338,7 +327,7 @@ const Schedule = () => {
             <Button 
               variant="ghost" 
               size="icon"
-              onClick={() => navigate('/dashboard')}
+              onClick={() => navigate(isAuthenticated && user?.is_admin ? '/dashboard' : '/')}
               className="hover:bg-white/10"
               data-testid="back-to-dashboard"
             >
@@ -521,20 +510,22 @@ const Schedule = () => {
                       )}
                     </p>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      regenerateSchedule(schedule.channel_id);
-                    }}
-                    disabled={refreshing}
-                    className="h-7 w-7 hover:bg-white/10"
-                    title="Shuffle schedule"
-                    data-testid={`regenerate-${schedule.channel_id}`}
-                  >
-                    <RefreshCw size={12} className={refreshing ? 'animate-spin' : ''} />
-                  </Button>
+                  {user?.is_admin && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        regenerateSchedule(schedule.channel_id);
+                      }}
+                      disabled={refreshing}
+                      className="h-7 w-7 hover:bg-white/10"
+                      title="Shuffle schedule"
+                      data-testid={`regenerate-${schedule.channel_id}`}
+                    >
+                      <RefreshCw size={12} className={refreshing ? 'animate-spin' : ''} />
+                    </Button>
+                  )}
                 </div>
 
                 {/* Timeline - Single continuous row */}
@@ -599,10 +590,12 @@ const Schedule = () => {
             <Calendar size={64} className="mx-auto mb-4 text-gray-600" />
             <h3 className="text-xl font-semibold mb-2">No Schedules Available</h3>
             <p className="text-gray-500 mb-6">
-              Add videos to your channels to generate schedules.
+              {isAuthenticated && user?.is_admin
+                ? 'Add videos to your channels to generate schedules.'
+                : 'No channels are broadcasting right now. Check back shortly.'}
             </p>
-            <Button onClick={() => navigate('/dashboard')} className="bg-primary">
-              Go to Dashboard
+            <Button onClick={() => navigate(isAuthenticated && user?.is_admin ? '/dashboard' : '/live')} className="bg-primary">
+              {isAuthenticated && user?.is_admin ? 'Go to Dashboard' : 'Go to Live TV'}
             </Button>
           </div>
         )}
