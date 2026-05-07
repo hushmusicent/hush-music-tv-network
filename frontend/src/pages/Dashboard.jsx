@@ -1615,10 +1615,11 @@ const Dashboard = () => {
           </div>
 
           {/* Quick Links */}
-          <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
             <Link
               to="/live"
               className="glass rounded-lg p-4 hover:bg-white/5 transition-colors group"
+              data-testid="dashboard-live-tv-link"
             >
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-red-500/20 rounded-lg">
@@ -1632,8 +1633,9 @@ const Dashboard = () => {
             </Link>
 
             <Link
-              to="/guide"
+              to="/schedule"
               className="glass rounded-lg p-4 hover:bg-white/5 transition-colors group"
+              data-testid="dashboard-tv-guide-link"
             >
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-blue-500/20 rounded-lg">
@@ -1642,21 +1644,6 @@ const Dashboard = () => {
                 <div>
                   <h4 className="font-medium">TV Guide</h4>
                   <p className="text-xs text-gray-400">View full schedule</p>
-                </div>
-              </div>
-            </Link>
-
-            <Link
-              to="/browse"
-              className="glass rounded-lg p-4 hover:bg-white/5 transition-colors group"
-            >
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-green-500/20 rounded-lg">
-                  <Eye size={20} className="text-green-500" />
-                </div>
-                <div>
-                  <h4 className="font-medium">Browse</h4>
-                  <p className="text-xs text-gray-400">View as visitor</p>
                 </div>
               </div>
             </Link>

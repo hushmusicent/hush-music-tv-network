@@ -386,9 +386,13 @@ const LiveTV = () => {
       setSchedules(scheduleMap);
       setChannels(channelList);
       
-      // Select first channel
+      // Respect ?channel=<id> query param (e.g. coming from TV Guide page).
+      // Fallback to first channel if param is missing or invalid.
       if (channelList.length > 0) {
-        selectChannel(channelList[0], playlistMap, scheduleMap, Date.now());
+        const params = new URLSearchParams(window.location.search);
+        const wantedId = params.get('channel');
+        const target = wantedId ? channelList.find((c) => c.id === wantedId) : null;
+        selectChannel(target || channelList[0], playlistMap, scheduleMap, Date.now());
       }
     } catch (error) {
       console.error('Failed to load playlists:', error);

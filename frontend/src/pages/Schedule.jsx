@@ -165,6 +165,12 @@ const Schedule = () => {
 
   // Play video at the synchronized position (Eastern time)
   const playVideoAtPosition = (video, channel) => {
+    // Navigate to Live TV with this channel pre-selected so the player syncs
+    // to the current Eastern-time slot for the channel.
+    if (channel?.channel_id) {
+      navigate(`/live?channel=${channel.channel_id}`);
+      return;
+    }
     const now = getEasternTime();
     const currentSeconds = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
     const [startH, startM, startS] = video.start_time.split(':').map(Number);
@@ -182,6 +188,10 @@ const Schedule = () => {
 
   // Handle clicking on channel to watch current live video
   const handleChannelClick = (schedule) => {
+    if (schedule?.channel_id) {
+      navigate(`/live?channel=${schedule.channel_id}`);
+      return;
+    }
     const currentVideo = getCurrentVideo(schedule);
     if (currentVideo) {
       playVideoAtPosition(currentVideo, schedule);
