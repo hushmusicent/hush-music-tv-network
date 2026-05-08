@@ -211,7 +211,7 @@ const ChannelCreator = () => {
 
     setAddingVideo(true);
     
-    const newVideo = {
+    let newVideo = {
       id: `temp-${Date.now()}`,
       youtube_id: youtubeId,
       title: `Video ${videos.length + 1}`,
@@ -221,15 +221,26 @@ const ChannelCreator = () => {
       type: 'youtube'
     };
 
-    // If editing, add to server
+    // If editing, persist immediately and use the server's real id so the
+    // subsequent "Save Channel" diff doesn't re-add the same video.
     if (isEditing) {
       try {
-        await channelsAPI.addVideo(channelId, {
+        const response = await channelsAPI.addVideo(channelId, {
           youtube_id: youtubeId,
           title: newVideo.title,
           thumbnail: newVideo.thumbnail,
           duration: newVideo.duration,
         });
+        // The server returns the updated channel; the newest video is at the end.
+        const persistedChannel = response?.data;
+        const persistedVideo = persistedChannel?.videos?.[persistedChannel.videos.length - 1];
+        if (persistedVideo?.id) {
+          newVideo = {
+            ...newVideo,
+            id: persistedVideo.id,
+            _persisted: true,  // tells handleSaveChannel to skip re-adding
+          };
+        }
         toast.success('Video added');
       } catch (error) {
         toast.error('Failed to add video');
@@ -421,9 +432,11 @@ const ChannelCreator = () => {
         );
         
         const newVideos = videos.filter(v => 
-          v.id?.startsWith('uploaded-') || 
-          v.id?.startsWith('temp-') || 
-          !existingVideoIds.has(v.id)
+          !v._persisted && (
+            v.id?.startsWith('uploaded-') || 
+            v.id?.startsWith('temp-') || 
+            !existingVideoIds.has(v.id)
+          )
         );
         
         // Add new videos to the channel

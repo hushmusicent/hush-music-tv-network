@@ -486,6 +486,20 @@ async def add_video_to_channel(channel_id: str, data: VideoCreate, user: dict = 
         order=len(channel.get("videos", [])),
         type=video_type
     )
+
+    # Server-side dedup: prevent the same YouTube video or the same R2 video URL
+    # from being added twice to a channel. Returns the existing channel unchanged
+    # rather than appending a duplicate.
+    existing_videos = channel.get("videos", [])
+    is_dup = False
+    if data.youtube_id:
+        is_dup = any(v.get("youtube_id") == data.youtube_id for v in existing_videos)
+    elif data.video_url:
+        is_dup = any(v.get("video_url") == data.video_url for v in existing_videos)
+    if is_dup:
+        # Return the channel as-is — this matches the historic behaviour of returning
+        # an updated ChannelResponse, but without the duplicate insert.
+        return channel
     
     await db.channels.update_one(
         {"id": channel_id},
