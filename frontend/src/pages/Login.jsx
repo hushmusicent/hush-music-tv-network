@@ -196,8 +196,8 @@ const Login = () => {
           <div className="mt-8 p-4 bg-black/30 rounded-lg border border-white/5">
             <p className="text-sm text-gray-400 text-center">
               Visitors can browse channels without signing in.
-              <Link to="/browse" className="text-primary hover:underline ml-1">
-                Browse Now
+              <Link to="/live" className="text-primary hover:underline ml-1" data-testid="login-live-tv-link">
+                Live TV
               </Link>
             </p>
           </div>
