@@ -91,9 +91,10 @@ const Layout = ({ children }) => {
           {/* Right: Search & Auth */}
           <div className="flex items-center gap-4">
             <Link
-              to="/browse"
+              to="/schedule"
               className="p-2 hover:bg-white/10 rounded-lg transition-colors"
               data-testid="search-btn"
+              title="TV Guide"
             >
               <Search size={20} className="text-gray-400" />
             </Link>

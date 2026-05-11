@@ -103,7 +103,7 @@ const Home = () => {
 
               <div className="flex items-center gap-4">
                 <Button
-                  onClick={() => navigate(`/watch/${heroChannel.id}`)}
+                  onClick={() => navigate(`/live?channel=${heroChannel.id}`)}
                   className="bg-primary hover:bg-primary-hover text-white font-bold px-8 py-6 text-lg glow-primary-hover"
                   data-testid="watch-now-btn"
                 >
@@ -150,11 +150,11 @@ const Home = () => {
             Categories
           </h2>
           <Link
-            to="/browse"
+            to="/schedule"
             className="text-sm text-gray-400 hover:text-white flex items-center gap-1 transition-colors"
             data-testid="view-all-categories"
           >
-            View All <ChevronRight size={16} />
+            TV Guide <ChevronRight size={16} />
           </Link>
         </div>
 
@@ -166,7 +166,7 @@ const Home = () => {
             : categories.map((cat) => (
                 <Link
                   key={cat.name}
-                  to={`/browse?category=${cat.name}`}
+                  to={`/live?category=${encodeURIComponent(cat.name)}`}
                   className="category-pill flex-shrink-0 px-5 py-2.5 rounded-full border border-white/20 text-sm font-medium hover:border-primary hover:text-primary transition-all"
                   data-testid={`category-${cat.name.toLowerCase()}`}
                 >
@@ -185,11 +185,11 @@ const Home = () => {
             Featured Channels
           </h2>
           <Link
-            to="/browse"
+            to="/live"
             className="text-sm text-gray-400 hover:text-white flex items-center gap-1 transition-colors"
             data-testid="view-all-featured"
           >
-            View All <ChevronRight size={16} />
+            Live TV <ChevronRight size={16} />
           </Link>
         </div>
 

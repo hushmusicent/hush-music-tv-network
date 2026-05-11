@@ -67,7 +67,7 @@ const ChannelCard = ({ channel, onDelete, showMenu = false }) => {
 
   return (
     <div className="channel-card group relative" data-testid={`channel-card-${channel.id}`}>
-      <Link to={`/watch/${channel.id}`} className="block">
+      <Link to={`/live?channel=${channel.id}`} className="block">
         {/* Thumbnail */}
         <div className="relative aspect-video bg-zinc-900 rounded-lg overflow-hidden">
           <img
