@@ -1032,51 +1032,65 @@ const LiveTV = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentVideo?.youtube_id, currentVideo?.video_id, isUploadedVideo]);
 
-  // Handle uploaded video playback
+  // Handle uploaded video playback — serialized seek-then-play to avoid
+  // hardware-decoder races on Android Chrome (frozen video / running audio).
   useEffect(() => {
     if (!isUploadedVideo || !currentVideo || !videoRef.current) return;
-    
+
     const video = videoRef.current;
-    
-    // Wait for video metadata to be ready before seeking
-    const handleMetadataLoaded = () => {
+    let cancelled = false;
+
+    const seekAndPlay = async () => {
       const seek = seekTimeRef.current;
+
+      // 1. Wait for metadata (duration must be known before seeking)
+      if (video.readyState < 1) {
+        await new Promise((resolve) => {
+          const onMeta = () => {
+            video.removeEventListener('loadedmetadata', onMeta);
+            resolve();
+          };
+          video.addEventListener('loadedmetadata', onMeta);
+        });
+      }
+      if (cancelled) return;
+
+      // 2. Seek if needed, then wait for the seek to complete before calling play().
+      // Calling play() while the HW decoder is mid-seek is what causes the
+      // "video frozen / audio plays" symptom on Android Chrome.
       if (seek > 0 && Math.abs(video.currentTime - seek) > 2) {
-        video.currentTime = seek;
+        await new Promise((resolve) => {
+          const onSeeked = () => {
+            video.removeEventListener('seeked', onSeeked);
+            resolve();
+          };
+          video.addEventListener('seeked', onSeeked);
+          try {
+            video.currentTime = seek;
+          } catch (e) {
+            // If seek fails, just play from current position.
+            video.removeEventListener('seeked', onSeeked);
+            resolve();
+          }
+        });
+      }
+      if (cancelled) return;
+
+      // 3. Now play.
+      try {
+        await video.play();
+        if (!cancelled) setIsPaused(false);
+      } catch (e) {
+        if (e?.name !== 'AbortError') {
+          console.log('Play failed:', e);
+        }
       }
     };
-    
-    const handleCanPlay = () => {
-      const playPromise = video.play();
-      if (playPromise !== undefined) {
-        playPromise
-          .then(() => {
-            setIsPaused(false);
-          })
-          .catch(e => {
-            if (e.name !== 'AbortError') {
-              console.log('Autoplay blocked:', e);
-            }
-          });
-      }
-    };
-    
-    // If video is already loaded enough, play immediately
-    if (video.readyState >= 2) {
-      handleMetadataLoaded();
-    } else {
-      video.addEventListener('loadedmetadata', handleMetadataLoaded, { once: true });
-    }
-    
-    if (video.readyState >= 3) {
-      handleCanPlay();
-    } else {
-      video.addEventListener('canplay', handleCanPlay, { once: true });
-    }
-    
+
+    seekAndPlay();
+
     return () => {
-      video.removeEventListener('loadedmetadata', handleMetadataLoaded);
-      video.removeEventListener('canplay', handleCanPlay);
+      cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentVideo?.video_id, currentVideo?.video_url, isUploadedVideo]);
@@ -1520,23 +1534,13 @@ const LiveTV = () => {
                 }
                 className="w-full h-full object-contain"
                 preload="auto"
-                autoPlay
                 muted={isMuted}
                 playsInline
                 onEnded={playNextVideo}
                 onError={(e) => {
                   console.error('Video error:', e.target.error, 'src:', e.target.src);
-                  // Skip to next video on error (without commercials)
                   skipToNextVideo();
                 }}
-                onLoadedData={() => {
-                  console.log('Video loaded, attempting play');
-                  // Video loaded, try to play
-                  if (videoRef.current && !isPaused) {
-                    videoRef.current.play().catch((e) => console.log('Play failed:', e));
-                  }
-                }}
-                onCanPlay={() => console.log('Video can play')}
                 onWaiting={() => setIsBuffering(true)}
                 onPlaying={() => setIsBuffering(false)}
               />
