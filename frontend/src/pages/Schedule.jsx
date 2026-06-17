@@ -35,6 +35,7 @@ api.interceptors.request.use((config) => {
 
 // Zoom levels: hours visible at once
 const ZOOM_LEVELS = [
+  { hours: 2, label: '2h' },
   { hours: 3, label: '3h' },
   { hours: 6, label: '6h' },
   { hours: 12, label: '12h' },
@@ -54,7 +55,7 @@ const Schedule = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [currentDate, setCurrentDate] = useState('');
   const [startHour, setStartHour] = useState(getEasternTime().getHours());
-  const [zoomLevel, setZoomLevel] = useState(1); // Index into ZOOM_LEVELS (default 6h)
+  const [zoomLevel, setZoomLevel] = useState(2); // Index into ZOOM_LEVELS (default 6h)
   const [visibleHours, setVisibleHours] = useState([]);
   const timelineRef = useRef(null);
   
