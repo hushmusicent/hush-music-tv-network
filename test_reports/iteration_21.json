@@ -1,0 +1,37 @@
+{
+  "summary": "Verified Commercials Manager bug fixes for the Hush Music TV Network. Backend assign/register endpoints correctly drop stale channel_ids while preserving valid ones, return 200 across all scenarios. Frontend Edit modal Save Changes shows success toast 'Channel assignment updated!' (no error toast). Upload UI works correctly. All 6 backend tests pass, all UI flows pass.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_commercials_assign.py",
+    "/app/test_reports/pytest/commercials_assign.xml"
+  ],
+  "action_items": [
+    "MINOR (pre-existing, out of scope): /commercials direct navigation (page.goto or hard refresh) redirects to '/' because Commercials.jsx useEffect runs `if (!user?.is_admin) navigate('/')` while user is still null during AuthContext hydration. In-app navigation via /dashboard works fine. Suggestion: gate the redirect on a loading=false state, or check localStorage user."
+  ],
+  "critical_code_review_comments": [
+    "server.py is 5186 lines - should be split into modules (commercials.py, channels.py, auth.py routers) for maintainability.",
+    "Commercials.jsx useEffect redirect logic does not wait for AuthContext hydration; deep-link reload to /commercials redirects to home even for admins.",
+    "assign_commercial_to_channels and register_commercial duplicate the stale-channel filtering logic - could be extracted into a helper `filter_valid_channel_ids(channel_ids)`."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_commercials_assign.py (new)"
+  ],
+  "success_rate": {
+    "backend": "100% (6/6)",
+    "frontend": "100% (upload UI + edit save no-mod + All Channels save)"
+  },
+  "test_credentials": "Hushmusicent419@gmail.com / sstisdd419 (admin) - working",
+  "seed_data_creation": "None - tested against existing 29 commercials and 57 channels in DB.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend test file at /app/backend/tests/test_commercials_assign.py covers: list commercials, PUT /assign with mixed stale+valid (200, stale dropped, valid kept), PUT /assign with only stale (becomes global), PUT /assign is_global=true clears channels, PUT /assign all valid preserves them, POST /register drops stale + persists valid with GET verify. Frontend Edit modal verified via dashboard navigation; deep-link goto causes auth-hydration redirect (preexisting non-blocker).",
+  "rca of the issue": "Original bug: assign_commercial_to_channels (server.py:1734) and register_commercial (server.py:1443) validated every channel_id and threw 404 if ANY was stale. Many legacy commercials had stale channel_ids from deleted channels, blocking saves and uploads. Fix (already applied): query db.channels for the IDs in payload, keep only existing ones, log dropped IDs as warning, treat as global when no valid channels remain. Verified end-to-end via pytest + UI."
+}

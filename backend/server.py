@@ -1454,6 +1454,21 @@ async def register_commercial(
     # Determine if global
     is_global = data.is_global or len(data.channel_ids) == 0
     
+    # Filter out stale/invalid channel IDs silently so uploads never fail just
+    # because a referenced channel was deleted.
+    valid_channel_ids: List[str] = []
+    if not is_global and data.channel_ids:
+        existing = await db.channels.find(
+            {"id": {"$in": data.channel_ids}}, {"_id": 0, "id": 1}
+        ).to_list(length=len(data.channel_ids))
+        existing_ids = {c["id"] for c in existing}
+        valid_channel_ids = [cid for cid in data.channel_ids if cid in existing_ids]
+        if len(valid_channel_ids) != len(data.channel_ids):
+            dropped = [cid for cid in data.channel_ids if cid not in existing_ids]
+            logger.warning(f"register_commercial dropped {len(dropped)} stale channel IDs: {dropped}")
+        if not valid_channel_ids:
+            is_global = True
+    
     # Defensive URL rewrite: if frontend passes a temp /api/videos/{filename}
     # path but R2 has the file, store the R2 URL instead so playback works
     # even if the background upload hasn't finished or doesn't trigger.
@@ -1480,7 +1495,7 @@ async def register_commercial(
         "url": final_url,
         "size": data.size,
         "duration": data.duration,
-        "channel_ids": [] if is_global else data.channel_ids,
+        "channel_ids": [] if is_global else valid_channel_ids,
         "is_global": is_global,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
@@ -1730,20 +1745,29 @@ async def assign_commercial_to_channels(
     if not commercial:
         raise HTTPException(status_code=404, detail="Commercial not found")
     
-    # Validate channels if not global
+    # Filter out stale channel IDs (channels that no longer exist) rather than
+    # rejecting the entire save. This prevents 404s when older commercials
+    # reference channels that have since been deleted.
+    valid_channel_ids: List[str] = []
     if not assignment.is_global and assignment.channel_ids:
-        for cid in assignment.channel_ids:
-            channel = await db.channels.find_one({"id": cid})
-            if not channel:
-                raise HTTPException(status_code=404, detail=f"Channel {cid} not found")
+        existing = await db.channels.find(
+            {"id": {"$in": assignment.channel_ids}}, {"_id": 0, "id": 1}
+        ).to_list(length=len(assignment.channel_ids))
+        existing_ids = {c["id"] for c in existing}
+        valid_channel_ids = [cid for cid in assignment.channel_ids if cid in existing_ids]
+        dropped = [cid for cid in assignment.channel_ids if cid not in existing_ids]
+        if dropped:
+            logger.warning(
+                f"Dropping {len(dropped)} stale channel IDs from commercial {commercial_id}: {dropped}"
+            )
     
-    # If global or no channels selected, set is_global to true
-    is_global = assignment.is_global or len(assignment.channel_ids) == 0
+    # If global or no valid channels resolved, treat as global
+    is_global = assignment.is_global or len(valid_channel_ids) == 0
     
     await db.commercials.update_one(
         {"id": commercial_id},
         {"$set": {
-            "channel_ids": [] if is_global else assignment.channel_ids,
+            "channel_ids": [] if is_global else valid_channel_ids,
             "is_global": is_global
         }}
     )
