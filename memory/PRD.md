@@ -32,6 +32,14 @@ Build a TV network app named "Hush Music TV Network" with admin-only channel/vid
 - `POST /api/schedules/regenerate-all` - Regenerate all 24h schedules
 - Admin credentials: hushmusicent419@gmail.com / $Stisdd419
 
+## Completed (Feb 19, 2026)
+- **Fixed Commercials Manager save/upload failures**
+  - Root cause: `assign_commercial_to_channels` and `register_commercial` in `server.py` strictly validated every channel_id and raised 404 if any was stale. Many legacy commercials had stale channel_ids from channels that were since deleted, so opening Edit → Save returned `404 Channel <id> not found` and the user perceived it as both "won't save" and "won't upload new".
+  - Fix (server.py): both endpoints now query existing channels in one $in lookup, keep only existing IDs, log dropped IDs as warnings, and fall back to `is_global=true` when no valid channels remain.
+  - DB cleanup: ran one-time script that cleaned 17 commercials with 17 stale channel references.
+  - Verified end-to-end by testing agent: 6/6 backend tests + full frontend Edit modal flow pass. Pytest at `/app/backend/tests/test_commercials_assign.py`.
+
+
 ## Completed (Apr 24, 2026)
 - **Fixed black-screen for uploaded videos on Gen Z / YouTv / Scary TV channels**
   - Root cause: 183 uploaded videos across 3 channels had stale `/api/videos/{filename}` local paths in `channels.videos[]` and `schedules.videos[]` instead of the Cloudflare R2 public URL. Local files no longer existed (migrated to R2), causing 404 → `MEDIA_ERR_SRC_NOT_SUPPORTED` → infinite skip loop → black screen.
