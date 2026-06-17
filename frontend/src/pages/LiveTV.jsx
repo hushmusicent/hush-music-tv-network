@@ -1674,8 +1674,8 @@ const LiveTV = () => {
               </div>
               <p className={`font-medium ${isMobile ? 'text-xs' : 'text-sm'}`}>{currentChannel.name}</p>
               <p className={`${isMobile ? 'text-[10px]' : 'text-xs'} text-gray-400 truncate mt-1`}>{currentVideo.title}</p>
-              {currentVideo.duration && !isCurrentChannelLiveStream && !isMobile && (
-                <p className="text-xs text-gray-500 mt-1">
+              {currentVideo.duration && !isCurrentChannelLiveStream && (
+                <p className={`${isMobile ? 'text-[10px]' : 'text-xs'} text-gray-500 mt-1`}>
                   Duration: {Math.floor(currentVideo.duration / 60)}:{(currentVideo.duration % 60).toString().padStart(2, '0')}
                 </p>
               )}

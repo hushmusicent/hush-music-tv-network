@@ -562,7 +562,7 @@ const Schedule = () => {
                           <div className="flex items-center justify-between text-[9px] text-white/80">
                             <span className="flex items-center gap-0.5">
                               <Clock size={8} />
-                              {video.start_time.slice(0, 5)}
+                              {video.start_time.slice(0, 5)} · {Math.floor((video.duration || 300) / 60)}:{((video.duration || 300) % 60).toString().padStart(2, '0')}
                             </span>
                             {isCurrentlyPlaying && (
                               <span className="flex items-center gap-0.5 text-red-300 font-medium">

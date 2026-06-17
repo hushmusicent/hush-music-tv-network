@@ -33,6 +33,13 @@ Build a TV network app named "Hush Music TV Network" with admin-only channel/vid
 - Admin credentials: hushmusicent419@gmail.com / $Stisdd419
 
 ## Completed (Feb 19, 2026)
+- **Made video titles & durations visible on every surface (channel videos)**
+  - Backfilled metadata via existing endpoints: 5 YouTube videos got refreshed titles/durations via YouTube Data API; 29 remaining are deleted on YouTube (unrecoverable — kept as-is with "Video N" placeholder so admin can rename or remove via Channel Editor).
+  - `LiveTV.jsx` info OSD now shows current video **duration on mobile** too (previously hidden below md breakpoint).
+  - `Schedule.jsx` timeline blocks now show `HH:MM · MM:SS` (start time · duration) so each block carries the duration at a glance.
+  - Channel Editor (`ChannelCreator.jsx`), TV Guide (`TVGuide.jsx`), and Schedule already rendered titles + durations; data is now fully populated for 6,869 of 6,898 channel videos.
+  - Installed `ffmpeg` in preview so future uploaded-video duration probes work locally; production image likely already has it via the same path that handled prior uploads.
+
 - **Fixed video freeze / A-V desync on uploaded MP4s during random playback**
   - Symptom: R2-hosted MP4s would occasionally freeze mid-playback while audio kept going (across all devices). Classic decoder stall on a keyframe gap with no automatic recovery.
   - Fix: Added a stall watchdog `useEffect` in `LiveTV.jsx` that ticks once per second. If the video's `currentTime` fails to advance >0.05s for 3 consecutive ticks while the player is supposed to be playing, it nudges `currentTime += 0.1` and re-issues `.play()` to force the hardware decoder to re-sync from the next keyframe. Rate-limited to one nudge per 6s. Only activates for uploaded (R2) videos, not YouTube.
