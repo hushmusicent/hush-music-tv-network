@@ -952,6 +952,14 @@ async def background_r2_upload(video_id: str, local_path: str, object_key: str):
                             channels_updated += 1
                     if channels_updated:
                         logger.info(f"Rewrote {local_url} -> R2 in {channels_updated} channels")
+
+                    # Same for commercials registered with a temp /api/videos/ URL
+                    comm_result = await db.commercials.update_many(
+                        {"url": local_url},
+                        {"$set": {"url": result["url"]}}
+                    )
+                    if comm_result.modified_count:
+                        logger.info(f"Rewrote {local_url} -> R2 in {comm_result.modified_count} commercials")
             except Exception as e:
                 logger.warning(f"Failed to rewrite channel URLs for {video_id}: {e}")
 
@@ -1446,11 +1454,30 @@ async def register_commercial(
     # Determine if global
     is_global = data.is_global or len(data.channel_ids) == 0
     
+    # Defensive URL rewrite: if frontend passes a temp /api/videos/{filename}
+    # path but R2 has the file, store the R2 URL instead so playback works
+    # even if the background upload hasn't finished or doesn't trigger.
+    final_url = data.video_url or ""
+    if final_url.startswith("/api/videos/") and is_r2_configured():
+        from r2_service import R2_PUBLIC_URL, get_r2_client, R2_BUCKET_NAME
+        filename = final_url.replace("/api/videos/", "")
+        uploaded = await db.uploaded_videos.find_one(
+            {"filename": filename}, {"_id": 0, "url": 1}
+        )
+        if uploaded and (uploaded.get("url") or "").startswith("http"):
+            final_url = uploaded["url"]
+        else:
+            try:
+                get_r2_client().head_object(Bucket=R2_BUCKET_NAME, Key=f"videos/{filename}")
+                final_url = f"{(R2_PUBLIC_URL or '').rstrip('/')}/videos/{filename}"
+            except Exception:
+                pass  # leave temp URL; background_r2_upload will fix it on completion
+    
     commercial_doc = {
         "id": commercial_id,
         "filename": f"{data.video_id}.mp4",
         "original_name": data.original_name,
-        "url": data.video_url,
+        "url": final_url,
         "size": data.size,
         "duration": data.duration,
         "channel_ids": [] if is_global else data.channel_ids,
@@ -2083,6 +2110,23 @@ async def heal_channel_urls(user: dict = Depends(require_user)):
             await db.schedules.update_one({"_id": s["_id"]}, {"$set": {"videos": new_slots}})
             sched_changed += 1
 
+    # Same fix for commercials
+    commercials_rewritten = 0
+    commercials_dropped = 0
+    async for c in db.commercials.find({}, {"_id": 0}):
+        url = c.get("url") or ""
+        if url.startswith("/api/videos/"):
+            fn = url.replace("/api/videos/", "")
+            if r2_exists(fn):
+                await db.commercials.update_one(
+                    {"id": c["id"]},
+                    {"$set": {"url": f"{public}/videos/{fn}"}}
+                )
+                commercials_rewritten += 1
+            else:
+                # R2 file genuinely missing — leave commercial doc but log it
+                commercials_dropped += 1
+
     return {
         "channels_changed": channels_changed,
         "video_urls_rewritten": rewritten,
@@ -2090,6 +2134,8 @@ async def heal_channel_urls(user: dict = Depends(require_user)):
         "missing_in_r2_removed": removed_videos,
         "schedules_changed": sched_changed,
         "schedule_slots_rewritten": sched_slots_rewritten,
+        "commercials_rewritten": commercials_rewritten,
+        "commercials_missing_r2": commercials_dropped,
         "missing_r2_files": missing_in_r2[:50],
     }
 

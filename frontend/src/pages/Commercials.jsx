@@ -132,10 +132,17 @@ const Commercials = () => {
     }
   };
 
-  const openEditModal = (commercial) => {
+  const openEditModal = async (commercial) => {
     setEditingCommercial(commercial);
     setEditIsGlobal(commercial.is_global || !commercial.channel_ids?.length);
     setEditChannelIds(commercial.channel_ids || []);
+    // Refresh channels so any newly-created channel appears in the picker.
+    try {
+      const channelsRes = await api.get('/channels');
+      setChannels(channelsRes.data);
+    } catch (e) {
+      console.warn('Channel refresh failed:', e);
+    }
   };
 
   const closeEditModal = () => {
