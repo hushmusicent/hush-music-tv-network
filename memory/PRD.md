@@ -33,6 +33,12 @@ Build a TV network app named "Hush Music TV Network" with admin-only channel/vid
 - Admin credentials: hushmusicent419@gmail.com / $Stisdd419
 
 ## Completed (Feb 19, 2026)
+- **Fixed video freeze / A-V desync on uploaded MP4s during random playback**
+  - Symptom: R2-hosted MP4s would occasionally freeze mid-playback while audio kept going (across all devices). Classic decoder stall on a keyframe gap with no automatic recovery.
+  - Fix: Added a stall watchdog `useEffect` in `LiveTV.jsx` that ticks once per second. If the video's `currentTime` fails to advance >0.05s for 3 consecutive ticks while the player is supposed to be playing, it nudges `currentTime += 0.1` and re-issues `.play()` to force the hardware decoder to re-sync from the next keyframe. Rate-limited to one nudge per 6s. Only activates for uploaded (R2) videos, not YouTube.
+  - Pre-existing `seek-then-play` start fix is preserved.
+  - **Requires Deploy** to take effect on production.
+
 - **Fixed Commercials Manager save/upload failures**
   - Root cause: `assign_commercial_to_channels` and `register_commercial` in `server.py` strictly validated every channel_id and raised 404 if any was stale. Many legacy commercials had stale channel_ids from channels that were since deleted, so opening Edit → Save returned `404 Channel <id> not found` and the user perceived it as both "won't save" and "won't upload new".
   - Fix (server.py): both endpoints now query existing channels in one $in lookup, keep only existing IDs, log dropped IDs as warnings, and fall back to `is_global=true` when no valid channels remain.

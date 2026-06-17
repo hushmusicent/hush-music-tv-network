@@ -1095,6 +1095,63 @@ const LiveTV = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentVideo?.video_id, currentVideo?.video_url, isUploadedVideo]);
 
+  // Stall watchdog for uploaded videos:
+  // R2-hosted MP4s occasionally hit a buffer underrun mid-playback — the video
+  // freezes on a frame while audio keeps going, never recovering. This watchdog
+  // detects when currentTime stops advancing while the video is supposed to be
+  // playing and nudges the decoder with a tiny seek to force re-sync from the
+  // next keyframe.
+  useEffect(() => {
+    if (!isUploadedVideo || !currentVideo || !videoRef.current) return;
+
+    const video = videoRef.current;
+    let lastTime = video.currentTime;
+    let stuckSamples = 0;
+    let lastNudgeAt = 0;
+
+    const intervalId = setInterval(() => {
+      // Only check while the player thinks it's playing (not paused, not ended)
+      if (video.paused || video.ended || video.readyState < 2) {
+        lastTime = video.currentTime;
+        stuckSamples = 0;
+        return;
+      }
+
+      const now = Date.now();
+      const advanced = video.currentTime - lastTime;
+
+      // currentTime should advance ~1s per second of wall-clock when playing.
+      // If it advanced less than 0.05s in our 1s tick, count it as stuck.
+      if (advanced < 0.05) {
+        stuckSamples += 1;
+      } else {
+        stuckSamples = 0;
+      }
+      lastTime = video.currentTime;
+
+      // After ~2.5s of being stuck, force a tiny seek nudge to re-sync the
+      // hardware decoder. Rate-limit to once every 6s to avoid thrashing.
+      if (stuckSamples >= 3 && now - lastNudgeAt > 6000) {
+        try {
+          const nudgeTo = Math.min(video.currentTime + 0.1, Math.max(0, (video.duration || 0) - 0.5));
+          if (Number.isFinite(nudgeTo) && nudgeTo > video.currentTime) {
+            video.currentTime = nudgeTo;
+            lastNudgeAt = now;
+            stuckSamples = 0;
+            // Re-issue play in case the browser paused us silently.
+            video.play().catch(() => {});
+            console.log('[LiveTV] Stall watchdog nudged video to', nudgeTo.toFixed(2));
+          }
+        } catch (e) {
+          // ignore – will retry on next tick
+        }
+      }
+    }, 1000);
+
+    return () => clearInterval(intervalId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentVideo?.video_id, currentVideo?.video_url, isUploadedVideo]);
+
   const toggleMute = () => {
     setIsMuted(!isMuted);
     if (youtubePlayerRef.current) {
