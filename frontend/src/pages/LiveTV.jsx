@@ -1095,98 +1095,13 @@ const LiveTV = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentVideo?.video_id, currentVideo?.video_url, isUploadedVideo]);
 
-  // Stall watchdog for uploaded videos:
-  // R2-hosted MP4s occasionally hit a buffer underrun mid-playback — the video
-  // freezes on a frame while audio keeps going, never recovering. This watchdog
-  // catches both:
-  //   (a) currentTime fully stalled (audio+video pipeline stuck)
-  //   (b) currentTime advancing but no video frames rendering (audio-only stall)
-  // and forces a tiny seek to make the decoder re-sync from the next keyframe.
+  // Stall watchdog DISABLED — was causing false-positive recovery seeks that
+  // produced the "plays a few seconds, jumps back" loop on production. Kept
+  // the early-return so the rest of the file is otherwise unchanged. If a
+  // real freeze happens, the user can manually click play / change channels.
   useEffect(() => {
     if (!isUploadedVideo || !currentVideo || !videoRef.current) return;
-
-    const video = videoRef.current;
-    let lastTime = video.currentTime;
-    let stuckSamples = 0;          // currentTime not advancing
-    let frameStallSamples = 0;     // currentTime moving but no frame painted
-    let lastNudgeAt = 0;
-    const playStartedAt = Date.now();
-
-    let lastFrameAt = Date.now();
-    let frameCbId = null;
-    const supportsFrameCb = typeof video.requestVideoFrameCallback === 'function';
-
-    const onFrame = () => {
-      lastFrameAt = Date.now();
-      if (supportsFrameCb) {
-        frameCbId = video.requestVideoFrameCallback(onFrame);
-      }
-    };
-    if (supportsFrameCb) {
-      frameCbId = video.requestVideoFrameCallback(onFrame);
-    }
-
-    const nudgeOnce = (reason) => {
-      try {
-        const dur = video.duration || 0;
-        if (!Number.isFinite(dur) || dur <= 0) return;  // duration not ready
-        const ct = video.currentTime;
-        const nudgeTo = Math.min(ct + 0.1, dur - 0.5);
-        if (Number.isFinite(nudgeTo) && nudgeTo > ct + 0.05) {
-          video.currentTime = nudgeTo;
-          lastNudgeAt = Date.now();
-          stuckSamples = 0;
-          frameStallSamples = 0;
-          lastFrameAt = Date.now();
-          video.play().catch(() => {});
-          console.log('[LiveTV] Stall watchdog nudge:', nudgeTo.toFixed(2), '(' + reason + ')');
-        }
-      } catch (e) {
-        // ignore – will retry on next tick
-      }
-    };
-
-    const intervalId = setInterval(() => {
-      // Only check while the player thinks it's playing (not paused, not ended)
-      if (video.paused || video.ended || video.readyState < 2) {
-        lastTime = video.currentTime;
-        stuckSamples = 0;
-        frameStallSamples = 0;
-        lastFrameAt = Date.now();
-        return;
-      }
-
-      const now = Date.now();
-      const advanced = video.currentTime - lastTime;
-
-      // (a) Full stall: currentTime not advancing
-      if (advanced < 0.05) stuckSamples += 1;
-      else stuckSamples = 0;
-      lastTime = video.currentTime;
-
-      // (b) Audio-only stall: currentTime moving but no video frame in 2s+.
-      // Require 3 consecutive ticks AND the video must have been playing for
-      // at least 8s, to avoid false positives during initial frame-callback
-      // warm-up or hidden-tab throttling.
-      const frameGap = now - lastFrameAt;
-      if (supportsFrameCb && advanced >= 0.05 && frameGap > 2000 && (now - playStartedAt) > 8000) {
-        frameStallSamples += 1;
-      } else {
-        frameStallSamples = 0;
-      }
-
-      if (now - lastNudgeAt > 6000) {
-        if (stuckSamples >= 3) nudgeOnce('full-stall');
-        else if (frameStallSamples >= 3) nudgeOnce('video-only-stall');
-      }
-    }, 1000);
-
-    return () => {
-      clearInterval(intervalId);
-      if (supportsFrameCb && frameCbId && typeof video.cancelVideoFrameCallback === 'function') {
-        try { video.cancelVideoFrameCallback(frameCbId); } catch (e) { /* noop */ }
-      }
-    };
+    return undefined;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentVideo?.video_id, currentVideo?.video_url, isUploadedVideo]);
 
