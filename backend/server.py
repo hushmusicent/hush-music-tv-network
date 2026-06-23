@@ -4861,6 +4861,57 @@ async def regenerate_all_schedules(user: dict = Depends(require_user)):
     
     return {"regenerated": regenerated, "date": today}
 
+def _show_key(title: str) -> str:
+    """Strip episode/season markers so episodes of the same show share a key.
+    e.g. 'All_That_Season_1_Episode_5' and 'All_That_Season_2_Episode_1' -> 'all_that'.
+    """
+    if not title:
+        return ''
+    import re as _re
+    t = title.lower().strip()
+    patterns = [
+        r'[\s_\-]+season[\s_\-]*\d+[\s_\-]*episode[\s_\-]*\d+.*$',
+        r'[\s_\-]+s\d+e\d+.*$',
+        r'[\s_\-]+s\d{1,2}\s*-\s*e\d{1,3}.*$',
+        r'[\s_\-]+\d{4}[\s_\-]*\d+.*$',  # _2024_5
+        r'[\s_\-]+ep[\s_\-]*\d+.*$',
+        r'[\s_\-]+episode[\s_\-]*\d+.*$',
+        r'[\s_\-]+e\d+.*$',
+        r'[\s_\-]+part[\s_\-]*\d+.*$',
+        r'\(\d{4}\).*$',
+    ]
+    for p in patterns:
+        new = _re.sub(p, '', t)
+        if new != t:
+            t = new
+            break
+    # Final tidy: collapse separators so 'all_that' == 'all that' == 'all-that'
+    t = _re.sub(r'[\s_\-]+', '_', t).strip('_')
+    return t
+
+
+def _deinterleave_by_show(videos: list) -> list:
+    """Greedy O(n^2) reorder that keeps two videos with the same show key from
+    sitting next to each other. If the entire tail is from one show, it leaves
+    them as-is (unavoidable)."""
+    n = len(videos)
+    if n < 2:
+        return videos
+    out = list(videos)
+    for i in range(1, n):
+        prev_key = _show_key(out[i - 1].get('title', ''))
+        if not prev_key:
+            continue
+        if _show_key(out[i].get('title', '')) != prev_key:
+            continue
+        # Find next index with a different show key and swap
+        for j in range(i + 1, n):
+            if _show_key(out[j].get('title', '')) != prev_key:
+                out[i], out[j] = out[j], out[i]
+                break
+    return out
+
+
 def generate_24h_schedule(channel: dict, date: str, force_random: bool = False) -> dict:
     """Generate a 24-hour schedule for a channel by randomly distributing videos"""
     videos = channel.get("videos", [])
@@ -4883,6 +4934,11 @@ def generate_24h_schedule(channel: dict, date: str, force_random: bool = False) 
     # Shuffle videos
     shuffled_videos = videos.copy()
     random.shuffle(shuffled_videos)
+
+    # Spread out same-show episodes so e.g. two All_That episodes don't play
+    # back-to-back. Operates on the post-shuffle order for deterministic daily
+    # output when seeded.
+    shuffled_videos = _deinterleave_by_show(shuffled_videos)
     
     # Reset random seed
     if not force_random:
