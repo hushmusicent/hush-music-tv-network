@@ -4890,25 +4890,71 @@ def _show_key(title: str) -> str:
     return t
 
 
-def _deinterleave_by_show(videos: list) -> list:
-    """Greedy O(n^2) reorder that keeps two videos with the same show key from
-    sitting next to each other. If the entire tail is from one show, it leaves
-    them as-is (unavoidable)."""
+def _deinterleave_by_show(videos: list, min_distance: int = 5) -> list:
+    """Reorder so any two videos sharing a show key are at least ``min_distance``
+    positions apart (i.e. with at least min_distance OTHER videos between them).
+    Uses a max-heap + cooldown queue (Leetcode 358 / Reorganize String K Apart).
+    Falls back gracefully when one show dominates and a perfect spread is
+    mathematically impossible.
+    """
     n = len(videos)
     if n < 2:
-        return videos
-    out = list(videos)
-    for i in range(1, n):
-        prev_key = _show_key(out[i - 1].get('title', ''))
-        if not prev_key:
-            continue
-        if _show_key(out[i].get('title', '')) != prev_key:
-            continue
-        # Find next index with a different show key and swap
-        for j in range(i + 1, n):
-            if _show_key(out[j].get('title', '')) != prev_key:
-                out[i], out[j] = out[j], out[i]
+        return list(videos)
+
+    import heapq as _heapq
+    from collections import deque as _deque
+
+    # Bucket videos by show key. Empty/unique keys -> each gets its own bucket
+    # so single tracks (e.g. music videos) never block anything.
+    groups: dict = {}
+    for v in videos:
+        k = _show_key(v.get('title', '')) or ''
+        if not k:
+            k = f'__nokey_{id(v)}'
+        groups.setdefault(k, []).append(v)
+
+    heap: list = []
+    tb = 0
+    for k, lst in groups.items():
+        _heapq.heappush(heap, (-len(lst), tb, k))
+        tb += 1
+
+    out: list = []
+    cooldown: _deque = _deque()  # entries: (re_admit_at_len, remaining, key)
+
+    while len(out) < n:
+        # Re-admit any show that has cooled enough
+        while cooldown and cooldown[0][0] <= len(out):
+            _, cnt, key = cooldown.popleft()
+            if cnt > 0:
+                _heapq.heappush(heap, (-cnt, tb, key))
+                tb += 1
+
+        if heap:
+            neg_cnt, _, key = _heapq.heappop(heap)
+            out.append(groups[key].pop(0))
+            remaining = -neg_cnt - 1
+            cooldown.append((len(out) + min_distance, remaining, key))
+        else:
+            # Heap is empty - we must pull from cooldown early (collision).
+            # Pick the cooled show with the most remaining videos.
+            if not cooldown:
                 break
+            best_idx = -1
+            best_cnt = 0
+            for i, (_, cnt, _) in enumerate(cooldown):
+                if cnt > best_cnt:
+                    best_cnt = cnt
+                    best_idx = i
+            if best_idx < 0:
+                break
+            re_at, cnt, key = cooldown[best_idx]
+            tmp = list(cooldown)
+            del tmp[best_idx]
+            cooldown = _deque(tmp)
+            out.append(groups[key].pop(0))
+            cooldown.append((len(out) + min_distance, cnt - 1, key))
+
     return out
 
 
