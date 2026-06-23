@@ -1107,12 +1107,11 @@ const LiveTV = () => {
 
     const video = videoRef.current;
     let lastTime = video.currentTime;
-    let stuckSamples = 0;
+    let stuckSamples = 0;          // currentTime not advancing
+    let frameStallSamples = 0;     // currentTime moving but no frame painted
     let lastNudgeAt = 0;
+    const playStartedAt = Date.now();
 
-    // Track when the last video frame was actually painted to detect the
-    // "audio plays, video frozen" case (currentTime keeps moving because it's
-    // driven by the audio clock, but no new video frame ever arrives).
     let lastFrameAt = Date.now();
     let frameCbId = null;
     const supportsFrameCb = typeof video.requestVideoFrameCallback === 'function';
@@ -1129,14 +1128,18 @@ const LiveTV = () => {
 
     const nudgeOnce = (reason) => {
       try {
-        const nudgeTo = Math.min(video.currentTime + 0.1, Math.max(0, (video.duration || 0) - 0.5));
-        if (Number.isFinite(nudgeTo) && nudgeTo > video.currentTime) {
+        const dur = video.duration || 0;
+        if (!Number.isFinite(dur) || dur <= 0) return;  // duration not ready
+        const ct = video.currentTime;
+        const nudgeTo = Math.min(ct + 0.1, dur - 0.5);
+        if (Number.isFinite(nudgeTo) && nudgeTo > ct + 0.05) {
           video.currentTime = nudgeTo;
           lastNudgeAt = Date.now();
           stuckSamples = 0;
+          frameStallSamples = 0;
           lastFrameAt = Date.now();
           video.play().catch(() => {});
-          console.log('[LiveTV] Stall watchdog nudged video to', nudgeTo.toFixed(2), '(' + reason + ')');
+          console.log('[LiveTV] Stall watchdog nudge:', nudgeTo.toFixed(2), '(' + reason + ')');
         }
       } catch (e) {
         // ignore – will retry on next tick
@@ -1148,6 +1151,7 @@ const LiveTV = () => {
       if (video.paused || video.ended || video.readyState < 2) {
         lastTime = video.currentTime;
         stuckSamples = 0;
+        frameStallSamples = 0;
         lastFrameAt = Date.now();
         return;
       }
@@ -1156,20 +1160,24 @@ const LiveTV = () => {
       const advanced = video.currentTime - lastTime;
 
       // (a) Full stall: currentTime not advancing
-      if (advanced < 0.05) {
-        stuckSamples += 1;
-      } else {
-        stuckSamples = 0;
-      }
+      if (advanced < 0.05) stuckSamples += 1;
+      else stuckSamples = 0;
       lastTime = video.currentTime;
 
-      // (b) Audio-only stall: currentTime moving but no video frame in 1.5s+
+      // (b) Audio-only stall: currentTime moving but no video frame in 2s+.
+      // Require 3 consecutive ticks AND the video must have been playing for
+      // at least 8s, to avoid false positives during initial frame-callback
+      // warm-up or hidden-tab throttling.
       const frameGap = now - lastFrameAt;
-      const videoFrozenWhileAudioPlays = supportsFrameCb && advanced >= 0.05 && frameGap > 1500;
+      if (supportsFrameCb && advanced >= 0.05 && frameGap > 2000 && (now - playStartedAt) > 8000) {
+        frameStallSamples += 1;
+      } else {
+        frameStallSamples = 0;
+      }
 
       if (now - lastNudgeAt > 6000) {
         if (stuckSamples >= 3) nudgeOnce('full-stall');
-        else if (videoFrozenWhileAudioPlays) nudgeOnce('video-only-stall');
+        else if (frameStallSamples >= 3) nudgeOnce('video-only-stall');
       }
     }, 1000);
 
