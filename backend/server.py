@@ -868,7 +868,11 @@ async def register_direct_upload(
     }
     
     await db.uploaded_videos.insert_one(video_doc)
-    
+
+    # Auto A/V sync audit (presigned direct upload path)
+    object_key = f"videos/{video_id}.mp4"
+    asyncio.create_task(audit_and_fix_av_sync(video_id, public_url, object_key))
+
     return {
         "id": video_id,
         "filename": f"{video_id}.mp4",
@@ -910,8 +914,118 @@ async def init_chunked_upload(
         "total_chunks": total_chunks,
     }
 
+async def audit_and_fix_av_sync(video_id: str, r2_url: str, object_key: str):
+    """Probe a freshly uploaded video on R2 and, if audio/video streams drift
+    by more than 0.5s, download, truncate to the shorter stream with `ffmpeg
+    -c copy`, and re-upload to the same R2 key. Idempotent and safe — does
+    nothing if streams are already aligned. Updates DB duration on success.
+    """
+    import asyncio as _asyncio
+    import subprocess as _sub
+    import tempfile as _tmp
+    import json as _json
+    DRIFT_THRESHOLD = 0.5
+
+    try:
+        # Probe both streams directly from the R2 URL (no full download)
+        proc = await _asyncio.create_subprocess_exec(
+            'ffprobe', '-v', 'error', '-show_streams', '-of', 'json', r2_url,
+            stdout=_asyncio.subprocess.PIPE, stderr=_asyncio.subprocess.PIPE,
+        )
+        try:
+            stdout, _ = await _asyncio.wait_for(proc.communicate(), timeout=60)
+        except _asyncio.TimeoutError:
+            proc.kill()
+            logger.warning(f"[av-audit] ffprobe timeout for {video_id}")
+            return
+        if proc.returncode != 0 or not stdout:
+            logger.warning(f"[av-audit] ffprobe failed for {video_id}")
+            return
+
+        data = _json.loads(stdout)
+        v = next((s for s in data.get('streams', []) if s.get('codec_type') == 'video'), None)
+        a = next((s for s in data.get('streams', []) if s.get('codec_type') == 'audio'), None)
+        if not v or not a:
+            return
+        try:
+            vd = float(v.get('duration') or 0)
+            ad = float(a.get('duration') or 0)
+        except Exception:
+            return
+        drift = abs(vd - ad)
+        if drift < DRIFT_THRESHOLD:
+            logger.info(f"[av-audit] {video_id} OK (drift {drift:.3f}s)")
+            return
+
+        target = min(vd, ad)
+        if target <= 0:
+            return
+        logger.info(f"[av-audit] {video_id} drift {drift:.2f}s — fixing (target {target:.2f}s)")
+
+        with _tmp.TemporaryDirectory() as work:
+            local_in = os.path.join(work, 'in.mp4')
+            local_out = os.path.join(work, 'out.mp4')
+
+            # Download from R2
+            dl = await _asyncio.create_subprocess_exec(
+                'curl', '-sSfL', '-o', local_in, r2_url,
+                stdout=_asyncio.subprocess.DEVNULL, stderr=_asyncio.subprocess.PIPE,
+            )
+            try:
+                _, derr = await _asyncio.wait_for(dl.communicate(), timeout=600)
+            except _asyncio.TimeoutError:
+                dl.kill()
+                logger.warning(f"[av-audit] download timeout for {video_id}")
+                return
+            if dl.returncode != 0:
+                logger.warning(f"[av-audit] download failed for {video_id}: {derr[:200]}")
+                return
+
+            # Truncate to shorter stream — fast, lossless
+            ff = await _asyncio.create_subprocess_exec(
+                'ffmpeg', '-y', '-i', local_in, '-c', 'copy',
+                '-t', f'{target:.3f}', '-movflags', '+faststart', local_out,
+                stdout=_asyncio.subprocess.DEVNULL, stderr=_asyncio.subprocess.PIPE,
+            )
+            try:
+                _, ferr = await _asyncio.wait_for(ff.communicate(), timeout=600)
+            except _asyncio.TimeoutError:
+                ff.kill()
+                logger.warning(f"[av-audit] ffmpeg timeout for {video_id}")
+                return
+            if ff.returncode != 0:
+                logger.warning(f"[av-audit] ffmpeg failed for {video_id}: {ferr[-200:]}")
+                return
+
+            # Re-upload to same R2 key (replaces original)
+            try:
+                from r2_service import get_r2_client, R2_BUCKET_NAME
+                client = get_r2_client()
+                with open(local_out, 'rb') as fh:
+                    client.upload_fileobj(
+                        fh, R2_BUCKET_NAME, object_key,
+                        ExtraArgs={'ContentType': 'video/mp4', 'CacheControl': 'public, max-age=3600'},
+                    )
+            except Exception as e:
+                logger.warning(f"[av-audit] re-upload failed for {video_id}: {e}")
+                return
+
+            # Update DB duration in uploaded_videos + any channels that already reference it
+            new_dur = int(target)
+            await db.uploaded_videos.update_one(
+                {'id': video_id}, {'$set': {'duration': new_dur, 'av_synced': True}}
+            )
+            await db.channels.update_many(
+                {'videos.video_url': r2_url},
+                {'$set': {'videos.$[v].duration': new_dur}},
+                array_filters=[{'v.video_url': r2_url}],
+            )
+            logger.info(f"[av-audit] {video_id} fixed → {new_dur}s (was video={vd:.1f}s audio={ad:.1f}s)")
+    except Exception as e:
+        logger.exception(f"[av-audit] unexpected error for {video_id}: {e}")
+
+
 async def background_r2_upload(video_id: str, local_path: str, object_key: str):
-    """Background task to upload large files to R2 without blocking the response"""
     try:
         logger.info(f"Background R2 upload started for {video_id}")
         from r2_service import upload_file_to_r2
@@ -932,6 +1046,11 @@ async def background_r2_upload(video_id: str, local_path: str, object_key: str):
                 }
             )
             logger.info(f"Background R2 upload completed for {video_id}: {result['url']}")
+
+            # Auto A/V sync audit — schedules a check + lossless truncation if
+            # audio/video streams drift, so newly uploaded files never reach a
+            # channel with broken lip sync.
+            asyncio.create_task(audit_and_fix_av_sync(video_id, result["url"], object_key))
 
             # Also rewrite any channel videos that reference the old /api/videos/ URL
             try:
@@ -1129,7 +1248,11 @@ async def complete_chunked_upload(
             "created_at": now
         }
         await db.uploaded_videos.insert_one(video_doc)
-        
+
+        # Auto A/V sync audit (small chunked upload that finished synchronously to R2)
+        if video_doc["storage_type"] == "r2" and video_url.startswith("http"):
+            asyncio.create_task(audit_and_fix_av_sync(video_id, video_url, object_key))
+
         return {
             "id": video_id,
             "filename": out_filename,
@@ -1245,7 +1368,11 @@ async def upload_video(
     }
     
     await db.uploaded_videos.insert_one(video_doc)
-    
+
+    # Auto A/V sync audit when stored on R2 (small synchronous upload path)
+    if storage_type == "r2":
+        asyncio.create_task(audit_and_fix_av_sync(video_id, video_url, f"videos/{filename}"))
+
     return UploadedVideoResponse(
         id=video_id,
         filename=filename,
