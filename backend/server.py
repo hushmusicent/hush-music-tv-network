@@ -3156,7 +3156,7 @@ async def update_single_video_duration(
             # Generate new schedule
             updated_channel = await db.channels.find_one({"id": channel_id}, {"_id": 0})
             if updated_channel:
-                schedule = generate_24h_schedule(updated_channel, today, force_random=False)
+                schedule = await generate_24h_schedule(updated_channel, today, force_random=False)
                 await db.schedules.insert_one(schedule)
         
         return {"updated": True, "new_duration": duration, "schedule_regenerated": abs(old_duration - duration) > 60}
@@ -4851,7 +4851,7 @@ async def get_or_create_schedule(channel: dict, date: str) -> dict:
         return existing
     
     # Generate new schedule for this date
-    schedule = generate_24h_schedule(channel, date)
+    schedule = await generate_24h_schedule(channel, date)
     
     # Store in database
     await db.schedules.insert_one(schedule)
@@ -4957,7 +4957,7 @@ async def regenerate_channel_schedule(channel_id: str, user: dict = Depends(requ
     await db.schedules.delete_one({"channel_id": channel_id, "schedule_date": today})
     
     # Generate new random schedule
-    schedule = generate_24h_schedule(channel, today, force_random=True)
+    schedule = await generate_24h_schedule(channel, today, force_random=True)
     
     # Store in database
     await db.schedules.insert_one(schedule)
@@ -4980,7 +4980,7 @@ async def regenerate_all_schedules(user: dict = Depends(require_user)):
         await db.schedules.delete_one({"channel_id": channel["id"], "schedule_date": today})
         
         # Generate new schedule with current durations
-        schedule = generate_24h_schedule(channel, today, force_random=False)
+        schedule = await generate_24h_schedule(channel, today, force_random=False)
         
         # Store in database
         await db.schedules.insert_one(schedule)
@@ -5085,7 +5085,31 @@ def _deinterleave_by_show(videos: list, min_distance: int = 5) -> list:
     return out
 
 
-def generate_24h_schedule(channel: dict, date: str, force_random: bool = False) -> dict:
+async def _get_recent_video_ids(channel_id: str, date: str, hours: int = 48) -> set:
+    """Return set of video_ids that played on this channel within the last
+    `hours` hours relative to the start of `date`. Used to enforce a 48h
+    no-repeat window when generating a new schedule.
+    """
+    from datetime import datetime as _dt, timedelta as _td
+    try:
+        d = _dt.strptime(date, '%Y-%m-%d')
+    except Exception:
+        return set()
+    days_back = max(1, (hours + 23) // 24)
+    prior_dates = [(d - _td(days=i)).strftime('%Y-%m-%d') for i in range(1, days_back + 1)]
+    recent: set = set()
+    async for s in db.schedules.find(
+        {'channel_id': channel_id, 'schedule_date': {'$in': prior_dates}},
+        {'_id': 0, 'videos': 1},
+    ):
+        for v in s.get('videos', []) or []:
+            vid = v.get('video_id') or v.get('id')
+            if vid:
+                recent.add(vid)
+    return recent
+
+
+async def generate_24h_schedule(channel: dict, date: str, force_random: bool = False) -> dict:
     """Generate a 24-hour schedule for a channel by randomly distributing videos"""
     videos = channel.get("videos", [])
     if not videos:
@@ -5108,10 +5132,34 @@ def generate_24h_schedule(channel: dict, date: str, force_random: bool = False) 
     shuffled_videos = videos.copy()
     random.shuffle(shuffled_videos)
 
-    # Spread out same-show episodes so e.g. two All_That episodes don't play
-    # back-to-back. Operates on the post-shuffle order for deterministic daily
-    # output when seeded.
-    shuffled_videos = _deinterleave_by_show(shuffled_videos)
+    # 48-hour no-repeat window: prefer videos that didn't play in the last 48
+    # hours. If we have enough fresh footage to fill the day, use only fresh
+    # videos; otherwise push the recently-played ones to the back of the queue.
+    if not force_random:
+        try:
+            recent_ids = await _get_recent_video_ids(channel.get('id', ''), date, hours=48)
+        except Exception:
+            recent_ids = set()
+        if recent_ids:
+            fresh = [v for v in shuffled_videos if v.get('id') not in recent_ids]
+            stale = [v for v in shuffled_videos if v.get('id') in recent_ids]
+            fresh_dur = sum((v.get('duration') or 300) for v in fresh)
+            if fresh_dur >= 86400:
+                # Enough fresh content to fill 24 hours — drop the stale ones
+                shuffled_videos = fresh
+            else:
+                # Not enough fresh — keep all, but order fresh first
+                shuffled_videos = fresh + stale
+
+    # Spread out same-show episodes so the same show doesn't repeat until ALL
+    # other shows have played. min_distance = distinct shows minus 1.
+    distinct_shows = len({
+        _show_key(v.get('title', ''))
+        for v in shuffled_videos
+        if _show_key(v.get('title', ''))
+    })
+    min_dist = max(5, distinct_shows - 1)
+    shuffled_videos = _deinterleave_by_show(shuffled_videos, min_distance=min_dist)
     
     # Reset random seed
     if not force_random:
