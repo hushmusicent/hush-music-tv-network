@@ -1433,7 +1433,7 @@ const LiveTV = () => {
           {/* Commercial Break Player */}
           {isCommercialBreak && commercialBreakVideos.length > 0 && (
             <div className="absolute inset-0 z-50 bg-black">
-              {/* Commercial video */}
+              {/* Commercial video — quieter than program audio */}
               <video
                 ref={commercialVideoRef}
                 src={commercialBreakVideos[currentCommercialIndex]?.url}
@@ -1441,6 +1441,7 @@ const LiveTV = () => {
                 autoPlay
                 muted={isMuted}
                 playsInline
+                onLoadedData={(e) => { try { e.target.volume = 0.6; } catch (_) {} }}
                 onEnded={handleCommercialEnded}
                 onError={handleCommercialEnded}
               />
