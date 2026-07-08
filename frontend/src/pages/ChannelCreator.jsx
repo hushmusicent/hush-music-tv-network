@@ -430,7 +430,29 @@ const ChannelCreator = () => {
         const existingVideoIds = new Set(
           (existingChannel?.videos || []).map(v => v.id)
         );
-        
+        const existingVideoMap = new Map(
+          (existingChannel?.videos || []).map(v => [v.id, v])
+        );
+
+        // 1. Update ANY existing video whose title/duration/thumbnail changed
+        const changedExisting = videos.filter(v => {
+          if (!v.id || !existingVideoMap.has(v.id)) return false;
+          const orig = existingVideoMap.get(v.id);
+          return (
+            (v.title || '') !== (orig.title || '') ||
+            Number(v.duration || 0) !== Number(orig.duration || 0) ||
+            (v.thumbnail || '') !== (orig.thumbnail || '')
+          );
+        });
+        for (const video of changedExisting) {
+          await channelsAPI.updateVideo(channelId, video.id, {
+            title: video.title,
+            duration: Number(video.duration || 0),
+            thumbnail: video.thumbnail || null,
+          });
+        }
+
+        // 2. Add newly-added videos to the channel
         const newVideos = videos.filter(v => 
           !v._persisted && (
             v.id?.startsWith('uploaded-') || 
