@@ -108,7 +108,11 @@ const ChannelCreator = () => {
     try {
       const response = await channelsAPI.getById(channelId);
       const channel = response.data;
-      setExistingChannel(channel); // Store the original channel data
+      // Deep-clone videos so future in-place edits to `videos` state don't
+      // silently mutate `existingChannel.videos` (they share object refs).
+      // Without this, the save-diff sees no changes and skips update calls.
+      const originalVideos = (channel.videos || []).map(v => ({ ...v }));
+      setExistingChannel({ ...channel, videos: originalVideos });
       setFormData({
         name: channel.name,
         description: channel.description || '',
