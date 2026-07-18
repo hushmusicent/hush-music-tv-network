@@ -589,8 +589,11 @@ async def update_video_in_channel(
     update_fields = {}
     if data.title is not None:
         update_fields["videos.$.title"] = data.title
+        # Mark as manually renamed so the YouTube auto-metadata fix leaves it alone
+        update_fields["videos.$.title_locked"] = True
     if data.duration is not None:
         update_fields["videos.$.duration"] = data.duration
+        update_fields["videos.$.duration_locked"] = True
     if data.thumbnail is not None:
         update_fields["videos.$.thumbnail"] = data.thumbnail
     
@@ -1975,6 +1978,8 @@ async def update_all_uploaded_durations(user: dict = Depends(require_user)):
                 continue
             if video.get("duration", 300) != 300:
                 continue
+            if video.get("duration_locked"):
+                continue  # Skip manually-locked durations
             video_tasks.append((ci, vi, video_url, video.get("title", "Unknown")))
     
     if not video_tasks:
@@ -2321,8 +2326,11 @@ async def fix_all_video_metadata(user: dict = Depends(require_user)):
             yt_id = video.get("youtube_id")
             if not yt_id:
                 continue
-            needs_dur = video.get("duration", 300) == 300
-            needs_title = is_generic_title(video.get("title", ""))
+            # Respect manual overrides: skip if BOTH title and duration are locked
+            title_locked = bool(video.get("title_locked"))
+            dur_locked = bool(video.get("duration_locked"))
+            needs_dur = (not dur_locked) and video.get("duration", 300) == 300
+            needs_title = (not title_locked) and is_generic_title(video.get("title", ""))
             if needs_dur or needs_title:
                 if yt_id not in yt_needs_update:
                     yt_needs_update[yt_id] = []
@@ -2335,6 +2343,8 @@ async def fix_all_video_metadata(user: dict = Depends(require_user)):
             video_url = video.get("video_url")
             if not video_url or not video_url.startswith("http"):
                 continue
+            if video.get("duration_locked"):
+                continue  # manual override — don't touch
             if video.get("duration", 300) == 300:
                 uploaded_tasks.append((ci, vi, video_url))
     
@@ -2359,17 +2369,19 @@ async def fix_all_video_metadata(user: dict = Depends(require_user)):
             for ci, vi in yt_needs_update[yt_id]:
                 video = channels[ci]["videos"][vi]
                 changed = False
+                title_locked = bool(video.get("title_locked"))
+                dur_locked = bool(video.get("duration_locked"))
                 
-                # Update duration if it was default
+                # Update duration if it was default and NOT manually locked
                 duration = info.get("duration", 0)
-                if duration > 0 and video.get("duration", 300) == 300:
+                if duration > 0 and video.get("duration", 300) == 300 and not dur_locked:
                     channels[ci]["videos"][vi]["duration"] = duration
                     yt_dur_updated += 1
                     changed = True
                 
-                # Update title if it was generic
+                # Update title if it was generic and NOT manually locked
                 title = info.get("title", "")
-                if title and is_generic_title(video.get("title", "")):
+                if title and is_generic_title(video.get("title", "")) and not title_locked:
                     channels[ci]["videos"][vi]["title"] = title
                     yt_title_updated += 1
                     changed = True
@@ -2402,6 +2414,8 @@ async def fix_all_video_metadata(user: dict = Depends(require_user)):
             for (ci, vi), f in future_map.items():
                 try:
                     duration = await f
+                    if channels[ci]["videos"][vi].get("duration_locked"):
+                        continue
                     if duration > 0 and duration != 300:
                         channels[ci]["videos"][vi]["duration"] = duration
                         uploaded_updated += 1
@@ -3018,8 +3032,10 @@ async def update_video_durations(user: dict = Depends(require_user), limit: int 
             yt_id = video.get("youtube_id")
             if not yt_id:
                 continue
-            needs_dur = video.get("duration", 300) in [300, 180, 0]
-            needs_title = bool(re.match(r'^Video \d+$', video.get("title", "").strip()))
+            title_locked = bool(video.get("title_locked"))
+            dur_locked = bool(video.get("duration_locked"))
+            needs_dur = (not dur_locked) and video.get("duration", 300) in [300, 180, 0]
+            needs_title = (not title_locked) and bool(re.match(r'^Video \d+$', video.get("title", "").strip()))
             if needs_dur or needs_title:
                 if yt_id not in yt_ids_to_fix:
                     yt_ids_to_fix[yt_id] = []
