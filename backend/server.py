@@ -3172,7 +3172,7 @@ async def update_single_video_duration(
             # Generate new schedule
             updated_channel = await db.channels.find_one({"id": channel_id}, {"_id": 0})
             if updated_channel:
-                schedule = await generate_24h_schedule(updated_channel, today, force_random=False)
+                schedule = await generate_24h_schedule(updated_channel, today, force_random=True)
                 await db.schedules.insert_one(schedule)
         
         return {"updated": True, "new_duration": duration, "schedule_regenerated": abs(old_duration - duration) > 60}
@@ -4996,7 +4996,7 @@ async def regenerate_all_schedules(user: dict = Depends(require_user)):
         await db.schedules.delete_one({"channel_id": channel["id"], "schedule_date": today})
         
         # Generate new schedule with current durations
-        schedule = await generate_24h_schedule(channel, today, force_random=False)
+        schedule = await generate_24h_schedule(channel, today, force_random=True)
         
         # Store in database
         await db.schedules.insert_one(schedule)
@@ -5005,40 +5005,59 @@ async def regenerate_all_schedules(user: dict = Depends(require_user)):
     return {"regenerated": regenerated, "date": today}
 
 def _show_key(title: str) -> str:
-    """Strip episode/season markers so episodes of the same show share a key.
-    e.g. 'All_That_Season_1_Episode_5' and 'All_That_Season_2_Episode_1' -> 'all_that'.
+    """Extract a normalized "show name" key so different episodes of the same
+    show collapse together. Strategy:
+      1. Split on strong "Show - Episode" delimiters (' - ', '_-_', em-dash)
+         and keep the left side. This handles most human-readable titles like
+         'Tripping the Rift - Benito's Revenge' or 'Webster - 01'.
+      2. Fallback: strip trailing episode markers (Season/Episode/S1E2/1x5/
+         year, part, trailing bare number) for titles that don't use ' - '.
+      3. Normalize case, underscores, dashes, and whitespace so
+         'The-Amanda-Show' == 'The Amanda Show' == 'the_amanda_show'.
     """
     if not title:
         return ''
     import re as _re
-    t = title.lower().strip()
+    t = title.strip()
+
+    # Step 1: strong delimiter split
+    for delim in [' - ', ' – ', ' — ', '_-_']:
+        if delim in t:
+            t = t.split(delim, 1)[0].strip()
+            break
+
+    # Step 2: strip trailing episode/season markers
+    t_lower = t.lower()
     patterns = [
         r'[\s_\-]+season[\s_\-]*\d+[\s_\-]*episode[\s_\-]*\d+.*$',
         r'[\s_\-]+s\d+e\d+.*$',
-        r'[\s_\-]+s\d{1,2}\s*-\s*e\d{1,3}.*$',
-        r'[\s_\-]+\d{4}[\s_\-]*\d+.*$',  # _2024_5
+        r'[\s_\-]+s\d{1,2}[\s_\-]*e\d{1,3}.*$',
         r'[\s_\-]+ep[\s_\-]*\d+.*$',
         r'[\s_\-]+episode[\s_\-]*\d+.*$',
-        r'[\s_\-]+e\d+.*$',
         r'[\s_\-]+part[\s_\-]*\d+.*$',
         r'\(\d{4}\).*$',
+        r'[\s_\-]+\d+x\d+.*$',         # 1x5 format
+        r'[\s_\-]+\d{4}([\s_\-]+\d+)?$',  # trailing year / year_seq
+        r'[\s_\-]+e\d+.*$',
+        r'[\s_\-]+\d+$',              # trailing bare number
     ]
     for p in patterns:
-        new = _re.sub(p, '', t)
-        if new != t:
-            t = new
+        new = _re.sub(p, '', t_lower)
+        if new and new != t_lower:
+            t_lower = new
             break
-    # Final tidy: collapse separators so 'all_that' == 'all that' == 'all-that'
-    t = _re.sub(r'[\s_\-]+', '_', t).strip('_')
-    return t
+
+    # Step 3: normalize into canonical key
+    key = _re.sub(r'[\s_\-]+', '_', t_lower).strip('_')
+    return key
 
 
 def _deinterleave_by_show(videos: list, min_distance: int = 5) -> list:
     """Reorder so any two videos sharing a show key are at least ``min_distance``
-    positions apart (i.e. with at least min_distance OTHER videos between them).
-    Uses a max-heap + cooldown queue (Leetcode 358 / Reorganize String K Apart).
-    Falls back gracefully when one show dominates and a perfect spread is
-    mathematically impossible.
+    positions apart. Uses a max-heap + cooldown queue (Reorganize String K
+    Apart). Also enforces the *softer* requirement that the fallback path
+    (heap empty) never selects the same key that was JUST placed — so back-to-
+    back repeats never happen even under scarcity.
     """
     n = len(videos)
     if n < 2:
@@ -5047,8 +5066,6 @@ def _deinterleave_by_show(videos: list, min_distance: int = 5) -> list:
     import heapq as _heapq
     from collections import deque as _deque
 
-    # Bucket videos by show key. Empty/unique keys -> each gets its own bucket
-    # so single tracks (e.g. music videos) never block anything.
     groups: dict = {}
     for v in videos:
         k = _show_key(v.get('title', '')) or ''
@@ -5063,10 +5080,10 @@ def _deinterleave_by_show(videos: list, min_distance: int = 5) -> list:
         tb += 1
 
     out: list = []
-    cooldown: _deque = _deque()  # entries: (re_admit_at_len, remaining, key)
+    last_key = None
+    cooldown: _deque = _deque()
 
     while len(out) < n:
-        # Re-admit any show that has cooled enough
         while cooldown and cooldown[0][0] <= len(out):
             _, cnt, key = cooldown.popleft()
             if cnt > 0:
@@ -5076,26 +5093,37 @@ def _deinterleave_by_show(videos: list, min_distance: int = 5) -> list:
         if heap:
             neg_cnt, _, key = _heapq.heappop(heap)
             out.append(groups[key].pop(0))
+            last_key = key
             remaining = -neg_cnt - 1
             cooldown.append((len(out) + min_distance, remaining, key))
         else:
-            # Heap is empty - we must pull from cooldown early (collision).
-            # Pick the cooled show with the most remaining videos.
+            # Fallback: pick from cooldown. NEVER pick the same key as last_key
+            # (guarantees no back-to-back), then prefer the one with most
+            # remaining videos.
             if not cooldown:
                 break
             best_idx = -1
             best_cnt = 0
-            for i, (_, cnt, _) in enumerate(cooldown):
+            for i, (_, cnt, key_i) in enumerate(cooldown):
+                if key_i == last_key:
+                    continue
                 if cnt > best_cnt:
                     best_cnt = cnt
                     best_idx = i
             if best_idx < 0:
-                break
+                # Only last_key has remaining videos — unavoidable repeat
+                for i, (_, cnt, _) in enumerate(cooldown):
+                    if cnt > best_cnt:
+                        best_cnt = cnt
+                        best_idx = i
+                if best_idx < 0:
+                    break
             re_at, cnt, key = cooldown[best_idx]
             tmp = list(cooldown)
             del tmp[best_idx]
             cooldown = _deque(tmp)
             out.append(groups[key].pop(0))
+            last_key = key
             cooldown.append((len(out) + min_distance, cnt - 1, key))
 
     return out
