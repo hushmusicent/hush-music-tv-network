@@ -22,11 +22,13 @@ import BulkThumbnails from './pages/BulkThumbnails';
 import YouTubeSettings from './pages/YouTubeSettings';
 import DownloadApp from './pages/DownloadApp';
 import Commercials from './pages/Commercials';
+import TVCursor from './components/TVCursor';
 
 function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
+        <TVCursor />
         <Routes>
           {/* Embed pages - no layout, minimal UI */}
           <Route path="/embed/:channelId" element={<EmbedPlayer />} />
