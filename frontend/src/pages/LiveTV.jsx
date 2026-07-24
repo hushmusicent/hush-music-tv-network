@@ -1298,18 +1298,18 @@ const LiveTV = () => {
 
   return (
     <div className="min-h-screen bg-black text-white flex flex-col md:flex-row" data-testid="live-tv-page">
-      {/* Channel Sidebar - Overlay on mobile, fixed sidebar on desktop */}
+      {/* Channel Sidebar - Overlay on mobile & fullscreen, fixed sidebar on desktop */}
       {showChannelList && (
         <>
-          {/* Mobile overlay backdrop */}
-          {isMobile && (
+          {/* Overlay backdrop (mobile or fullscreen) */}
+          {(isMobile || isFullscreen) && (
             <div 
-              className="fixed inset-0 bg-black/70 z-40 md:hidden"
+              className="fixed inset-0 bg-black/70 z-40"
               onClick={() => setShowChannelList(false)}
             />
           )}
           <div className={`
-            ${isMobile 
+            ${(isMobile || isFullscreen)
               ? 'fixed inset-y-0 left-0 z-50 w-[280px] animate-in slide-in-from-left duration-200' 
               : 'w-72 relative'
             }
@@ -1424,13 +1424,14 @@ const LiveTV = () => {
             </div>
           )}
           
-          {/* Desktop: Show sidebar toggle */}
-          {!showChannelList && !isFullscreen && !isMobile && (
+          {/* Desktop: Show sidebar toggle - also visible in fullscreen, auto-hides with controls */}
+          {!showChannelList && !isMobile && (
             <Button
               variant="ghost"
               size="icon"
               onClick={() => setShowChannelList(true)}
-              className="absolute top-4 left-4 z-20 bg-black/50 hover:bg-black/70"
+              className={`${isFullscreen ? 'fixed' : 'absolute'} top-4 left-4 z-40 bg-black/50 hover:bg-black/70 transition-opacity duration-300 ${controlsVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+              data-testid="channels-list-toggle"
             >
               <List size={20} />
             </Button>
