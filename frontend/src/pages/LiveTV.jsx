@@ -230,6 +230,7 @@ const LiveTV = () => {
   // Auto-hide controls after inactivity
   const CONTROLS_HIDE_DELAY = 3000;
   const isPausedRef = useRef(isPaused);
+  const showControlsTriggerRef = useRef(() => {});
   
   // Detect mobile screen resize
   useEffect(() => {
@@ -262,6 +263,7 @@ const LiveTV = () => {
       }, CONTROLS_HIDE_DELAY);
     };
     
+    showControlsTriggerRef.current = showAndStartTimer;
     const handleActivity = () => showAndStartTimer();
 
     document.addEventListener('mousemove', handleActivity);
@@ -279,7 +281,11 @@ const LiveTV = () => {
 
   useEffect(() => {
     const handleFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
+      const nowFs = !!document.fullscreenElement;
+      setIsFullscreen(nowFs);
+      // Briefly reveal channel tab + controls when entering/exiting fullscreen,
+      // then auto-hide via the existing controls timer.
+      showControlsTriggerRef.current?.();
     };
     document.addEventListener('fullscreenchange', handleFullscreenChange);
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
@@ -1599,7 +1605,7 @@ const LiveTV = () => {
 
           {/* Now Playing OSD - Responsive */}
           {currentChannel && currentVideo && (
-            <div className={`${isFullscreen ? 'fixed' : 'absolute'} ${isMobile ? 'top-12 right-2 max-w-[200px] p-2' : 'top-4 right-4 max-w-sm p-3'} bg-black/70 backdrop-blur-sm rounded-lg z-40 transition-opacity duration-300 ${controlsVisible ? 'opacity-100' : 'opacity-0'}`}>
+            <div className={`${isFullscreen ? 'fixed' : 'absolute'} ${isMobile ? 'top-12 right-2 max-w-[200px] p-2' : 'top-4 right-4 max-w-sm p-3'} bg-black/70 backdrop-blur-sm rounded-lg z-40 transition-opacity duration-300 ${controlsVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`} data-testid="now-playing-osd">
               <div className="flex items-center gap-2 mb-1 md:mb-2">
                 {isPaused ? (
                   <>

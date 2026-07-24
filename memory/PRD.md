@@ -105,6 +105,10 @@ Build a TV network app named "Hush Music TV Network" with admin-only channel/vid
 - **Batch YouTube API**: Duration endpoint now uses batch API (200 videos per call) and also fixes generic titles
 - **Frontend timeout**: Increased to 5 minutes for long-running admin operations
 
+
+## Completed (Feb 24, 2026)
+- **Fullscreen Auto-Hide Channel Tab**: Entering/exiting fullscreen now briefly reveals the Now-Playing OSD (channel + video title) and the channel changer via the existing `controlsVisible` timer, then auto-fades after 3s — matching the channel-changer overlay behavior. Implemented in `/app/frontend/src/pages/LiveTV.jsx` by exposing `showAndStartTimer` via `showControlsTriggerRef` and calling it from the `fullscreenchange` handler. Added `pointer-events-none` to the OSD when hidden so it doesn't block clicks.
+
 ## Previous Completions
 - P0 Playback Bug Fix (React re-render loop)
 - Full Data Migration from production
