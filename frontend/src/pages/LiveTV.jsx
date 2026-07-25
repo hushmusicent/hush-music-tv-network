@@ -1430,7 +1430,7 @@ const LiveTV = () => {
               variant="ghost"
               size="icon"
               onClick={() => setShowChannelList(true)}
-              className={`${isFullscreen ? 'fixed' : 'absolute'} top-4 left-4 z-40 bg-black/50 hover:bg-black/70 transition-opacity duration-300 ${controlsVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+              className={`${isFullscreen ? 'fixed' : 'absolute'} top-4 left-4 z-50 h-11 w-11 rounded-xl bg-[#12121a]/95 backdrop-blur-sm border border-white/10 text-white hover:bg-primary/20 hover:text-primary transition-opacity duration-300 ${controlsVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
               data-testid="channels-list-toggle"
             >
               <List size={20} />
