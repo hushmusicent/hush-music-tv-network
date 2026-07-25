@@ -218,6 +218,7 @@ const LiveTV = () => {
   const COMMERCIALS_PER_BREAK = 3;
   
   const playerRef = useRef(null);
+  const pageRef = useRef(null);
   const videoRef = useRef(null);
   const youtubePlayerRef = useRef(null);
   const proxyVideoRef = useRef(null); // For proxy video player
@@ -1161,12 +1162,12 @@ const LiveTV = () => {
   };
 
   const toggleFullscreen = () => {
-    const player = playerRef.current;
-    if (!player) return;
+    const target = pageRef.current || playerRef.current;
+    if (!target) return;
     if (document.fullscreenElement) {
       document.exitFullscreen();
     } else {
-      player.requestFullscreen();
+      target.requestFullscreen();
     }
   };
 
@@ -1297,7 +1298,7 @@ const LiveTV = () => {
   };
 
   return (
-    <div className="min-h-screen bg-black text-white flex flex-col md:flex-row" data-testid="live-tv-page">
+    <div ref={pageRef} className="min-h-screen bg-black text-white flex flex-col md:flex-row" data-testid="live-tv-page">
       {/* Channel Sidebar - Overlay on mobile & fullscreen, fixed sidebar on desktop */}
       {showChannelList && (
         <>
