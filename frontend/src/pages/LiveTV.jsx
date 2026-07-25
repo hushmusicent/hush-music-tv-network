@@ -1405,36 +1405,16 @@ const LiveTV = () => {
           className={`flex-1 relative bg-black ${isFullscreen ? 'w-full h-full' : isMobile ? 'h-[60vh]' : ''}`} 
           ref={playerRef}
         >
-          {/* Mobile top bar with channel button */}
-          {isMobile && !isFullscreen && (
-            <div className="absolute top-0 left-0 right-0 z-20 p-2 flex items-center justify-between bg-gradient-to-b from-black/80 to-transparent">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowChannelList(true)}
-                className="bg-black/50 hover:bg-black/70 h-8 px-2"
-              >
-                <List size={16} className="mr-1" />
-                <span className="text-xs">Channels</span>
-              </Button>
-              {currentChannel && (
-                <div className="text-xs text-white/80 truncate max-w-[50%]">
-                  {currentChannel.name}
-                </div>
-              )}
-            </div>
-          )}
-          
-          {/* Desktop: Show sidebar toggle - also visible in fullscreen, auto-hides with controls */}
-          {!showChannelList && !isMobile && (
+          {/* Sidebar toggle - visible in all modes (mobile/desktop, fullscreen too), auto-hides with controls */}
+          {!showChannelList && (
             <Button
               variant="ghost"
-              size="icon"
               onClick={() => setShowChannelList(true)}
-              className={`${isFullscreen ? 'fixed' : 'absolute'} top-4 left-4 z-50 h-11 w-11 rounded-xl bg-[#12121a]/95 backdrop-blur-sm border border-white/10 text-white hover:bg-primary/20 hover:text-primary transition-opacity duration-300 ${controlsVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+              className={`${isFullscreen ? 'fixed' : 'absolute'} top-4 left-4 z-50 h-11 px-3 rounded-xl bg-[#12121a]/95 backdrop-blur-sm border border-white/10 text-white hover:bg-primary/20 hover:text-primary transition-opacity duration-300 flex items-center gap-2 ${controlsVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
               data-testid="channels-list-toggle"
             >
-              <List size={20} />
+              <List size={18} />
+              <span className="text-sm font-medium">Channels</span>
             </Button>
           )}
 
@@ -1739,11 +1719,14 @@ const LiveTV = () => {
                 )}
                 <Button
                   variant="ghost"
-                  size="icon"
                   onClick={toggleFullscreen}
-                  className={`hover:bg-white/10 ${isMobile ? 'h-8 w-8' : ''}`}
+                  className={`hover:bg-white/10 flex items-center gap-1 ${isMobile ? 'h-8 px-2' : 'h-9 px-3'}`}
+                  data-testid="fullscreen-toggle"
                 >
                   <Maximize size={isMobile ? 16 : 20} />
+                  <span className={`${isMobile ? 'text-[11px]' : 'text-sm'} font-medium`}>
+                    {isFullscreen ? 'Exit' : 'FullScreen'}
+                  </span>
                 </Button>
               </div>
             </div>
