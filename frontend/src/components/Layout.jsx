@@ -60,12 +60,11 @@ const Layout = ({ children }) => {
             </button>
             
             <Link to="/" className="flex items-center gap-3 group" data-testid="logo-link">
-              <div className="p-2 bg-primary rounded-lg glow-primary group-hover:scale-110 transition-transform">
-                <Tv size={24} className="text-white" />
-              </div>
-              <span className="font-heading text-2xl tracking-wider hidden sm:block">
-                HUSH MUSIC <span className="text-primary">TV</span>
-              </span>
+              <img
+                src="/hush-logo-tight.png"
+                alt="Hush Music TV"
+                className="h-12 w-auto group-hover:scale-110 transition-transform"
+              />
             </Link>
           </div>
 

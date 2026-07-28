@@ -81,10 +81,7 @@ const Login = () => {
         
         <div className="relative z-10 flex flex-col justify-between p-12">
           <Link to="/" className="flex items-center gap-3">
-            <div className="p-2 bg-primary rounded-lg">
-              <Tv size={24} />
-            </div>
-            <span className="font-heading text-3xl tracking-wider">HUSH MUSIC TV</span>
+            <img src="/hush-logo-tight.png" alt="Hush Music TV" className="h-16 w-auto" />
           </Link>
           
           <div>
@@ -110,10 +107,7 @@ const Login = () => {
           {/* Mobile Logo */}
           <div className="lg:hidden mb-8">
             <Link to="/" className="flex items-center gap-3">
-              <div className="p-2 bg-primary rounded-lg">
-                <Tv size={24} />
-              </div>
-              <span className="font-heading text-2xl tracking-wider">HUSH MUSIC TV</span>
+              <img src="/hush-logo-tight.png" alt="Hush Music TV" className="h-12 w-auto" />
             </Link>
           </div>
 
