@@ -93,10 +93,38 @@
         color: #999;
         padding: 8px;
       }
+
+      /* Initial loading splash — visible until React mounts */
+      #app-splash {
+        position: fixed;
+        inset: 0;
+        background: #000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 99999;
+        transition: opacity 0.5s ease;
+      }
+      #app-splash.fade-out {
+        opacity: 0;
+        pointer-events: none;
+      }
+      #app-splash img {
+        width: min(60vw, 320px);
+        height: auto;
+        animation: splash-pulse 1.6s ease-in-out infinite;
+      }
+      @keyframes splash-pulse {
+        0%, 100% { opacity: 0.85; transform: scale(1); }
+        50% { opacity: 1; transform: scale(1.04); }
+      }
     </style>
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>
+    <div id="app-splash">
+      <img src="/hush-logo-tight.png" alt="Hush Music TV" />
+    </div>
     <div id="root"></div>
     
     <!-- PWA Install Banner -->
