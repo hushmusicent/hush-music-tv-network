@@ -49,9 +49,17 @@ async def measure_lufs(url):
         return None
 
 
-async def apply_loudnorm_and_denoise(url, target_lufs=-16.0):
-    """Download, re-encode audio (video copied), re-upload to same R2 key."""
+async def apply_loudnorm_and_denoise(url, target_lufs=-16.0, current_lufs=None, current_peak=None):
+    """Fast normalization: pre-computed static gain + peak limiter.
+    ~10x faster than dynamic loudnorm+afftdn. Uses the LUFS we already measured
+    to compute exact gain needed, then applies gain + alimiter to prevent clipping.
+    """
     from r2_service import get_r2_client, R2_BUCKET_NAME
+    if current_lufs is None:
+        return False, 'missing lufs measurement'
+    gain_db = target_lufs - current_lufs  # e.g. -25 → -16 = +9 dB gain
+    # Cap gain to avoid noise amplification on already-clipping content
+    gain_db = max(-12.0, min(gain_db, 18.0))
     key = urlparse(url).path.lstrip('/')
     with tempfile.TemporaryDirectory() as work:
         local_in = os.path.join(work, 'in.mp4')
@@ -63,12 +71,13 @@ async def apply_loudnorm_and_denoise(url, target_lufs=-16.0):
         )
         _, derr = await asyncio.wait_for(dl.communicate(), timeout=900)
         if dl.returncode != 0:
-            return False, f'download failed'
-        # Re-encode audio: loudnorm (single-pass) + light denoise + gentle highpass
-        # -c:v copy keeps video stream untouched (fast)
+            return False, 'download failed'
+        # Fast filter chain: highpass (60Hz rumble cut) + gain + alimiter (peak safety)
+        # No dynamic loudnorm, no FFT denoise → ~10x speedup
+        filter_str = f'highpass=f=60,volume={gain_db:.2f}dB,alimiter=limit=0.891:release=200'
         ff = await asyncio.create_subprocess_exec(
             'ffmpeg', '-y', '-i', local_in,
-            '-af', f'highpass=f=60,afftdn=nf=-25,loudnorm=I={target_lufs}:TP=-1.5:LRA=11',
+            '-af', filter_str,
             '-c:v', 'copy', '-c:a', 'aac', '-b:a', '160k', '-ar', '48000',
             '-movflags', '+faststart', local_out,
             stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.PIPE,
@@ -82,7 +91,7 @@ async def apply_loudnorm_and_denoise(url, target_lufs=-16.0):
             r2.upload_fileobj(fh, R2_BUCKET_NAME, key,
                               ExtraArgs={'ContentType': 'video/mp4',
                                          'CacheControl': 'public, max-age=3600'})
-        return True, 'ok'
+        return True, f'gain={gain_db:+.1f}dB'
 
 
 # ────────────────────────── phase 1 ──────────────────────────
@@ -149,7 +158,11 @@ async def fix_phase():
     async def work(doc):
         nonlocal done, ok_count
         async with sem:
-            ok, msg = await apply_loudnorm_and_denoise(doc['url'])
+            ok, msg = await apply_loudnorm_and_denoise(
+                doc['url'],
+                current_lufs=doc.get('lufs'),
+                current_peak=doc.get('peak_dbtp'),
+            )
             if ok:
                 await db.uploaded_videos.update_one(
                     {'_id': doc['_id']},
@@ -168,7 +181,7 @@ async def fix_phase():
                 eta_h = (total - done) / max(rate, 0.001) / 3600
                 print(f"  fix progress: {done}/{total} (ok={ok_count}) — ETA {eta_h:.1f}h")
 
-    cursor = db.uploaded_videos.find(query, {'url': 1})
+    cursor = db.uploaded_videos.find(query, {'url': 1, 'lufs': 1, 'peak_dbtp': 1})
     tasks = []
     async for doc in cursor:
         tasks.append(asyncio.create_task(work(doc)))
