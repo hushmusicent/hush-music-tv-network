@@ -2059,8 +2059,14 @@ async def update_single_video_duration(
 from youtube_api import get_videos_info_batch, is_youtube_api_configured
 
 @api_router.post("/channels/{channel_id}/update-youtube-durations")
-async def update_youtube_video_durations(channel_id: str, user: dict = Depends(require_user)):
-    """Update video durations for all YouTube videos in a channel using YouTube Data API"""
+async def update_youtube_video_durations(
+    channel_id: str,
+    force: bool = False,
+    user: dict = Depends(require_user)
+):
+    """Update video titles+durations+thumbnails for all YouTube videos in a channel.
+    By default only refreshes videos with placeholder duration (300s) or generic
+    'Video N' titles. Pass `?force=true` to refresh every non-title-locked video."""
     if not user.get("is_admin", False):
         raise HTTPException(status_code=403, detail="Admin access required")
     
@@ -2070,20 +2076,25 @@ async def update_youtube_video_durations(channel_id: str, user: dict = Depends(r
     
     videos = channel.get("videos", [])
     
-    # Collect YouTube video IDs that need duration update
+    # Collect YouTube video IDs that need enrichment
     youtube_ids = []
     id_to_index = {}
     
     for i, video in enumerate(videos):
         youtube_id = video.get("youtube_id")
-        if youtube_id:
-            # Only update if still has default duration
-            if video.get("duration", 300) == 300:
-                youtube_ids.append(youtube_id)
-                id_to_index[youtube_id] = i
+        if not youtube_id:
+            continue
+        if video.get("title_locked"):
+            continue  # user-renamed — leave alone
+        title = str(video.get("title", "")).strip()
+        is_generic = title.startswith("Video ") and title.replace("Video ", "").isdigit()
+        needs_duration = video.get("duration", 300) == 300
+        if force or needs_duration or is_generic:
+            youtube_ids.append(youtube_id)
+            id_to_index[youtube_id] = i
     
     if not youtube_ids:
-        return {"updated": 0, "total_videos": len(videos), "message": "No videos need duration update"}
+        return {"updated": 0, "total_videos": len(videos), "message": "No videos need enrichment"}
     
     # Use YouTube API if available, otherwise fall back to yt-dlp
     updated_count = 0
