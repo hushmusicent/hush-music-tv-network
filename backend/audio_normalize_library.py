@@ -25,7 +25,7 @@ db = client[os.environ['DB_NAME']]
 TARGET_LUFS = -16.0
 OFF_THRESHOLD = 3.0          # ≥3 LUFS off target ⇒ re-encode
 SCAN_CONCURRENCY = 10
-FIX_CONCURRENCY = 2
+FIX_CONCURRENCY = 5
 
 
 async def measure_lufs(url):
