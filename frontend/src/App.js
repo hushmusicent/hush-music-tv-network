@@ -22,6 +22,7 @@ import BulkThumbnails from './pages/BulkThumbnails';
 import YouTubeSettings from './pages/YouTubeSettings';
 import DownloadApp from './pages/DownloadApp';
 import Commercials from './pages/Commercials';
+import PrivacyPolicy from './pages/PrivacyPolicy';
 import TVCursor from './components/TVCursor';
 
 function App() {
@@ -36,6 +37,9 @@ function App() {
           
           {/* Download page - no layout */}
           <Route path="/download" element={<DownloadApp />} />
+          
+          {/* Privacy policy - no layout, publicly linkable for Play Store submission */}
+          <Route path="/privacy" element={<PrivacyPolicy />} />
           
           {/* Live TV - with layout */}
           <Route
