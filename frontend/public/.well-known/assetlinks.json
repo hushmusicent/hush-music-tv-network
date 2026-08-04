@@ -3,6 +3,6 @@
   "target": {
     "namespace": "android_app",
     "package_name": "com.hushmusictv.app",
-    "sha256_cert_fingerprints": ["REPLACE_WITH_YOUR_SIGNING_CERT_SHA256"]
+    "sha256_cert_fingerprints": ["23:B4:61:F2:F0:87:31:A3:8B:0C:0D:F9:DC:76:2D:32:32:A9:6B:42:9F:C9:D0:E6:E3:AA:03:1F:55:2D:98:21"]
   }
 }]
