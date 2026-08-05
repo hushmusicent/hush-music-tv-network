@@ -38,27 +38,69 @@
                     item = content.createChild("ContentNode")
                     item.title = ch.name
                     item.description = (ch.videos.Count()).ToStr() + " videos"
-                    if ch.icon <> invalid and Len(ch.icon) > 0
-                        item.HDPosterUrl = ch.icon
-                        item.SDPosterUrl = ch.icon
+                    if ch.thumbnail <> invalid and Len(ch.thumbnail) > 0
+                        item.HDPosterUrl = ch.thumbnail
+                        item.SDPosterUrl = ch.thumbnail
                     end if
                 end if
             end for
             m.channelList.content = content
-            m.status.text = "Select a channel to start watching"
+            m.status.text = "Select a channel to start   •   Press * for TV Guide"
         end sub
 
         sub onChannelSelected()
             idx = m.channelList.itemSelected
             if idx < 0 or idx >= m.channels.Count() then return
-            channel = m.channels[idx]
+            openPlayer(m.channels[idx])
+        end sub
 
-            ' Open the live player
+        sub openPlayer(channel as Object)
             player = m.top.createChild("LivePlayer")
             player.channel = channel
             player.backendBase = m.backendBase
             player.setFocus(true)
             player.observeField("closed", "onPlayerClosed")
+        end sub
+
+        sub openGuide()
+            guide = m.top.createChild("TVGuide")
+            guide.backendBase = m.backendBase
+            guide.channels = m.channels
+            guide.setFocus(true)
+            guide.observeField("closed", "onGuideClosed")
+            guide.observeField("selectedChannelIndex", "onGuideChannelPicked")
+        end sub
+
+        sub onGuideChannelPicked()
+            guide = getGuideNode()
+            if guide = invalid then return
+            idx = guide.selectedChannelIndex
+            if idx < 0 or idx >= m.channels.Count() then return
+            channel = m.channels[idx]
+            removeGuideNode()
+            openPlayer(channel)
+        end sub
+
+        sub onGuideClosed()
+            removeGuideNode()
+            m.channelList.setFocus(true)
+        end sub
+
+        function getGuideNode() as Object
+            for i = 0 to m.top.getChildCount() - 1
+                child = m.top.getChild(i)
+                if child.subtype() = "TVGuide" then return child
+            end for
+            return invalid
+        end function
+
+        sub removeGuideNode()
+            for i = m.top.getChildCount() - 1 to 0 step -1
+                child = m.top.getChild(i)
+                if child.subtype() = "TVGuide"
+                    m.top.removeChild(child)
+                end if
+            end for
         end sub
 
         sub onPlayerClosed()
@@ -73,9 +115,16 @@
         end sub
 
         function onKeyEvent(key as String, press as Boolean) as Boolean
-            if press and key = "back"
-                m.top.exit = true
-                return true
+            if press
+                if key = "back"
+                    m.top.exit = true
+                    return true
+                end if
+                if key = "options" or key = "info"
+                    ' Open TV Guide
+                    openGuide()
+                    return true
+                end if
             end if
             return false
         end function

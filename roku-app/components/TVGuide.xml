@@ -1,0 +1,214 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="TVGuide" extends="Group">
+    <interface>
+        <field id="channels" type="array" onChange="onChannelsSet" />
+        <field id="backendBase" type="string" />
+        <field id="closed" type="boolean" alwaysNotify="true" />
+        <field id="selectedChannelIndex" type="integer" value="-1" alwaysNotify="true" />
+    </interface>
+    <script type="text/brightscript" uri="pkg:/source/util.brs" />
+    <script type="text/brightscript">
+    <![CDATA[
+        SLOT_COUNT = 4          ' show NOW + next 3
+        SLOT_WIDTH = 380
+        ROW_HEIGHT = 92
+        VISIBLE_ROWS = 10
+        CHANNEL_COL = 260
+
+        sub init()
+            m.top.backgroundColor = "0x0A0A0AFF"
+            m.title = m.top.findNode("guideTitle")
+            m.header = m.top.findNode("headerRow")
+            m.rowsGroup = m.top.findNode("rowsGroup")
+            m.hint = m.top.findNode("hintLabel")
+            m.selectedRow = 0
+            m.rows = []
+        end sub
+
+        sub onChannelsSet()
+            ' Build header (time columns)
+            buildHeader()
+            ' Build one visible row per channel (up to VISIBLE_ROWS)
+            buildRows()
+            m.selectedRow = 0
+            drawFocus()
+        end sub
+
+        sub buildHeader()
+            m.header.removeChildrenIndex(m.header.getChildCount(), 0)
+            ' Channel column label
+            addLabelTo(m.header, "CHANNEL", 0, 0, 260, 60, "font:SmallBoldSystemFont", "0xAAAAAAFF")
+            ' Time headers: NOW, +30, +1h, +1.5h etc. (use current time)
+            now = CreateObject("roDateTime")
+            now.ToLocalTime()
+            hour = now.GetHours()
+            minute = now.GetMinutes()
+            for i = 0 to 3
+                x = 260 + (i * 380)
+                if i = 0
+                    labelText = "NOW  " + formatTime(hour, minute)
+                else
+                    ' Add ~30min * i (but round to real forward times)
+                    m2 = minute + (i * 30)
+                    h2 = hour + (m2 \ 60)
+                    m2 = m2 mod 60
+                    h2 = h2 mod 24
+                    labelText = formatTime(h2, m2)
+                end if
+                addLabelTo(m.header, labelText, x, 0, 380, 60, "font:SmallBoldSystemFont", "0xAAAAAAFF")
+            end for
+        end sub
+
+        function formatTime(h as Integer, m as Integer) as String
+            ampm = "AM"
+            hh = h
+            if hh = 0 then hh = 12
+            if hh > 12
+                hh = hh - 12
+                ampm = "PM"
+            else if hh = 12
+                ampm = "PM"
+            end if
+            mm = m.ToStr()
+            if Len(mm) = 1 then mm = "0" + mm
+            return hh.ToStr() + ":" + mm + " " + ampm
+        end function
+
+        sub buildRows()
+            m.rowsGroup.removeChildrenIndex(m.rowsGroup.getChildCount(), 0)
+            m.rows = []
+            channels = m.top.channels
+            if channels = invalid then return
+            n = channels.Count()
+            if n > 10 then n = 10
+            for i = 0 to n - 1
+                ch = channels[i]
+                row = m.rowsGroup.createChild("Group")
+                row.translation = [0, i * 92]
+                ' Background rectangle
+                bg = row.createChild("Rectangle")
+                bg.color = "0x14141AFF"
+                bg.width = 1780
+                bg.height = 84
+                bg.translation = [0, 4]
+                bg.id = "rowBg"
+                ' Channel name
+                addLabelTo(row, ch.name, 20, 24, 240, 40, "font:SmallBoldSystemFont", "0xFFFFFFFF")
+                ' Compute what plays in next 4 slots (30-min windows)
+                slots = getUpcomingSlots(ch, 4)
+                for j = 0 to 3
+                    x = 260 + (j * 380)
+                    slotBg = row.createChild("Rectangle")
+                    slotBg.width = 372
+                    slotBg.height = 76
+                    slotBg.translation = [x, 8]
+                    slotBg.color = "0x1F1F2AFF"
+                    if j = 0 then slotBg.color = "0x2A1F4AFF"
+                    slotLabel = "—"
+                    if slots.Count() > j and slots[j] <> invalid
+                        slotLabel = slots[j].title
+                    end if
+                    addLabelTo(row, slotLabel, x + 10, 30, 352, 40, "font:SmallSystemFont", "0xEEEEEEFF")
+                end for
+                m.rows.Push(row)
+            end for
+        end sub
+
+        sub addLabelTo(parent as Object, txt as String, x as Integer, y as Integer, w as Integer, h as Integer, fnt as String, color as String)
+            lbl = parent.createChild("Label")
+            lbl.text = txt
+            lbl.translation = [x, y]
+            lbl.width = w
+            lbl.height = h
+            lbl.horizAlign = "left"
+            lbl.vertAlign = "center"
+            lbl.font = fnt
+            lbl.color = color
+            lbl.maxLines = 1
+            lbl.ellipsizeOnBoundary = true
+        end sub
+
+        ' Returns titles of the next `count` 30-minute slots for a channel.
+        ' The video that plays in a 30-min window is whichever video would
+        ' be playing at the START of that window per the sync algorithm.
+        function getUpcomingSlots(ch as Object, count as Integer) as Object
+            slots = []
+            nowUtc = getUtcSeconds()
+            for i = 0 to count - 1
+                offset = nowUtc + (i * 1800)   ' + i * 30 min
+                s = getCurrentVideo(ch, offset)
+                if s <> invalid
+                    slots.Push(s.video)
+                else
+                    slots.Push(invalid)
+                end if
+            end for
+            return slots
+        end function
+
+        function getUtcSeconds() as Integer
+            dt = CreateObject("roDateTime")
+            return dt.AsSeconds()
+        end function
+
+        sub drawFocus()
+            for i = 0 to m.rows.Count() - 1
+                row = m.rows[i]
+                bg = row.getChild(0)   ' first child is rowBg
+                if i = m.selectedRow
+                    bg.color = "0x7C3AEDAA"
+                else
+                    bg.color = "0x14141AFF"
+                end if
+            end for
+        end sub
+
+        function onKeyEvent(key as String, press as Boolean) as Boolean
+            if not press then return false
+            if key = "back"
+                m.top.closed = true
+                return true
+            end if
+            if key = "up"
+                m.selectedRow = Max(0, m.selectedRow - 1)
+                drawFocus()
+                return true
+            end if
+            if key = "down"
+                m.selectedRow = Min(m.rows.Count() - 1, m.selectedRow + 1)
+                drawFocus()
+                return true
+            end if
+            if key = "OK" or key = "play"
+                m.top.selectedChannelIndex = m.selectedRow
+                return true
+            end if
+            return false
+        end function
+
+        function Max(a as Integer, b as Integer) as Integer
+            if a > b then return a
+            return b
+        end function
+        function Min(a as Integer, b as Integer) as Integer
+            if a < b then return a
+            return b
+        end function
+    ]]>
+    </script>
+    <children>
+        <Rectangle width="1920" height="1080" color="0x0A0A0AFF" />
+        <Label id="guideTitle"
+               text="TV GUIDE"
+               font="font:MediumBoldSystemFont"
+               color="0xFFFFFFFF"
+               translation="[70, 30]" />
+        <Group id="headerRow" translation="[70, 100]" />
+        <Group id="rowsGroup" translation="[70, 170]" />
+        <Label id="hintLabel"
+               text="Up/Down: Select channel   •   OK: Tune in   •   Back: Return"
+               font="font:SmallSystemFont"
+               color="0x888888FF"
+               translation="[70, 1030]" />
+    </children>
+</component>

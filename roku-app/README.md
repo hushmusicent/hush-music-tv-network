@@ -44,6 +44,8 @@ On your Roku, you should see:
 - A grid of all channels (loaded from your production API)
 - Pressing OK on any channel starts synchronized live playback
 - Up/Down arrows show the overlay with channel/video info (auto-hides after 4s)
+- **Press the `*` (options/star) button on your Roku remote from the channel grid → opens the TV Guide**
+- In the TV Guide: Up/Down selects channel, OK tunes to that channel, Back returns to grid
 - Back returns to the channel grid; Back again exits
 
 ## Step 4 — Publish to the Roku Channel Store
@@ -75,6 +77,6 @@ Once you're happy with how it works:
 
 ## Known limitations of this v1
 - **YouTube-sourced channels** stream via yt-dlp (your backend already exposes `/api/youtube/stream-info/{id}`). Those plays **do not count** toward the YouTube channel's public view count.
-- **No TV Guide screen yet** (grid-only for now). Add later if you want the horizontal schedule UI.
+- **TV Guide** shows the next 4 slots (30 min windows) per channel — grid style, not a horizontal scrolling timeline. Adequate for a "what's on now / next" overview.
 - **No search** (channel grid only). Roku users don't typically need this on a 59-channel network.
 - **No favorites** (would need per-device local storage).
