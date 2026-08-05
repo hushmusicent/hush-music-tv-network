@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="LivePlayer" extends="Group">
+    <interface>
+        <field id="channel" type="assocarray" onChange="onChannelSet" />
+        <field id="backendBase" type="string" />
+        <field id="closed" type="boolean" alwaysNotify="true" />
+    </interface>
+    <script type="text/brightscript" uri="pkg:/source/util.brs" />
+    <script type="text/brightscript">
+    <![CDATA[
+        sub init()
+            m.video = m.top.findNode("video")
+            m.overlay = m.top.findNode("overlay")
+            m.channelName = m.top.findNode("channelName")
+            m.videoTitle = m.top.findNode("videoTitle")
+            m.errorLabel = m.top.findNode("errorLabel")
+            m.hideTimer = m.top.findNode("hideOverlay")
+            m.hideTimer.observeField("fire", "onHideOverlay")
+            m.video.observeField("state", "onVideoState")
+        end sub
+
+        sub onChannelSet()
+            ch = m.top.channel
+            m.channelName.text = ch.name
+            showAndScheduleHide()
+            playCurrentSlot()
+        end sub
+
+        sub playCurrentSlot()
+            ch = m.top.channel
+            nowUtc = getUtcSeconds()
+            slot = getCurrentVideo(ch, nowUtc)
+            if slot = invalid
+                m.errorLabel.text = "No video scheduled right now."
+                return
+            end if
+
+            m.currentSeek = slot.seek
+            m.videoTitle.text = slot.video.title
+
+            ' Resolve URL (may hit backend for YouTube stream URL)
+            url = resolvePlayableUrl(slot.video, m.top.backendBase)
+            if Len(url) = 0
+                m.errorLabel.text = "Could not play this video. Skipping..."
+                skipToNext()
+                return
+            end if
+
+            m.errorLabel.text = ""
+            content = CreateObject("roSGNode", "ContentNode")
+            content.title = slot.video.title
+            content.url = url
+            content.streamFormat = detectFormat(url)
+
+            m.video.content = content
+            m.video.seekMode = "accurate"
+            m.video.seek = slot.seek
+            m.video.control = "play"
+        end sub
+
+        function detectFormat(url as String) as String
+            u = LCase(url)
+            if Instr(1, u, ".m3u8") > 0 then return "hls"
+            if Instr(1, u, ".mpd") > 0 then return "dash"
+            return "mp4"
+        end function
+
+        function getUtcSeconds() as Integer
+            dt = CreateObject("roDateTime")
+            return dt.AsSeconds()
+        end function
+
+        sub onVideoState()
+            s = m.video.state
+            if s = "finished"
+                playCurrentSlot()   ' next slot
+            else if s = "error"
+                m.errorLabel.text = "Playback error. Skipping..."
+                skipToNext()
+            end if
+        end sub
+
+        sub skipToNext()
+            ' Simple skip: recompute slot after a short delay
+            timer = CreateObject("roSGNode", "Timer")
+            timer.duration = 2
+            timer.observeField("fire", "playCurrentSlot")
+            m.top.appendChild(timer)
+            timer.control = "start"
+        end sub
+
+        sub showAndScheduleHide()
+            m.overlay.visible = true
+            m.hideTimer.control = "start"
+        end sub
+
+        sub onHideOverlay()
+            m.overlay.visible = false
+        end sub
+
+        function onKeyEvent(key as String, press as Boolean) as Boolean
+            if not press then return false
+            if key = "back" or key = "options"
+                m.video.control = "stop"
+                m.top.closed = true
+                return true
+            end if
+            if key = "up" or key = "down"
+                showAndScheduleHide()
+                return true
+            end if
+            if key = "OK" or key = "play"
+                showAndScheduleHide()
+                return true
+            end if
+            return false
+        end function
+    ]]>
+    </script>
+    <children>
+        <Video id="video" width="1920" height="1080" translation="[0, 0]" />
+
+        <Group id="overlay">
+            <Rectangle width="1920" height="140" translation="[0, 0]" color="0x000000AA" />
+            <Label id="channelName" translation="[70, 40]" font="font:MediumBoldSystemFont" color="0xFFFFFFFF" />
+            <Label id="videoTitle"  translation="[70, 90]" font="font:SmallSystemFont"      color="0xCCCCCCFF" />
+        </Group>
+
+        <Label id="errorLabel" translation="[70, 700]" font="font:LargeSystemFont" color="0xFF6666FF" />
+
+        <Timer id="hideOverlay" duration="4" repeat="false" />
+    </children>
+</component>

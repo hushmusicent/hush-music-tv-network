@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="HomeScene" extends="Scene">
+    <interface />
+    <script type="text/brightscript" uri="pkg:/source/util.brs" />
+    <script type="text/brightscript">
+    <![CDATA[
+        sub init()
+            m.top.backgroundURI = ""
+            m.top.backgroundColor = "#0A0A0A"
+
+            ' Title bar
+            m.title = m.top.findNode("titleLabel")
+            m.status = m.top.findNode("statusLabel")
+
+            ' Channel grid
+            m.channelList = m.top.findNode("channelList")
+            m.channelList.observeField("itemSelected", "onChannelSelected")
+            m.channelList.setFocus(true)
+
+            ' Load channels from backend
+            m.backendBase = "https://broadcaster.emergent.host"
+            loadChannels()
+        end sub
+
+        sub loadChannels()
+            m.status.text = "Loading channels..."
+            data = httpGetJson(m.backendBase + "/api/channels")
+            if data = invalid
+                m.status.text = "Unable to load channels. Check your connection."
+                return
+            end if
+
+            content = CreateObject("roSGNode", "ContentNode")
+            m.channels = []
+            for each ch in data
+                if ch.videos <> invalid and ch.videos.Count() > 0
+                    m.channels.Push(ch)
+                    item = content.createChild("ContentNode")
+                    item.title = ch.name
+                    item.description = (ch.videos.Count()).ToStr() + " videos"
+                    if ch.icon <> invalid and Len(ch.icon) > 0
+                        item.HDPosterUrl = ch.icon
+                        item.SDPosterUrl = ch.icon
+                    end if
+                end if
+            end for
+            m.channelList.content = content
+            m.status.text = "Select a channel to start watching"
+        end sub
+
+        sub onChannelSelected()
+            idx = m.channelList.itemSelected
+            if idx < 0 or idx >= m.channels.Count() then return
+            channel = m.channels[idx]
+
+            ' Open the live player
+            player = m.top.createChild("LivePlayer")
+            player.channel = channel
+            player.backendBase = m.backendBase
+            player.setFocus(true)
+            player.observeField("closed", "onPlayerClosed")
+        end sub
+
+        sub onPlayerClosed()
+            ' Return focus to grid
+            m.channelList.setFocus(true)
+            for i = m.top.getChildCount() - 1 to 0 step -1
+                child = m.top.getChild(i)
+                if child.subtype() = "LivePlayer"
+                    m.top.removeChild(child)
+                end if
+            end for
+        end sub
+
+        function onKeyEvent(key as String, press as Boolean) as Boolean
+            if press and key = "back"
+                m.top.exit = true
+                return true
+            end if
+            return false
+        end function
+    ]]>
+    </script>
+    <children>
+        <Label
+            id="titleLabel"
+            text="HUSH MUSIC TELEVISION"
+            font="font:MediumBoldSystemFont"
+            color="0xFFFFFFFF"
+            translation="[70, 40]"
+            width="1780" horizAlign="left" />
+
+        <Label
+            id="statusLabel"
+            text=""
+            font="font:SmallSystemFont"
+            color="0xAAAAAAFF"
+            translation="[70, 110]" />
+
+        <MarkupGrid
+            id="channelList"
+            translation="[70, 180]"
+            itemSize="[280, 200]"
+            itemSpacing="[24, 24]"
+            numColumns="6"
+            drawFocusFeedback="true">
+            <itemComponent>
+                <ChannelTile />
+            </itemComponent>
+        </MarkupGrid>
+    </children>
+</component>

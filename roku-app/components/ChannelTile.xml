@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="ChannelTile" extends="Group">
+    <interface>
+        <field id="itemContent" type="node" onChange="onContentChange" />
+        <field id="focusPercent" type="float" onChange="onFocusChange" />
+    </interface>
+    <script type="text/brightscript">
+    <![CDATA[
+        sub init()
+            m.bg = m.top.findNode("bg")
+            m.poster = m.top.findNode("poster")
+            m.title = m.top.findNode("title")
+            m.subtitle = m.top.findNode("subtitle")
+        end sub
+
+        sub onContentChange()
+            c = m.top.itemContent
+            if c = invalid then return
+            m.title.text = c.title
+            m.subtitle.text = c.description
+            if c.HDPosterUrl <> invalid and Len(c.HDPosterUrl) > 0
+                m.poster.uri = c.HDPosterUrl
+            end if
+        end sub
+
+        sub onFocusChange()
+            f = m.top.focusPercent
+            m.bg.color = "0x1A1A24FF"
+            if f > 0.5 then m.bg.color = "0x7C3AEDFF"
+            m.top.scale = [1.0 + (f * 0.05), 1.0 + (f * 0.05)]
+        end sub
+    ]]>
+    </script>
+    <children>
+        <Rectangle id="bg" width="280" height="200" color="0x1A1A24FF" />
+        <Poster id="poster" width="280" height="140" translation="[0, 0]" loadingBitmapUri="" />
+        <Label id="title"    translation="[14, 150]" font="font:SmallBoldSystemFont" color="0xFFFFFFFF" width="252" maxLines="1" ellipsizeOnBoundary="true" />
+        <Label id="subtitle" translation="[14, 175]" font="font:ExtraSmallSystemFont" color="0xBBBBBBFF" width="252" maxLines="1" />
+    </children>
+</component>
