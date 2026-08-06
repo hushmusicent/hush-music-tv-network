@@ -66,16 +66,33 @@
 
         sub onChannelSelected()
             idx = m.channelList.itemSelected
-            if idx < 0 or idx >= m.channels.Count() then return
+            m.status.text = "Click: idx=" + idx.ToStr()
+            if idx < 0 or idx >= m.channels.Count()
+                m.status.text = "Click: bad idx " + idx.ToStr()
+                return
+            end if
             openPlayer(m.channels[idx])
         end sub
 
         sub openPlayer(channel as Object)
+            m.status.text = "Opening: " + channel.name + " — creating LivePlayer..."
             player = m.top.createChild("LivePlayer")
-            player.channel = channel
+            if player = invalid
+                m.status.text = "ERROR: createChild(LivePlayer) returned invalid — XML parse error"
+                return
+            end if
+            if player.subtype() <> "LivePlayer"
+                m.status.text = "ERROR: created node is " + player.subtype() + " not LivePlayer"
+                return
+            end if
+            m.status.text = "LivePlayer node created — setting backendBase..."
             player.backendBase = m.backendBase
+            m.status.text = "backendBase set — setting channel..."
+            player.channel = channel
+            m.status.text = "channel set — focusing..."
             player.setFocus(true)
             player.observeField("closed", "onPlayerClosed")
+            m.status.text = "LivePlayer opened for: " + channel.name
         end sub
 
         sub openGuide()
