@@ -14,7 +14,24 @@
             m.videoTitle = m.top.findNode("videoTitle")
             m.errorLabel = m.top.findNode("errorLabel")
             m.hideTimer = m.top.findNode("hideOverlay")
+
+            ' Loading UI
+            m.loadingPanel = m.top.findNode("loadingPanel")
+            m.loadingChannel = m.top.findNode("loadingChannel")
+            m.loadingStatus = m.top.findNode("loadingStatus")
+            m.loadingHint = m.top.findNode("loadingHint")
+            m.pulseBars = [
+                m.top.findNode("pulseBar1"),
+                m.top.findNode("pulseBar2"),
+                m.top.findNode("pulseBar3"),
+                m.top.findNode("pulseBar4")
+            ]
+            m.pulseColors = ["0xE11D48FF", "0xE11D48AA", "0xE11D4866", "0xE11D4833"]
+            m.dotsTimer = m.top.findNode("dotsTimer")
+            m.dotsStep = 0
+
             m.hideTimer.observeField("fire", "onHideOverlay")
+            m.dotsTimer.observeField("fire", "onDotsTick")
             m.video.observeField("state", "onVideoState")
         end sub
 
@@ -30,6 +47,7 @@
             nowUtc = getUtcSeconds()
             slot = getCurrentVideo(ch, nowUtc)
             if slot = invalid
+                showLoading(false)
                 m.errorLabel.text = "No video scheduled right now."
                 return
             end if
@@ -39,13 +57,14 @@
 
             ' Uploaded R2 video — direct play
             if slot.video.video_url <> invalid and Len(slot.video.video_url) > 0
+                showLoading(true, "Loading video")
                 startPlayback(slot.video.video_url, slot.seek)
                 return
             end if
 
-            ' YouTube-sourced — resolve URL async via Task
+            ' YouTube-sourced — resolve URL async via Task (7-8s wait)
             if slot.video.youtube_id <> invalid and Len(slot.video.youtube_id) > 0
-                m.errorLabel.text = "Loading..."
+                showLoading(true, "Tuning in")
                 m.streamFetcher = CreateObject("roSGNode", "DataFetcher")
                 m.streamFetcher.url = m.top.backendBase + "/api/youtube/stream-info/" + slot.video.youtube_id
                 m.streamFetcher.observeField("response", "onStreamResolved")
@@ -60,12 +79,14 @@
         sub onStreamResolved()
             body = m.streamFetcher.response
             if Len(body) = 0
+                showLoading(false)
                 m.errorLabel.text = "Stream unavailable. Skipping..."
                 skipToNext()
                 return
             end if
             info = ParseJson(body)
             if info = invalid or info.success <> true or info.url = invalid
+                showLoading(false)
                 m.errorLabel.text = "Stream unavailable. Skipping..."
                 skipToNext()
                 return
@@ -94,9 +115,13 @@
 
         sub onVideoState()
             s = m.video.state
-            if s = "finished"
+            if s = "playing"
+                ' Real frames rendering — hide loading panel
+                showLoading(false)
+            else if s = "finished"
                 playCurrentSlot()   ' next slot
             else if s = "error"
+                showLoading(false)
                 m.errorLabel.text = "Playback error. Skipping..."
                 skipToNext()
             end if
@@ -120,9 +145,48 @@
             m.overlay.visible = false
         end sub
 
+        ' ---------- Loading Overlay ----------
+        sub showLoading(visible as Boolean, statusText = "Tuning in" as String)
+            m.loadingPanel.visible = visible
+            if visible
+                m.loadingChannel.text = m.top.channel.name
+                m.loadingStatus.text = statusText
+                m.loadingHint.text = "Press BACK to return to the guide"
+                m.dotsStep = 0
+                m.dotsTimer.control = "start"
+            else
+                m.dotsTimer.control = "stop"
+            end if
+        end sub
+
+        sub onDotsTick()
+            m.dotsStep = (m.dotsStep + 1) mod 4
+            dots = ""
+            for i = 1 to m.dotsStep
+                dots = dots + "."
+            end for
+            base = m.loadingStatus.text
+            ' Strip trailing dots to get the base label
+            while Len(base) > 0 and Right(base, 1) = "."
+                base = Left(base, Len(base) - 1)
+            end while
+            m.loadingStatus.text = base + dots
+
+            ' Rotate the pulse bar colors for a marquee-style animation
+            n = m.pulseBars.Count()
+            if n > 0
+                offset = m.dotsStep mod n
+                for i = 0 to n - 1
+                    idx = (i + offset) mod n
+                    m.pulseBars[i].color = m.pulseColors[idx]
+                end for
+            end if
+        end sub
+
         function onKeyEvent(key as String, press as Boolean) as Boolean
             if not press then return false
             if key = "back" or key = "options"
+                showLoading(false)
                 m.video.control = "stop"
                 m.top.closed = true
                 return true
@@ -140,8 +204,57 @@
     ]]>
     </script>
     <children>
+        <!-- Base black background so no flash of white before playback -->
+        <Rectangle width="1920" height="1080" color="0x000000FF" />
+
         <Video id="video" width="1920" height="1080" translation="[0, 0]" />
 
+        <!-- Full-screen loading panel shown while resolving stream -->
+        <Group id="loadingPanel" visible="false">
+            <Rectangle width="1920" height="1080" color="0x0B0B14FF" />
+            <!-- Accent bar -->
+            <Rectangle width="1920" height="6" translation="[0, 0]" color="0xE11D48FF" />
+
+            <Label id="loadingBrand"
+                   text="HUSH MUSIC TV"
+                   translation="[0, 340]"
+                   horizAlign="center"
+                   width="1920"
+                   font="font:SmallBoldSystemFont"
+                   color="0xE11D48FF" />
+
+            <Label id="loadingChannel"
+                   translation="[0, 400]"
+                   horizAlign="center"
+                   width="1920"
+                   font="font:LargeBoldSystemFont"
+                   color="0xFFFFFFFF" />
+
+            <!-- Animated brand accent bars -->
+            <Rectangle id="pulseBar1" width="60"  height="6" translation="[810, 540]" color="0xE11D48FF" />
+            <Rectangle id="pulseBar2" width="60"  height="6" translation="[880, 540]" color="0xE11D48AA" />
+            <Rectangle id="pulseBar3" width="60"  height="6" translation="[950, 540]" color="0xE11D4866" />
+            <Rectangle id="pulseBar4" width="60"  height="6" translation="[1020, 540]" color="0xE11D4833" />
+
+            <Label id="loadingStatus"
+                   text="Tuning in"
+                   translation="[0, 700]"
+                   horizAlign="center"
+                   width="1920"
+                   font="font:MediumBoldSystemFont"
+                   color="0xE5E7EBFF" />
+
+            <Label id="loadingHint"
+                   translation="[0, 760]"
+                   horizAlign="center"
+                   width="1920"
+                   font="font:SmallSystemFont"
+                   color="0x9CA3AFFF" />
+
+            <Timer id="dotsTimer" duration="0.4" repeat="true" />
+        </Group>
+
+        <!-- Channel info overlay shown briefly at top -->
         <Group id="overlay">
             <Rectangle width="1920" height="140" translation="[0, 0]" color="0x000000AA" />
             <Label id="channelName" translation="[70, 40]" font="font:MediumBoldSystemFont" color="0xFFFFFFFF" />

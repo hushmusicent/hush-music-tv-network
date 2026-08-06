@@ -32,6 +32,11 @@ Build a TV network app named "Hush Music TV Network" with admin-only channel/vid
 - `POST /api/schedules/regenerate-all` - Regenerate all 24h schedules
 - Admin credentials: hushmusicent419@gmail.com / $Stisdd419
 
+## Completed (Feb 6, 2026)
+- **Roku LivePlayer loading UI**: Added a full-screen branded "Tuning in..." panel with the Hush Music TV wordmark, channel name, animated dots and a marquee-style pulse-bar animation shown during the ~7.5s `yt-dlp` YouTube stream resolution. Auto-hides once the video's `state == "playing"`, and on any playback/network error. BACK button remains responsive during the loading state (stops video, closes the LivePlayer). Fixes the "frozen splash" impression when tuning into YouTube-sourced channels on Roku.
+- Repackaged `/app/frontend/public/downloads/hush-music-tv-roku.zip` (444 KB). User must click Deploy for the new zip to be served on `broadcaster.emergent.host`.
+
+
 ## Completed (Feb 19, 2026)
 - **Made video titles & durations visible on every surface (channel videos)**
   - Backfilled metadata via existing endpoints: 5 YouTube videos got refreshed titles/durations via YouTube Data API; 29 remaining are deleted on YouTube (unrecoverable — kept as-is with "Video N" placeholder so admin can rename or remove via Channel Editor).
