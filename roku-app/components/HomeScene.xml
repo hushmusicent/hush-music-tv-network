@@ -15,15 +15,17 @@
             ' Channel grid
             m.channelList = m.top.findNode("channelList")
             m.channelList.observeField("itemSelected", "onChannelSelected")
-            m.channelList.setFocus(true)
+
+            ' Keep focus on scene root until content loads
+            m.top.setFocus(true)
 
             ' Load channels from backend (async via Task)
             m.backendBase = "https://broadcaster.emergent.host"
+            m.status.text = "Loading channels..."
             loadChannels()
         end sub
 
         sub loadChannels()
-            m.status.text = "Loading channels..."
             m.channelLoader = CreateObject("roSGNode", "DataFetcher")
             m.channelLoader.url = m.backendBase + "/api/channels"
             m.channelLoader.observeField("response", "onChannelsLoaded")
@@ -34,12 +36,12 @@
             ok = m.channelLoader.success
             body = m.channelLoader.response
             if not ok or Len(body) = 0
-                m.status.text = "Unable to load channels. Check your connection."
+                m.status.text = "Network error. Unable to reach broadcaster.emergent.host"
                 return
             end if
             data = ParseJson(body)
             if data = invalid or type(data) <> "roArray"
-                m.status.text = "Invalid channel data from server."
+                m.status.text = "Server returned invalid data (parse failed)"
                 return
             end if
 
@@ -58,7 +60,9 @@
                 end if
             end for
             m.channelList.content = content
-            m.status.text = "Select a channel to start   •   Press * for TV Guide"
+            m.status.text = "Select a channel   |   Press * for TV Guide   |   Loaded " + m.channels.Count().ToStr() + " channels"
+            ' Now transfer focus to the grid
+            m.channelList.setFocus(true)
         end sub
 
         sub onChannelSelected()
@@ -144,6 +148,12 @@
     ]]>
     </script>
     <children>
+        <!-- Full-screen black backdrop so Scene bg quirks don't leave us on white -->
+        <Rectangle
+            width="1920"
+            height="1080"
+            color="0x0A0A0AFF" />
+
         <Label
             id="titleLabel"
             text="HUSH MUSIC TELEVISION"
@@ -154,9 +164,10 @@
 
         <Label
             id="statusLabel"
-            text=""
-            font="font:SmallSystemFont"
-            color="0xAAAAAAFF"
+            text="Starting..."
+            font="font:MediumSystemFont"
+            color="0xFFCC00FF"
+            width="1780" horizAlign="left"
             translation="[70, 110]" />
 
         <MarkupGrid
