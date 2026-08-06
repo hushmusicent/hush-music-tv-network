@@ -65,11 +65,6 @@
             return "mp4"
         end function
 
-        function getUtcSeconds() as Integer
-            dt = CreateObject("roDateTime")
-            return dt.AsSeconds()
-        end function
-
         sub onVideoState()
             s = m.video.state
             if s = "finished"

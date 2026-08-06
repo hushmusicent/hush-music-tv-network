@@ -9,12 +9,6 @@
     <script type="text/brightscript" uri="pkg:/source/util.brs" />
     <script type="text/brightscript">
     <![CDATA[
-        SLOT_COUNT = 4          ' show NOW + next 3
-        SLOT_WIDTH = 380
-        ROW_HEIGHT = 92
-        VISIBLE_ROWS = 10
-        CHANNEL_COL = 260
-
         sub init()
             m.top.backgroundColor = "0x0A0A0AFF"
             m.title = m.top.findNode("guideTitle")
@@ -59,9 +53,9 @@
             end for
         end sub
 
-        function formatTime(h as Integer, m as Integer) as String
+        function formatTime(hr as Integer, mn as Integer) as String
             ampm = "AM"
-            hh = h
+            hh = hr
             if hh = 0 then hh = 12
             if hh > 12
                 hh = hh - 12
@@ -69,7 +63,7 @@
             else if hh = 12
                 ampm = "PM"
             end if
-            mm = m.ToStr()
+            mm = mn.ToStr()
             if Len(mm) = 1 then mm = "0" + mm
             return hh.ToStr() + ":" + mm + " " + ampm
         end function
@@ -144,11 +138,6 @@
                 end if
             end for
             return slots
-        end function
-
-        function getUtcSeconds() as Integer
-            dt = CreateObject("roDateTime")
-            return dt.AsSeconds()
         end function
 
         sub drawFocus()

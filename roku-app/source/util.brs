@@ -22,6 +22,12 @@ function httpGetJson(url as String) as Dynamic
     return invalid
 end function
 
+' Current UTC seconds since epoch.
+function getUtcSeconds() as Integer
+    dt = CreateObject("roDateTime")
+    return dt.AsSeconds()
+end function
+
 ' Given a channel dict and current UTC epoch seconds, return the video
 ' scheduled to play at this moment (based on 24h synchronized schedule).
 function getCurrentVideo(channel as Object, nowUtc as Integer) as Object
