@@ -17,7 +17,15 @@
             loadChannels()
 
             m.channelList.observeField("itemSelected", "onChannelSelected")
+            m.channelList.observeField("itemFocused", "onChannelFocused")
             m.status.text = "Init 4/4: waiting for channels..."
+        end sub
+
+        sub onChannelFocused()
+            idx = m.channelList.itemFocused
+            if m.channels <> invalid and idx >= 0 and idx < m.channels.Count()
+                m.status.text = "Focused: " + m.channels[idx].name + " — press OK to play"
+            end if
         end sub
 
         sub loadChannels()
