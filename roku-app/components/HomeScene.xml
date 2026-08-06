@@ -5,24 +5,20 @@
     <script type="text/brightscript">
     <![CDATA[
         sub init()
-            m.top.backgroundURI = ""
-            m.top.backgroundColor = "0x0A0A0AFF"
-
-            ' Title bar
-            m.title = m.top.findNode("titleLabel")
             m.status = m.top.findNode("statusLabel")
+            m.status.text = "Init 1/4..."
 
-            ' Channel grid
+            m.title = m.top.findNode("titleLabel")
             m.channelList = m.top.findNode("channelList")
-            m.channelList.observeField("itemSelected", "onChannelSelected")
+            m.status.text = "Init 2/4: nodes found"
 
-            ' Keep focus on scene root until content loads
-            m.top.setFocus(true)
-
-            ' Load channels from backend (async via Task)
             m.backendBase = "https://broadcaster.emergent.host"
-            m.status.text = "Loading channels..."
+            m.status.text = "Init 3/4: kicking off fetch..."
+
             loadChannels()
+
+            m.channelList.observeField("itemSelected", "onChannelSelected")
+            m.status.text = "Init 4/4: waiting for channels..."
         end sub
 
         sub loadChannels()
@@ -36,12 +32,17 @@
             ok = m.channelLoader.success
             body = m.channelLoader.response
             if not ok or Len(body) = 0
-                m.status.text = "Network error. Unable to reach broadcaster.emergent.host"
+                m.status.text = "Network error. Cannot reach broadcaster.emergent.host"
                 return
             end if
+            m.status.text = "Got response — parsing..."
             data = ParseJson(body)
-            if data = invalid or type(data) <> "roArray"
-                m.status.text = "Server returned invalid data (parse failed)"
+            if data = invalid
+                m.status.text = "JSON parse failed"
+                return
+            end if
+            if type(data) <> "roArray"
+                m.status.text = "Server returned non-array (type=" + type(data) + ")"
                 return
             end if
 
@@ -60,8 +61,7 @@
                 end if
             end for
             m.channelList.content = content
-            m.status.text = "Select a channel   |   Press * for TV Guide   |   Loaded " + m.channels.Count().ToStr() + " channels"
-            ' Now transfer focus to the grid
+            m.status.text = "Loaded " + m.channels.Count().ToStr() + " channels   |   * = TV Guide"
             m.channelList.setFocus(true)
         end sub
 
