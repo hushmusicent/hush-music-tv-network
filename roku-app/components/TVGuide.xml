@@ -6,7 +6,6 @@
         <field id="closed" type="boolean" alwaysNotify="true" />
         <field id="selectedChannelIndex" type="integer" value="-1" alwaysNotify="true" />
     </interface>
-    <script type="text/brightscript" uri="pkg:/source/util.brs" />
     <script type="text/brightscript">
     <![CDATA[
         sub init()

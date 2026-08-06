@@ -5,7 +5,6 @@
         <field id="backendBase" type="string" />
         <field id="closed" type="boolean" alwaysNotify="true" />
     </interface>
-    <script type="text/brightscript" uri="pkg:/source/util.brs" />
     <script type="text/brightscript">
     <![CDATA[
         sub init()
