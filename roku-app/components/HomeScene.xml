@@ -169,16 +169,11 @@
             width="1780" horizAlign="left"
             translation="[70, 110]" />
 
-        <MarkupGrid
+        <LabelList
             id="channelList"
             translation="[70, 180]"
-            itemSize="[280, 200]"
-            itemSpacing="[24, 24]"
-            numColumns="6"
-            drawFocusFeedback="true">
-            <itemComponent>
-                <ChannelTile />
-            </itemComponent>
-        </MarkupGrid>
+            itemSize="[900, 60]"
+            drawFocusFeedback="true"
+            numRows="14" />
     </children>
 </component>
