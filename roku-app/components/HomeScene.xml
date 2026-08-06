@@ -6,7 +6,7 @@
     <![CDATA[
         sub init()
             m.top.backgroundURI = ""
-            m.top.backgroundColor = "#0A0A0A"
+            m.top.backgroundColor = "0x0A0A0AFF"
 
             ' Title bar
             m.title = m.top.findNode("titleLabel")
@@ -17,16 +17,29 @@
             m.channelList.observeField("itemSelected", "onChannelSelected")
             m.channelList.setFocus(true)
 
-            ' Load channels from backend
+            ' Load channels from backend (async via Task)
             m.backendBase = "https://broadcaster.emergent.host"
             loadChannels()
         end sub
 
         sub loadChannels()
             m.status.text = "Loading channels..."
-            data = httpGetJson(m.backendBase + "/api/channels")
-            if data = invalid
+            m.channelLoader = CreateObject("roSGNode", "DataFetcher")
+            m.channelLoader.url = m.backendBase + "/api/channels"
+            m.channelLoader.observeField("response", "onChannelsLoaded")
+            m.channelLoader.control = "RUN"
+        end sub
+
+        sub onChannelsLoaded()
+            ok = m.channelLoader.success
+            body = m.channelLoader.response
+            if not ok or Len(body) = 0
                 m.status.text = "Unable to load channels. Check your connection."
+                return
+            end if
+            data = ParseJson(body)
+            if data = invalid or type(data) <> "roArray"
+                m.status.text = "Invalid channel data from server."
                 return
             end if
 

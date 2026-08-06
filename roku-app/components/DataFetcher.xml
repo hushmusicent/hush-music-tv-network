@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="DataFetcher" extends="Task">
+    <interface>
+        <field id="url" type="string" />
+        <field id="response" type="string" alwaysNotify="true" />
+        <field id="success" type="boolean" value="false" />
+    </interface>
+    <script type="text/brightscript">
+    <![CDATA[
+        sub init()
+            m.top.functionName = "run"
+        end sub
+
+        sub run()
+            url = m.top.url
+            if url = invalid or Len(url) = 0
+                m.top.success = false
+                m.top.response = ""
+                return
+            end if
+            tp = CreateObject("roMessagePort")
+            req = CreateObject("roUrlTransfer")
+            req.SetMessagePort(tp)
+            req.SetURL(url)
+            req.SetCertificatesFile("common:/certs/ca-bundle.crt")
+            req.InitClientCertificates()
+            req.EnableEncodings(true)
+            req.AddHeader("User-Agent", "HushMusicTV/1.0 Roku")
+
+            if req.AsyncGetToString()
+                msg = wait(30000, tp)   ' 30s timeout
+                if type(msg) = "roUrlEvent" and msg.GetResponseCode() = 200
+                    m.top.success = true
+                    m.top.response = msg.GetString()
+                    return
+                end if
+            end if
+            m.top.success = false
+            m.top.response = ""
+        end sub
+    ]]>
+    </script>
+</component>
