@@ -4983,8 +4983,10 @@ async def regenerate_channel_schedule(channel_id: str, user: dict = Depends(requ
     # Delete existing schedule for today
     await db.schedules.delete_one({"channel_id": channel_id, "schedule_date": today})
     
-    # Generate new random schedule
-    schedule = await generate_24h_schedule(channel, today, force_random=True)
+    # Generate new schedule with smart rules (daily seed + 48h cooldown +
+    # show de-interleave + no-same-show-same-hour). `force_random=True` would
+    # bypass every one of those, which we don't want anymore.
+    schedule = await generate_24h_schedule(channel, today, force_random=False)
     
     # Store in database
     await db.schedules.insert_one(schedule)
@@ -5006,8 +5008,8 @@ async def regenerate_all_schedules(user: dict = Depends(require_user)):
         # Delete existing schedule
         await db.schedules.delete_one({"channel_id": channel["id"], "schedule_date": today})
         
-        # Generate new schedule with current durations
-        schedule = await generate_24h_schedule(channel, today, force_random=True)
+        # Generate new schedule with smart rules enabled
+        schedule = await generate_24h_schedule(channel, today, force_random=False)
         
         # Store in database
         await db.schedules.insert_one(schedule)
