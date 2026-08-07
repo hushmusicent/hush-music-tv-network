@@ -5164,6 +5164,88 @@ async def _get_recent_video_ids(channel_id: str, date: str, hours: int = 48) -> 
     return recent
 
 
+async def _get_hour_slot_shows(channel_id: str, date: str, lookback_days: int = 7) -> dict:
+    """Return a dict {hour_of_day (0-23): set(show_keys)} representing which
+    shows have started in each hour across the last `lookback_days`. Used to
+    enforce the "same show never plays in the same time slot on a subsequent
+    day" rule.
+    """
+    from datetime import datetime as _dt, timedelta as _td
+    try:
+        d = _dt.strptime(date, '%Y-%m-%d')
+    except Exception:
+        return {}
+    prior_dates = [(d - _td(days=i)).strftime('%Y-%m-%d') for i in range(1, lookback_days + 1)]
+    if not prior_dates:
+        return {}
+    hour_shows: dict = {}
+    async for s in db.schedules.find(
+        {'channel_id': channel_id, 'schedule_date': {'$in': prior_dates}},
+        {'_id': 0, 'videos': 1},
+    ):
+        for v in s.get('videos', []) or []:
+            start = v.get('start_time') or ''
+            title = v.get('title') or ''
+            key = _show_key(title)
+            if not key or not start:
+                continue
+            try:
+                hour = int(start.split(':')[0]) % 24
+            except Exception:
+                continue
+            hour_shows.setdefault(hour, set()).add(key)
+    return hour_shows
+
+
+def _avoid_same_hour_slot(videos: list, hour_conflicts: dict) -> list:
+    """Reorder videos so that when laid out sequentially over 24 hours, no
+    video whose show_key was in ``hour_conflicts[H]`` starts inside hour H.
+
+    Greedy O(n^2): after each swap, recompute the hour each slot lands in
+    (cumulative-duration walk) and continue. For channels with even a
+    modest diversity of shows this converges to zero clashes; when the
+    channel doesn't have enough distinct shows to cover 24 hours, some
+    clashes are unavoidable and left in place.
+    """
+    if not hour_conflicts:
+        return list(videos)
+
+    result = list(videos)
+    n = len(result)
+
+    def compute_hours():
+        hours = []
+        cursor = 0
+        for v in result:
+            d = v.get('duration') or 300
+            if d <= 0:
+                d = 300
+            hours.append((cursor // 3600) % 24)
+            cursor += d
+        return hours
+
+    for i in range(n):
+        hours = compute_hours()
+        head = result[i]
+        head_key = _show_key(head.get('title') or '')
+        hour_i = hours[i]
+        if not head_key or head_key not in hour_conflicts.get(hour_i, set()):
+            continue
+        # Find a swap partner that resolves the clash at both endpoints.
+        for j in range(i + 1, n):
+            cand = result[j]
+            cand_key = _show_key(cand.get('title') or '')
+            hour_j = hours[j]
+            if cand_key and cand_key in hour_conflicts.get(hour_i, set()):
+                continue
+            if head_key in hour_conflicts.get(hour_j, set()):
+                continue
+            result[i], result[j] = result[j], result[i]
+            break
+
+    return result
+
+
 async def generate_24h_schedule(channel: dict, date: str, force_random: bool = False) -> dict:
     """Generate a 24-hour schedule for a channel by randomly distributing videos"""
     videos = channel.get("videos", [])
@@ -5215,6 +5297,16 @@ async def generate_24h_schedule(channel: dict, date: str, force_random: bool = F
     })
     min_dist = max(5, distinct_shows - 1)
     shuffled_videos = _deinterleave_by_show(shuffled_videos, min_distance=min_dist)
+
+    # NEW: prevent the same *show* from starting in the same hour-of-day it did
+    # on any of the last 7 days. Applies only for deterministic (seeded) runs.
+    if not force_random:
+        try:
+            hour_conflicts = await _get_hour_slot_shows(channel.get('id', ''), date, lookback_days=7)
+        except Exception:
+            hour_conflicts = {}
+        if hour_conflicts:
+            shuffled_videos = _avoid_same_hour_slot(shuffled_videos, hour_conflicts)
     
     # Reset random seed
     if not force_random:
