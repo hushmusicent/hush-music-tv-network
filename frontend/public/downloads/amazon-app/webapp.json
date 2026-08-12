@@ -1,0 +1,63 @@
+{
+  "name": "Hush Music TV",
+  "version": "1.0.0",
+  "description": "24/7 Hip-Hop, R&B, Dance, and Music Video Network",
+  "start_url": "https://broadcaster.emergent.host/live",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#000000",
+  "theme_color": "#7c3aed",
+  
+  "icons": [
+    {
+      "src": "assets/icon-114.png",
+      "sizes": "114x114",
+      "type": "image/png"
+    },
+    {
+      "src": "assets/icon-512.png", 
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  
+  "amazon": {
+    "web_app": {
+      "launch_mode": "fullscreen",
+      "allowed_domains": [
+        "broadcaster.emergent.host",
+        "*.youtube.com",
+        "*.googlevideo.com",
+        "*.r2.dev",
+        "*.cloudflarestorage.com"
+      ],
+      "navigation": {
+        "focus_color": "#7c3aed",
+        "enable_dpad": true
+      },
+      "features": {
+        "media_playback": true,
+        "fullscreen_video": true
+      }
+    },
+    
+    "fire_tv": {
+      "banner": "assets/banner-firetv.png",
+      "category": "ENTERTAINMENT",
+      "supported_features": [
+        "MEDIA_PLAYBACK",
+        "VIDEO_STREAMING"
+      ]
+    },
+    
+    "tablet": {
+      "min_sdk": 22,
+      "target_sdk": 30
+    }
+  },
+  
+  "permissions": [
+    "INTERNET",
+    "WAKE_LOCK"
+  ]
+}
