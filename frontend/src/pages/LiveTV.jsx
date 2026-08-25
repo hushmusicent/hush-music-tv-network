@@ -485,21 +485,30 @@ const LiveTV = () => {
   // Fetch commercials when channel changes
   useEffect(() => {
     if (!currentChannel) return;
-    
+
+    // Clear previous channel's commercials immediately so a break firing during
+    // the fetch cannot leak ads from the previously-tuned channel.
+    setCommercials([]);
+
     const fetchCommercials = async () => {
+      const channelIdAtStart = currentChannel.id;
       try {
-        const response = await fetch(`${BACKEND_URL}/api/channels/${currentChannel.id}/commercials`);
+        const response = await fetch(`${BACKEND_URL}/api/channels/${channelIdAtStart}/commercials`);
+        // If the user switched channels again while we were fetching, drop this response.
+        if (channelIdAtStart !== currentChannel.id) return;
         if (response.ok) {
           const data = await response.json();
           setCommercials(data);
           console.log(`Loaded ${data.length} commercials for ${currentChannel.name}`);
+        } else {
+          setCommercials([]);
         }
       } catch (error) {
         console.error('Failed to fetch commercials:', error);
         setCommercials([]);
       }
     };
-    
+
     fetchCommercials();
   }, [currentChannel?.id]);
 
