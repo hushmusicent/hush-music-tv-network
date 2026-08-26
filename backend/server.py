@@ -5065,12 +5065,17 @@ def _show_key(title: str) -> str:
     return key
 
 
-def _deinterleave_by_show(videos: list, min_distance: int = 5) -> list:
-    """Reorder so any two videos sharing a show key are at least ``min_distance``
+def _deinterleave_by_show(videos: list, min_distance: int = 5, key_fn=None) -> list:
+    """Reorder so any two videos sharing a key are at least ``min_distance``
     positions apart. Uses a max-heap + cooldown queue (Reorganize String K
     Apart). Also enforces the *softer* requirement that the fallback path
     (heap empty) never selects the same key that was JUST placed — so back-to-
     back repeats never happen even under scarcity.
+
+    ``key_fn`` defaults to `_show_key` on the title (spreads by series/artist).
+    Pass ``lambda v: v.get('id') or v.get('video_id')`` to spread by unique
+    video identity (prevents the same episode from repeating within one pool
+    cycle).
     """
     n = len(videos)
     if n < 2:
@@ -5079,9 +5084,12 @@ def _deinterleave_by_show(videos: list, min_distance: int = 5) -> list:
     import heapq as _heapq
     from collections import deque as _deque
 
+    if key_fn is None:
+        key_fn = lambda v: _show_key(v.get('title', ''))
+
     groups: dict = {}
     for v in videos:
-        k = _show_key(v.get('title', '')) or ''
+        k = key_fn(v) or ''
         if not k:
             k = f'__nokey_{id(v)}'
         groups.setdefault(k, []).append(v)
@@ -5095,6 +5103,7 @@ def _deinterleave_by_show(videos: list, min_distance: int = 5) -> list:
     out: list = []
     last_key = None
     cooldown: _deque = _deque()
+    last_pos: dict = {}  # key -> most recent slot index it was placed
 
     while len(out) < n:
         while cooldown and cooldown[0][0] <= len(out):
@@ -5107,28 +5116,34 @@ def _deinterleave_by_show(videos: list, min_distance: int = 5) -> list:
             neg_cnt, _, key = _heapq.heappop(heap)
             out.append(groups[key].pop(0))
             last_key = key
+            last_pos[key] = len(out) - 1
             remaining = -neg_cnt - 1
             cooldown.append((len(out) + min_distance, remaining, key))
         else:
-            # Fallback: pick from cooldown. NEVER pick the same key as last_key
-            # (guarantees no back-to-back), then prefer the one with most
-            # remaining videos.
+            # Fallback: heap empty (impossible to honour min_distance for
+            # everyone). Pick the key placed FURTHEST BACK — this maximises
+            # the achievable gap and eliminates the "gap=2" clustering.
             if not cooldown:
                 break
             best_idx = -1
-            best_cnt = 0
+            best_score = -1.0
             for i, (_, cnt, key_i) in enumerate(cooldown):
+                if cnt <= 0:
+                    continue
                 if key_i == last_key:
                     continue
-                if cnt > best_cnt:
-                    best_cnt = cnt
+                gap = len(out) - last_pos.get(key_i, -10**9)
+                # Prefer bigger gap; ties broken by remaining count
+                score = gap * 1000 + cnt
+                if score > best_score:
+                    best_score = score
                     best_idx = i
             if best_idx < 0:
-                # Only last_key has remaining videos — unavoidable repeat
+                # Only last_key has anything left — accept the repeat
                 for i, (_, cnt, _) in enumerate(cooldown):
-                    if cnt > best_cnt:
-                        best_cnt = cnt
+                    if cnt > 0:
                         best_idx = i
+                        break
                 if best_idx < 0:
                     break
             re_at, cnt, key = cooldown[best_idx]
@@ -5137,6 +5152,7 @@ def _deinterleave_by_show(videos: list, min_distance: int = 5) -> list:
             cooldown = _deque(tmp)
             out.append(groups[key].pop(0))
             last_key = key
+            last_pos[key] = len(out) - 1
             cooldown.append((len(out) + min_distance, cnt - 1, key))
 
     return out
@@ -5199,7 +5215,7 @@ async def _get_hour_slot_shows(channel_id: str, date: str, lookback_days: int = 
     return hour_shows
 
 
-def _avoid_same_hour_slot(videos: list, hour_conflicts: dict) -> list:
+def _avoid_same_hour_slot(videos: list, hour_conflicts: dict, video_id_window: int = 10) -> list:
     """Reorder videos so that when laid out sequentially over 24 hours, no
     video whose show_key was in ``hour_conflicts[H]`` starts inside hour H.
 
@@ -5208,12 +5224,20 @@ def _avoid_same_hour_slot(videos: list, hour_conflicts: dict) -> list:
     modest diversity of shows this converges to zero clashes; when the
     channel doesn't have enough distinct shows to cover 24 hours, some
     clashes are unavoidable and left in place.
+
+    ``video_id_window`` prevents swaps that would place the same video_id
+    within N slots of another copy (preserves the "no repeats until pool
+    exhausted" property from the earlier video_id de-interleave).
     """
     if not hour_conflicts:
         return list(videos)
 
     result = list(videos)
     n = len(result)
+    W = max(3, video_id_window)
+
+    def _vid(v):
+        return v.get('id') or v.get('video_id') or ''
 
     def compute_hours():
         hours = []
@@ -5226,37 +5250,57 @@ def _avoid_same_hour_slot(videos: list, hour_conflicts: dict) -> list:
             cursor += d
         return hours
 
+    def window_vids(centre, exclude):
+        s = set()
+        for k in range(max(0, centre - W), min(n, centre + W + 1)):
+            if k == exclude:
+                continue
+            v = _vid(result[k])
+            if v:
+                s.add(v)
+        return s
+
     for i in range(n):
         hours = compute_hours()
         head = result[i]
         head_key = _show_key(head.get('title') or '')
+        head_vid = _vid(head)
         hour_i = hours[i]
         if not head_key or head_key not in hour_conflicts.get(hour_i, set()):
             continue
-        # Find a swap partner that resolves the clash at both endpoints AND
-        # doesn't create a new back-to-back same-show clash at either landing spot.
         for j in range(i + 1, n):
             cand = result[j]
             cand_key = _show_key(cand.get('title') or '')
+            cand_vid = _vid(cand)
             hour_j = hours[j]
             if cand_key and cand_key in hour_conflicts.get(hour_i, set()):
                 continue
             if head_key in hour_conflicts.get(hour_j, set()):
                 continue
-            # Adjacency check: cand landing at position i must not match its neighbours' show_key
-            if cand_key:
-                prev_i_key = _show_key(result[i - 1].get('title') or '') if i > 0 else ''
-                next_i_key = _show_key(result[i + 1].get('title') or '') if i + 1 < n and i + 1 != j else ''
-                if cand_key and (cand_key == prev_i_key or cand_key == next_i_key):
-                    continue
-            # Adjacency check: head landing at position j must not match its new neighbours
-            if head_key:
-                prev_j_key = _show_key(result[j - 1].get('title') or '') if j - 1 > i else ''
-                next_j_key = _show_key(result[j + 1].get('title') or '') if j + 1 < n else ''
-                if head_key == prev_j_key or head_key == next_j_key:
-                    continue
+            # show_key adjacency (i-1, i+1, j-1, j+1)
+            prev_i = result[i - 1] if i > 0 else None
+            next_i = result[i + 1] if (i + 1 < n and i + 1 != j) else None
+            prev_j = result[j - 1] if j - 1 > i else None
+            next_j = result[j + 1] if j + 1 < n else None
+            if cand_key and cand_key in {
+                _show_key((prev_i or {}).get('title') or ''),
+                _show_key((next_i or {}).get('title') or '')
+            }:
+                continue
+            if head_key and head_key in {
+                _show_key((prev_j or {}).get('title') or ''),
+                _show_key((next_j or {}).get('title') or '')
+            }:
+                continue
+            # video_id window check: cand at position i, head at position j
+            if cand_vid and cand_vid in window_vids(i, exclude=j):
+                continue
+            if head_vid and head_vid in window_vids(j, exclude=i):
+                continue
             result[i], result[j] = result[j], result[i]
             break
+
+    return result
 
     return result
 
@@ -5312,21 +5356,47 @@ async def generate_24h_schedule(channel: dict, date: str, force_random: bool = F
     })
     min_dist = max(5, distinct_shows - 1)
 
-    # If the pool doesn't have enough total duration to fill 24 hours, we'd
-    # loop it later — and the loop-around boundary creates same-show
-    # adjacency. Pre-expand the pool with a fresh reshuffle appended so
-    # `_deinterleave_by_show` can spread every slot properly.
+    # If the pool doesn't have enough total duration to fill 24 hours we'll
+    # need multiple passes. Build each pass independently (fresh shuffle +
+    # de-interleave inside the pass) then concat. This enforces the rule
+    # "never repeat the same episode until every episode has played" AND
+    # keeps the show de-interleave working within each pass.
     total_pool_dur = sum((v.get('duration') or 300) for v in shuffled_videos)
     if total_pool_dur > 0 and total_pool_dur < 86400 and shuffled_videos:
-        loops_needed = (86400 // total_pool_dur) + 1
-        expanded = list(shuffled_videos)
+        loops_needed = (86400 // total_pool_dur) + 2
+        passes = []
+        passes.append(_deinterleave_by_show(shuffled_videos, min_distance=min_dist))
         for _ in range(loops_needed):
             copy = list(shuffled_videos)
             random.shuffle(copy)
-            expanded.extend(copy)
-        shuffled_videos = expanded
+            passes.append(_deinterleave_by_show(copy, min_distance=min_dist))
+        combined = []
+        for p in passes:
+            if combined and p:
+                last_key = _show_key(combined[-1].get('title') or '')
+                if last_key:
+                    for rot in range(len(p)):
+                        head_key = _show_key(p[rot].get('title') or '')
+                        if head_key != last_key:
+                            p = p[rot:] + p[:rot]
+                            break
+            combined.extend(p)
 
-    shuffled_videos = _deinterleave_by_show(shuffled_videos, min_distance=min_dist)
+        # Final pass: enforce a MINIMUM GAP between repeats of the same
+        # video_id — implements the user's "don't play the same episode
+        # until all episodes have played" rule. Pool size = # unique videos;
+        # min_distance ≈ pool_size - 1.
+        pool_size = len({v.get('id') or v.get('video_id') for v in shuffled_videos
+                         if v.get('id') or v.get('video_id')})
+        if pool_size >= 3:
+            combined = _deinterleave_by_show(
+                combined,
+                min_distance=max(3, pool_size - 1),
+                key_fn=lambda v: v.get('id') or v.get('video_id'),
+            )
+        shuffled_videos = combined
+    else:
+        shuffled_videos = _deinterleave_by_show(shuffled_videos, min_distance=min_dist)
 
     # NEW: prevent the same *show* from starting in the same hour-of-day it did
     # on any of the last 7 days. Applies only for deterministic (seeded) runs.
@@ -5336,7 +5406,16 @@ async def generate_24h_schedule(channel: dict, date: str, force_random: bool = F
         except Exception:
             hour_conflicts = {}
         if hour_conflicts:
-            shuffled_videos = _avoid_same_hour_slot(shuffled_videos, hour_conflicts)
+            # Window size for the video_id adjacency guard: half the pool
+            # size, capped at 40, so swaps can never place two copies of the
+            # same video within N slots of each other.
+            pool_size = len({(v.get('id') or v.get('video_id'))
+                             for v in shuffled_videos
+                             if (v.get('id') or v.get('video_id'))})
+            window = min(40, max(3, pool_size // 2))
+            shuffled_videos = _avoid_same_hour_slot(
+                shuffled_videos, hour_conflicts, video_id_window=window
+            )
     
     # Reset random seed
     if not force_random:
