@@ -5233,7 +5233,8 @@ def _avoid_same_hour_slot(videos: list, hour_conflicts: dict) -> list:
         hour_i = hours[i]
         if not head_key or head_key not in hour_conflicts.get(hour_i, set()):
             continue
-        # Find a swap partner that resolves the clash at both endpoints.
+        # Find a swap partner that resolves the clash at both endpoints AND
+        # doesn't create a new back-to-back same-show clash at either landing spot.
         for j in range(i + 1, n):
             cand = result[j]
             cand_key = _show_key(cand.get('title') or '')
@@ -5242,6 +5243,18 @@ def _avoid_same_hour_slot(videos: list, hour_conflicts: dict) -> list:
                 continue
             if head_key in hour_conflicts.get(hour_j, set()):
                 continue
+            # Adjacency check: cand landing at position i must not match its neighbours' show_key
+            if cand_key:
+                prev_i_key = _show_key(result[i - 1].get('title') or '') if i > 0 else ''
+                next_i_key = _show_key(result[i + 1].get('title') or '') if i + 1 < n and i + 1 != j else ''
+                if cand_key and (cand_key == prev_i_key or cand_key == next_i_key):
+                    continue
+            # Adjacency check: head landing at position j must not match its new neighbours
+            if head_key:
+                prev_j_key = _show_key(result[j - 1].get('title') or '') if j - 1 > i else ''
+                next_j_key = _show_key(result[j + 1].get('title') or '') if j + 1 < n else ''
+                if head_key == prev_j_key or head_key == next_j_key:
+                    continue
             result[i], result[j] = result[j], result[i]
             break
 
@@ -5298,6 +5311,21 @@ async def generate_24h_schedule(channel: dict, date: str, force_random: bool = F
         if _show_key(v.get('title', ''))
     })
     min_dist = max(5, distinct_shows - 1)
+
+    # If the pool doesn't have enough total duration to fill 24 hours, we'd
+    # loop it later — and the loop-around boundary creates same-show
+    # adjacency. Pre-expand the pool with a fresh reshuffle appended so
+    # `_deinterleave_by_show` can spread every slot properly.
+    total_pool_dur = sum((v.get('duration') or 300) for v in shuffled_videos)
+    if total_pool_dur > 0 and total_pool_dur < 86400 and shuffled_videos:
+        loops_needed = (86400 // total_pool_dur) + 1
+        expanded = list(shuffled_videos)
+        for _ in range(loops_needed):
+            copy = list(shuffled_videos)
+            random.shuffle(copy)
+            expanded.extend(copy)
+        shuffled_videos = expanded
+
     shuffled_videos = _deinterleave_by_show(shuffled_videos, min_distance=min_dist)
 
     # NEW: prevent the same *show* from starting in the same hour-of-day it did
