@@ -120,10 +120,18 @@ app = FastAPI(title="TV Network API")
 api_router = APIRouter(prefix="/api")
 security = HTTPBearer(auto_error=False)
 
-# Root-level health check endpoint for Kubernetes
+# Root-level health check endpoint for Kubernetes readiness / liveness.
+# Kept intentionally trivial — no DB call, no auth, no imports it doesn't
+# already have — so it can respond within microseconds of the socket binding.
 @app.get("/health")
 async def root_health_check():
     return {"status": "healthy"}
+
+# Ultra-fast /api/ping alias for internal probes. Same guarantee: never
+# touches the DB, never blocks.
+@app.get("/api/ping")
+async def api_ping():
+    return {"status": "ok"}
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -5733,6 +5741,51 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+# ===================== STARTUP / SHUTDOWN =====================
+#
+# The server MUST bind and answer `/health` immediately on process start so the
+# Kubernetes readiness probe passes even if MongoDB is temporarily unreachable
+# or slow. Nothing here awaits blocking work. Any warmup (index creation,
+# schedule pre-generation, etc.) is dispatched as an `asyncio.create_task` and
+# runs concurrently after the server is already accepting traffic.
+
+async def _startup_warmup():
+    """Background warmup — runs AFTER the server is bound. Never awaited from
+    the startup path. Failures are logged and swallowed; they must not affect
+    request handling.
+    """
+    try:
+        # Give the server a beat to fully bind and start serving before we
+        # touch the database.
+        await asyncio.sleep(2)
+        # Ensure a couple of indexes exist for the hot paths. Idempotent.
+        try:
+            await db.views.create_index("timestamp")
+            await db.views.create_index("channel_id")
+            await db.schedules.create_index([("channel_id", 1), ("schedule_date", 1)])
+            await db.channels.create_index("sort_order")
+        except Exception as e:
+            logger.warning(f"[startup_warmup] index creation skipped: {e}")
+    except Exception as e:
+        logger.warning(f"[startup_warmup] task error (non-fatal): {e}")
+
+
+@app.on_event("startup")
+async def _kickoff_background_warmup():
+    """Schedule warmup work in the background — do NOT await it. Uvicorn will
+    finish this handler in microseconds and open the listen socket.
+    """
+    try:
+        asyncio.create_task(_startup_warmup())
+    except Exception as e:
+        # Even task-creation failures must not block startup.
+        logger.warning(f"[startup] could not schedule warmup task: {e}")
+
+
 @app.on_event("shutdown")
 async def shutdown_db_client():
-    client.close()
+    try:
+        client.close()
+    except Exception:
+        pass
