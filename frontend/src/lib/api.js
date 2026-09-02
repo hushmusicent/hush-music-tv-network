@@ -261,23 +261,33 @@ export const uploadAPI = {
 };
 
 // Analytics API
+// Uses `/track/*` paths (ad-blocker safe). Backend also aliases `/analytics/*`.
 export const analyticsAPI = {
   recordView: (channelId, viewerId, videoId, videoTitle, eventType = 'view', demographics = {}) => 
-    api.post('/analytics/view', { 
+    api.post('/track/view', { 
       channel_id: channelId, 
       viewer_id: viewerId, 
       video_id: videoId, 
       video_title: videoTitle, 
       event_type: eventType,
       ...demographics
+    }).catch((err) => {
+      // Log but don't throw — analytics failures shouldn't break playback
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn('[analytics] recordView failed:', err?.message || err);
+      }
     }),
   recordCommercial: (commercialId, channelId, viewerId, eventType = 'play', demographics = {}) =>
-    api.post('/analytics/commercial', {
+    api.post('/track/commercial', {
       commercial_id: commercialId,
       channel_id: channelId,
       viewer_id: viewerId,
       event_type: eventType,
       ...demographics
+    }).catch((err) => {
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn('[analytics] recordCommercial failed:', err?.message || err);
+      }
     }),
   getStats: () => api.get('/analytics/stats'),
   getCommercialStats: () => api.get('/analytics/commercials'),

@@ -4292,6 +4292,8 @@ class CommercialEvent(BaseModel):
     city: Optional[str] = None
 
 @api_router.post("/analytics/view")
+@api_router.post("/track/view")
+@api_router.post("/t/v")
 async def record_view(event: ViewEvent, request: Request):
     """Record a channel view/skip/complete event with auto-detected demographics"""
     now = datetime.now(timezone.utc)
@@ -4337,6 +4339,8 @@ async def record_view(event: ViewEvent, request: Request):
     return {"status": "recorded"}
 
 @api_router.post("/analytics/commercial")
+@api_router.post("/track/commercial")
+@api_router.post("/t/c")
 async def record_commercial_event(event: CommercialEvent, request: Request):
     """Record a commercial play/complete/skip event with auto-detected demographics"""
     now = datetime.now(timezone.utc)
