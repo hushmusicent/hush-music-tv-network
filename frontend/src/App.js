@@ -3,6 +3,9 @@ import "@/App.css";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from './context/AuthContext';
 import Layout from './components/Layout';
+// Kick off the /api/schedule/live prefetch as soon as the app module loads,
+// so LiveTV and TV Guide are ready to display instantly when the user navigates.
+import './lib/prefetch';
 
 // Pages
 import Home from './pages/Home';

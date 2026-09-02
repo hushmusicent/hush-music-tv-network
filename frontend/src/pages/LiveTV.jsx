@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { channelsAPI, analyticsAPI, videoCleanupAPI, youtubeProxyAPI } from '../lib/api';
+import { getPrefetchedLiveSchedule, invalidateLiveSchedule } from '../lib/prefetch';
 import { Button } from '../components/ui/button';
 import { 
   ChevronUp, 
@@ -334,9 +335,10 @@ const LiveTV = () => {
     try {
       setLoading(true);
       
-      // Load channels from the public endpoint
-      const scheduleResponse = await axios.get(`${BACKEND_URL}/api/schedule/live`);
-      const { schedules: scheduleList, date } = scheduleResponse.data;
+      // Prefer prefetched data (kicked off at app boot). Falls back to a
+      // fresh network call inside the helper if the cache is empty/stale.
+      const responseData = await getPrefetchedLiveSchedule();
+      const { schedules: scheduleList, date } = responseData;
       
       setScheduleDate(date);
       

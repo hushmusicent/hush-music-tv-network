@@ -20,6 +20,7 @@ import {
 import { Button } from '../components/ui/button';
 import axios from 'axios';
 import YouTube from 'react-youtube';
+import { getPrefetchedLiveSchedule } from '../lib/prefetch';
 
 const api = axios.create({
   baseURL: process.env.REACT_APP_BACKEND_URL,
@@ -94,10 +95,11 @@ const Schedule = () => {
   const loadSchedules = async () => {
     try {
       setLoading(true);
-      // Use the public endpoint so the TV Guide works without login.
-      const response = await api.get('/api/schedule/live');
-      setSchedules(response.data.schedules || []);
-      setCurrentDate(response.data.date);
+      // Prefer prefetched cache (kicked off at app boot). Falls back to a
+      // fresh network fetch inside the helper if the cache is empty/stale.
+      const data = await getPrefetchedLiveSchedule();
+      setSchedules(data.schedules || []);
+      setCurrentDate(data.date);
     } catch (error) {
       console.error('Failed to load schedules:', error);
     } finally {
