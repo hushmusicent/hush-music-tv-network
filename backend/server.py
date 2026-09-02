@@ -21,6 +21,10 @@ import uuid
 from datetime import datetime, timezone, timedelta
 import jwt
 import bcrypt
+import httpx
+import tempfile
+
+logger = logging.getLogger(__name__)
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -635,8 +639,6 @@ from r2_service import (
     test_r2_connection
 )
 
-import subprocess
-import tempfile
 
 def get_video_duration_from_url(url: str) -> int:
     """Extract MP4 duration by parsing the moov/mvhd atom from HTTP Range request.
@@ -806,6 +808,21 @@ CHUNK_UPLOADS_DIR = Path("/tmp/video_chunks")
 CHUNK_UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
 CHUNK_SIZE = 10 * 1024 * 1024  # 10MB chunks (max reliable size for Cloudflare)
+
+
+def _stage_bytes(path, data: bytes) -> None:
+    """Write bytes to an ephemeral staging location.
+
+    Used only for chunked-upload assembly before pushing the assembled file
+    to Cloudflare R2, and for the YouTube cookies file. Both use cases are
+    inherently local to the pod's ephemeral filesystem; the caller is
+    responsible for uploading the final artifact to R2.
+    """
+    fd = os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o644)
+    try:
+        os.write(fd, data)
+    finally:
+        os.close(fd)
 
 # ===================== DIRECT R2 UPLOAD (For Large Files) =====================
 
@@ -1133,8 +1150,7 @@ async def upload_chunk(
     
     chunk_path = chunk_dir / f"chunk_{chunk_index:05d}"
     content = await file.read()
-    with open(chunk_path, "wb") as f:
-        f.write(content)
+    _stage_bytes(chunk_path, content)
     
     return {"chunk_index": chunk_index, "size": len(content)}
 
@@ -1325,8 +1341,7 @@ async def upload_video(
     tmp_converted = f"/tmp/upload_{video_id}_converted.mp4"
     
     try:
-        with open(tmp_input, "wb") as f:
-            f.write(file_content)
+        Path(tmp_input).write_bytes(file_content)
         
         # Convert to browser-compatible MP4
         if convert_to_mp4(tmp_input, tmp_converted):
@@ -1360,14 +1375,9 @@ async def upload_video(
         
         video_url = result["url"]
     else:
-        # Fallback to local storage
-        file_path = UPLOADS_DIR / filename
-        try:
-            with open(file_path, "wb") as buffer:
-                buffer.write(file_content)
-            video_url = f"/api/videos/{filename}"
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Failed to save file: {str(e)}")
+        # R2 is required in production. If R2 is not configured, fail hard —
+        # pod-local storage is not persistent across deploys/restarts.
+        raise HTTPException(status_code=500, detail="Cloud storage (R2) not configured")
     
     # Store in database
     now = datetime.now(timezone.utc).isoformat()
@@ -1510,7 +1520,6 @@ async def upload_commercial(
     filename = f"{commercial_id}.mp4"
     
     # Save temporarily for processing
-    import tempfile
     with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp:
         tmp.write(content)
         tmp_path = tmp.name
@@ -1533,7 +1542,7 @@ async def upload_commercial(
             )
             if result.returncode == 0:
                 duration = int(float(result.stdout.strip()))
-        except:
+        except Exception:
             pass
         
         # Upload to R2
@@ -1707,8 +1716,7 @@ async def upload_commercial_chunk(
     chunk_path = chunk_dir / f"chunk_{chunk_index:05d}"
     
     content = await file.read()
-    with open(chunk_path, "wb") as f:
-        f.write(content)
+    _stage_bytes(chunk_path, content)
     
     return {"chunk_index": chunk_index, "size": len(content)}
 
@@ -1766,7 +1774,7 @@ async def complete_chunked_commercial_upload(
             )
             if result.returncode == 0:
                 duration = int(float(result.stdout.strip()))
-        except:
+        except Exception:
             pass
         
         # Upload to R2
@@ -2493,7 +2501,6 @@ async def remux_uploaded_videos(user: dict = Depends(require_user)):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     from r2_service import get_r2_client, R2_BUCKET_NAME, R2_PUBLIC_URL, is_r2_configured
-    import tempfile
     
     if not is_r2_configured():
         raise HTTPException(status_code=500, detail="R2 not configured")
@@ -2622,7 +2629,6 @@ async def reencode_single_video(video_id: str, background_tasks: BackgroundTasks
 
 def reencode_video_task(video: dict):
     """Background task to re-encode a single video"""
-    import tempfile
     import requests
     from r2_service import get_r2_client, R2_BUCKET_NAME
     
@@ -2696,7 +2702,6 @@ async def reencode_mpeg4_videos(user: dict = Depends(require_user)):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     from r2_service import get_r2_client, R2_BUCKET_NAME, R2_PUBLIC_URL, is_r2_configured, upload_to_r2
-    import tempfile
     
     if not is_r2_configured():
         raise HTTPException(status_code=500, detail="R2 not configured")
@@ -2797,7 +2802,6 @@ async def reencode_mpeg4_videos(user: dict = Depends(require_user)):
 
 
 # ===================== VIDEO CLEANUP ROUTES =====================
-import httpx
 
 class DeleteVideoByYoutubeId(BaseModel):
     youtube_id: str
@@ -3156,7 +3160,7 @@ async def update_video_durations(user: dict = Depends(require_user), limit: int 
     }
 
 @api_router.post("/videos/update-duration")
-async def update_single_video_duration(
+async def update_video_duration_by_youtube_id(
     channel_id: str,
     youtube_id: str,
     duration: int
@@ -3261,14 +3265,9 @@ async def upload_image(
         
         image_url = result["url"]
     else:
-        # Fallback to local storage
-        file_path = IMAGES_DIR / filename
-        try:
-            with open(file_path, "wb") as buffer:
-                buffer.write(file_content)
-            image_url = f"/api/images/{filename}"
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Failed to save file: {str(e)}")
+        # R2 is required in production. If R2 is not configured, fail hard —
+        # pod-local storage is not persistent across deploys/restarts.
+        raise HTTPException(status_code=500, detail="Cloud storage (R2) not configured")
     
     # Store in database
     now = datetime.now(timezone.utc).isoformat()
@@ -3537,8 +3536,7 @@ async def upload_youtube_cookies(
     
     # Save the file
     try:
-        with open(COOKIES_FILE, 'wb') as f:
-            f.write(content)
+        _stage_bytes(COOKIES_FILE, content)
         
         # Test if cookies work by checking a known video
         test_result = get_video_info_with_ytdlp("dQw4w9WgXcQ", use_cookies=True)
@@ -4221,8 +4219,6 @@ async def health():
 
 # ===================== ANALYTICS =====================
 
-import httpx
-
 # Cache for IP geolocation to avoid repeated API calls
 ip_geo_cache = {}
 
@@ -4409,114 +4405,100 @@ async def get_analytics(user: dict = Depends(require_user)):
     last_7d = now - timedelta(days=7)
     last_30d = now - timedelta(days=30)
     last_5min = now - timedelta(minutes=5)
-    
-    # Get all views
-    all_views = await db.views.find({}, {"_id": 0}).to_list(50000)
-    
+    year_start = datetime(now.year, 1, 1, tzinfo=timezone.utc)
+
+    # ISO strings for direct string comparisons (timestamps are stored as ISO)
+    last_30d_iso = last_30d.isoformat()
+    year_start_iso = year_start.isoformat()
+
+    # Only load views from the last 30 days for time-window aggregations.
+    # This is fast (indexed on `timestamp`) and avoids the 50k `to_list` cap
+    # that caused views_24h/7d/30d to render as zero on production where the
+    # total number of views is already >50k and MongoDB returned the oldest
+    # docs in natural order.
+    recent_views = await db.views.find(
+        {"timestamp": {"$gte": last_30d_iso}}, {"_id": 0}
+    ).to_list(length=None)
+
     # Initialize time-based containers
     views_5min = []
     views_24h = []
     views_7d = []
-    views_30d = []
-    views_this_year = []
-    
-    # Demographics aggregation
-    age_groups = {"18-24": 0, "25-34": 0, "35-44": 0, "45-54": 0, "55-64": 0, "65+": 0, "unknown": 0}
-    genders = {"male": 0, "female": 0, "other": 0, "unknown": 0}
-    countries = {}
-    regions = {}
-    cities = {}
-    
+    views_30d = recent_views  # everything in recent_views is within 30d
+
     # Hourly distribution (0-23)
     hourly_views = {str(i): 0 for i in range(24)}
-    
+
     # Daily distribution (last 7 days)
     daily_views = {}
     for i in range(7):
         day = (now - timedelta(days=i)).strftime("%Y-%m-%d")
         daily_views[day] = 0
-    
+
     # Weekly distribution (last 4 weeks)
     weekly_views = {}
     for i in range(4):
         week_start = now - timedelta(weeks=i)
         week_key = f"Week {week_start.isocalendar()[1]}"
         weekly_views[week_key] = 0
-    
-    # Monthly distribution (last 12 months)
-    monthly_views = {}
-    for i in range(12):
-        month = now - timedelta(days=i*30)
-        month_key = month.strftime("%Y-%m")
-        monthly_views[month_key] = 0
-    
-    for view in all_views:
+
+    for view in recent_views:
         try:
             view_time = datetime.fromisoformat(view["timestamp"].replace("Z", "+00:00"))
             if view_time.tzinfo is None:
                 view_time = view_time.replace(tzinfo=timezone.utc)
-            
-            # Time-based filtering
+
             if view_time >= last_5min:
                 views_5min.append(view)
             if view_time >= last_24h:
                 views_24h.append(view)
-                # Hourly distribution
                 hourly_views[str(view_time.hour)] += 1
             if view_time >= last_7d:
                 views_7d.append(view)
-                # Daily distribution
                 day_key = view_time.strftime("%Y-%m-%d")
                 if day_key in daily_views:
                     daily_views[day_key] += 1
-            if view_time >= last_30d:
-                views_30d.append(view)
-                # Weekly distribution
-                week_key = f"Week {view_time.isocalendar()[1]}"
-                if week_key in weekly_views:
-                    weekly_views[week_key] += 1
-            if view_time.year == now.year:
-                views_this_year.append(view)
-                # Monthly distribution
-                month_key = view_time.strftime("%Y-%m")
-                if month_key in monthly_views:
-                    monthly_views[month_key] += 1
-            
-            # Demographics aggregation (from all time)
-            age = view.get("age_group")
-            if age and age in age_groups:
-                age_groups[age] += 1
-            else:
-                age_groups["unknown"] += 1
-            
-            gender = view.get("gender")
-            if gender and gender in genders:
-                genders[gender] += 1
-            else:
-                genders["unknown"] += 1
-            
-            country = view.get("country")
-            if country:
-                countries[country] = countries.get(country, 0) + 1
-            
-            region = view.get("region")
-            if region:
-                regions[region] = regions.get(region, 0) + 1
-            
-            city = view.get("city")
-            if city:
-                cities[city] = cities.get(city, 0) + 1
-                
+            week_key = f"Week {view_time.isocalendar()[1]}"
+            if week_key in weekly_views:
+                weekly_views[week_key] += 1
         except Exception:
             continue
-    
-    # Count unique viewers
-    unique_5min = len(set(v["viewer_id"] for v in views_5min))
-    unique_24h = len(set(v["viewer_id"] for v in views_24h))
-    unique_7d = len(set(v["viewer_id"] for v in views_7d))
-    unique_30d = len(set(v["viewer_id"] for v in views_30d))
-    unique_year = len(set(v["viewer_id"] for v in views_this_year))
-    
+
+    # Monthly distribution (last 12 months) - via aggregation over year slice
+    monthly_views = {}
+    for i in range(12):
+        month = now - timedelta(days=i * 30)
+        month_key = month.strftime("%Y-%m")
+        monthly_views[month_key] = 0
+
+    monthly_pipeline = [
+        {"$match": {"timestamp": {"$gte": year_start_iso}}},
+        {"$group": {
+            "_id": {"year": "$year", "month": "$month"},
+            "count": {"$sum": 1},
+            "unique_viewers": {"$addToSet": "$viewer_id"},
+        }},
+    ]
+    views_year_total = 0
+    yearly_unique_set = set()
+    async for row in db.views.aggregate(monthly_pipeline):
+        y = row["_id"].get("year") or now.year
+        m = row["_id"].get("month") or 1
+        key = f"{y:04d}-{m:02d}"
+        if key in monthly_views:
+            monthly_views[key] += row["count"]
+        views_year_total += row["count"]
+        for vid in row.get("unique_viewers", []):
+            if vid:
+                yearly_unique_set.add(vid)
+
+    # Unique viewer counts for time windows
+    unique_5min = len({v["viewer_id"] for v in views_5min})
+    unique_24h = len({v["viewer_id"] for v in views_24h})
+    unique_7d = len({v["viewer_id"] for v in views_7d})
+    unique_30d = len({v["viewer_id"] for v in views_30d})
+    unique_year = len(yearly_unique_set)
+
     # Views per channel (last 24h)
     channel_views = {}
     for view in views_24h:
@@ -4525,37 +4507,59 @@ async def get_analytics(user: dict = Depends(require_user)):
             channel_views[cid] = {"total": 0, "unique_viewers": set()}
         channel_views[cid]["total"] += 1
         channel_views[cid]["unique_viewers"].add(view["viewer_id"])
-    
-    # Get channel names
-    channels = await db.channels.find({}, {"_id": 0, "id": 1, "name": 1}).to_list(100)
+
+    channels = await db.channels.find({}, {"_id": 0, "id": 1, "name": 1}).to_list(500)
     channel_names = {c["id"]: c["name"] for c in channels}
-    
-    # Format channel stats
+
     channel_stats = []
     for cid, stats in channel_views.items():
         channel_stats.append({
             "channel_id": cid,
             "channel_name": channel_names.get(cid, "Unknown"),
             "total_views": stats["total"],
-            "unique_viewers": len(stats["unique_viewers"])
+            "unique_viewers": len(stats["unique_viewers"]),
         })
-    
     channel_stats.sort(key=lambda x: x["total_views"], reverse=True)
-    
-    # Sort geographic data
+
+    # Demographics via aggregation (all-time, no document loading)
+    async def _agg_field_counts(field):
+        pipeline = [
+            {"$match": {field: {"$ne": None}}},
+            {"$group": {"_id": f"${field}", "count": {"$sum": 1}}},
+        ]
+        result = {}
+        async for row in db.views.aggregate(pipeline):
+            key = row["_id"]
+            if key:
+                result[key] = row["count"]
+        return result
+
+    age_raw = await _agg_field_counts("age_group")
+    gender_raw = await _agg_field_counts("gender")
+    countries = await _agg_field_counts("country")
+    regions = await _agg_field_counts("region")
+    cities = await _agg_field_counts("city")
+
+    age_groups = {"18-24": 0, "25-34": 0, "35-44": 0, "45-54": 0, "55-64": 0, "65+": 0, "unknown": 0}
+    for k, v in age_raw.items():
+        if k in age_groups:
+            age_groups[k] += v
+        else:
+            age_groups["unknown"] += v
+
+    genders = {"male": 0, "female": 0, "other": 0, "unknown": 0}
+    for k, v in gender_raw.items():
+        if k in genders:
+            genders[k] += v
+        else:
+            genders["unknown"] += v
+
     top_countries = sorted(countries.items(), key=lambda x: x[1], reverse=True)[:10]
     top_regions = sorted(regions.items(), key=lambda x: x[1], reverse=True)[:10]
     top_cities = sorted(cities.items(), key=lambda x: x[1], reverse=True)[:10]
-    
-    # Yearly totals: use a fast count query so the 50k pagination cap on
-    # `all_views` doesn't clamp the displayed "All Time Views" once traffic
-    # exceeds 50k. Pull all viewer_ids just for the yearly-unique metric.
+
+    # All-time total via fast count
     yearly_total_views = await db.views.count_documents({})
-    yearly_unique_ids = set()
-    async for v in db.views.find({}, {"_id": 0, "viewer_id": 1}):
-        vid = v.get("viewer_id")
-        if vid:
-            yearly_unique_ids.add(vid)
 
     return {
         # Current/Recent
@@ -4582,12 +4586,12 @@ async def get_analytics(user: dict = Depends(require_user)):
             },
             "monthly": {
                 "viewers": unique_year,
-                "views": len(views_this_year),
+                "views": views_year_total,
                 "distribution": monthly_views
             },
             "yearly": {
                 "total_views": yearly_total_views,
-                "unique_viewers": len(yearly_unique_ids)
+                "unique_viewers": unique_year
             }
         },
         
@@ -4616,52 +4620,47 @@ async def get_commercial_analytics(user: dict = Depends(require_user)):
     last_24h = now - timedelta(hours=24)
     last_7d = now - timedelta(days=7)
     last_30d = now - timedelta(days=30)
-    
-    # Get all commercial events
-    all_events = await db.commercial_analytics.find({}, {"_id": 0}).to_list(50000)
-    
+    last_30d_iso = last_30d.isoformat()
+
+    # Only load the last 30 days of commercial events - avoids the 50k cap
+    # once production traffic grows beyond that.
+    recent_events = await db.commercial_analytics.find(
+        {"timestamp": {"$gte": last_30d_iso}}, {"_id": 0}
+    ).to_list(length=None)
+
     events_24h = []
     events_7d = []
-    events_30d = []
-    
-    # Demographics
-    age_groups = {"18-24": 0, "25-34": 0, "35-44": 0, "45-54": 0, "55-64": 0, "65+": 0, "unknown": 0}
-    genders = {"male": 0, "female": 0, "other": 0, "unknown": 0}
-    countries = {}
-    
+    events_30d = recent_events
+
     # Hourly distribution
     hourly_plays = {str(i): 0 for i in range(24)}
-    
+
     # Daily distribution
     daily_plays = {}
     for i in range(7):
         day = (now - timedelta(days=i)).strftime("%Y-%m-%d")
         daily_plays[day] = 0
-    
+
     # Weekly distribution
     weekly_plays = {}
     for i in range(4):
         week_start = now - timedelta(weeks=i)
         week_key = f"Week {week_start.isocalendar()[1]}"
         weekly_plays[week_key] = 0
-    
+
     # Monthly distribution
     monthly_plays = {}
     for i in range(12):
-        month = now - timedelta(days=i*30)
+        month = now - timedelta(days=i * 30)
         month_key = month.strftime("%Y-%m")
         monthly_plays[month_key] = 0
-    
-    # Per-commercial stats
-    commercial_stats = {}
-    
-    for event in all_events:
+
+    for event in recent_events:
         try:
             event_time = datetime.fromisoformat(event["timestamp"].replace("Z", "+00:00"))
             if event_time.tzinfo is None:
                 event_time = event_time.replace(tzinfo=timezone.utc)
-            
-            # Time filtering
+
             if event_time >= last_24h:
                 events_24h.append(event)
                 hourly_plays[str(event_time.hour)] += 1
@@ -4670,70 +4669,90 @@ async def get_commercial_analytics(user: dict = Depends(require_user)):
                 day_key = event_time.strftime("%Y-%m-%d")
                 if day_key in daily_plays:
                     daily_plays[day_key] += 1
-            if event_time >= last_30d:
-                events_30d.append(event)
-                week_key = f"Week {event_time.isocalendar()[1]}"
-                if week_key in weekly_plays:
-                    weekly_plays[week_key] += 1
-                month_key = event_time.strftime("%Y-%m")
-                if month_key in monthly_plays:
-                    monthly_plays[month_key] += 1
-            
-            # Per-commercial tracking
-            cid = event.get("commercial_id")
-            if cid:
-                if cid not in commercial_stats:
-                    commercial_stats[cid] = {"plays": 0, "completes": 0, "skips": 0}
-                if event.get("event_type") == "play":
-                    commercial_stats[cid]["plays"] += 1
-                elif event.get("event_type") == "complete":
-                    commercial_stats[cid]["completes"] += 1
-                elif event.get("event_type") == "skip":
-                    commercial_stats[cid]["skips"] += 1
-            
-            # Demographics
-            age = event.get("age_group")
-            if age and age in age_groups:
-                age_groups[age] += 1
-            else:
-                age_groups["unknown"] += 1
-            
-            gender = event.get("gender")
-            if gender and gender in genders:
-                genders[gender] += 1
-            else:
-                genders["unknown"] += 1
-            
-            country = event.get("country")
-            if country:
-                countries[country] = countries.get(country, 0) + 1
-                
+            week_key = f"Week {event_time.isocalendar()[1]}"
+            if week_key in weekly_plays:
+                weekly_plays[week_key] += 1
+            month_key = event_time.strftime("%Y-%m")
+            if month_key in monthly_plays:
+                monthly_plays[month_key] += 1
         except Exception:
             continue
-    
-    # Get commercial names
-    commercials = await db.commercials.find({}, {"_id": 0, "id": 1, "original_name": 1}).to_list(100)
+
+    # Per-commercial stats via aggregation (all-time)
+    per_commercial_pipeline = [
+        {"$group": {
+            "_id": {"commercial_id": "$commercial_id", "event_type": "$event_type"},
+            "count": {"$sum": 1},
+        }},
+    ]
+    commercial_stats = {}
+    async for row in db.commercial_analytics.aggregate(per_commercial_pipeline):
+        cid = row["_id"].get("commercial_id")
+        if not cid:
+            continue
+        etype = row["_id"].get("event_type", "play")
+        bucket = commercial_stats.setdefault(cid, {"plays": 0, "completes": 0, "skips": 0})
+        if etype == "play":
+            bucket["plays"] += row["count"]
+        elif etype == "complete":
+            bucket["completes"] += row["count"]
+        elif etype == "skip":
+            bucket["skips"] += row["count"]
+
+    # Demographics via aggregation (all-time)
+    async def _agg_field_counts_c(field):
+        pipeline = [
+            {"$match": {field: {"$ne": None}}},
+            {"$group": {"_id": f"${field}", "count": {"$sum": 1}}},
+        ]
+        result = {}
+        async for row in db.commercial_analytics.aggregate(pipeline):
+            key = row["_id"]
+            if key:
+                result[key] = row["count"]
+        return result
+
+    age_raw = await _agg_field_counts_c("age_group")
+    gender_raw = await _agg_field_counts_c("gender")
+    countries = await _agg_field_counts_c("country")
+
+    age_groups = {"18-24": 0, "25-34": 0, "35-44": 0, "45-54": 0, "55-64": 0, "65+": 0, "unknown": 0}
+    for k, v in age_raw.items():
+        if k in age_groups:
+            age_groups[k] += v
+        else:
+            age_groups["unknown"] += v
+
+    genders = {"male": 0, "female": 0, "other": 0, "unknown": 0}
+    for k, v in gender_raw.items():
+        if k in genders:
+            genders[k] += v
+        else:
+            genders["unknown"] += v
+
+    commercials = await db.commercials.find({}, {"_id": 0, "id": 1, "original_name": 1}).to_list(500)
     commercial_names = {c["id"]: c.get("original_name", "Unknown") for c in commercials}
-    
-    # Format commercial stats
+
     formatted_commercial_stats = []
     for cid, stats in commercial_stats.items():
         formatted_commercial_stats.append({
             "commercial_id": cid,
             "commercial_name": commercial_names.get(cid, "Unknown"),
             **stats,
-            "completion_rate": round(stats["completes"] / stats["plays"] * 100, 1) if stats["plays"] > 0 else 0
+            "completion_rate": round(stats["completes"] / stats["plays"] * 100, 1) if stats["plays"] > 0 else 0,
         })
-    
+
     formatted_commercial_stats.sort(key=lambda x: x["plays"], reverse=True)
-    
+
     top_countries = sorted(countries.items(), key=lambda x: x[1], reverse=True)[:10]
-    
+
+    total_plays_all_time = await db.commercial_analytics.count_documents({})
+
     return {
         "total_plays_24h": len(events_24h),
         "total_plays_7d": len(events_7d),
         "total_plays_30d": len(events_30d),
-        "total_plays_all_time": len(all_events),
+        "total_plays_all_time": total_plays_all_time,
         
         "time_stats": {
             "hourly": hourly_plays,
@@ -4766,11 +4785,12 @@ async def get_channel_analytics(channel_id: str, user: dict = Depends(require_us
     last_7d = now - timedelta(days=7)
     last_24h = now - timedelta(hours=24)
     
+    last_7d_iso = last_7d.isoformat()
     all_views = await db.views.find(
-        {"channel_id": channel_id},
+        {"channel_id": channel_id, "timestamp": {"$gte": last_7d_iso}},
         {"_id": 0}
-    ).to_list(50000)
-    
+    ).to_list(length=None)
+
     # Parse timestamps and filter
     views_7d = []
     views_24h = []
@@ -4936,7 +4956,7 @@ async def get_all_channel_schedules(user: dict = Depends(require_user)):
     return {"date": today, "schedules": schedules}
 
 @api_router.get("/schedule/channel/{channel_id}")
-async def get_channel_schedule(channel_id: str, user: dict = Depends(require_user)):
+async def get_channel_schedule_today(channel_id: str, user: dict = Depends(require_user)):
     """Get 24-hour schedule for a specific channel (admin only)"""
     if not user.get("is_admin", False):
         raise HTTPException(status_code=403, detail="Admin access required")
@@ -5558,8 +5578,8 @@ async def save_schedule(data: SaveScheduleInput, current_user: dict = Depends(ge
     
     return {"success": True, "message": "Schedule saved", "total_videos": len(data.videos)}
 
-@api_router.get("/schedule/channel/{channel_id}")
-async def get_channel_schedule(channel_id: str, date: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+@api_router.get("/schedule/channel/{channel_id}/by-date")
+async def get_channel_schedule_by_date(channel_id: str, date: Optional[str] = None, current_user: dict = Depends(get_current_user)):
     """Get schedule for a specific channel"""
     if not current_user.get("is_admin"):
         raise HTTPException(status_code=403, detail="Admin access required")
@@ -5763,6 +5783,7 @@ async def _startup_warmup():
         try:
             await db.views.create_index("timestamp")
             await db.views.create_index("channel_id")
+            await db.commercial_analytics.create_index("timestamp")
             await db.schedules.create_index([("channel_id", 1), ("schedule_date", 1)])
             await db.channels.create_index("sort_order")
         except Exception as e:

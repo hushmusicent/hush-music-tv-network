@@ -58,6 +58,18 @@ Build a TV network app named "Hush Music TV Network" with admin-only channel/vid
   - Verified end-to-end by testing agent: 6/6 backend tests + full frontend Edit modal flow pass. Pytest at `/app/backend/tests/test_commercials_assign.py`.
 
 
+## Completed (Feb 26, 2026)
+- **Fixed Analytics Overview/Time Analysis showing all zeros on production**
+  - Root cause: `/api/analytics/stats` and `/api/analytics/commercials` used `db.views.find({}).to_list(50000)` with no sort. On production (60,600+ views) MongoDB returned the OLDEST 50k documents in natural order, so the in-Python 24h/7d/30d filters found nothing and every recent metric rendered as 0. "All Time Views" stayed correct because it was already using `count_documents`.
+  - Fix (`/app/backend/server.py`):
+    - `/api/analytics/stats` now queries `db.views.find({"timestamp": {"$gte": last_30d_iso}})` for time-window aggregations (indexed on `timestamp`, no cap).
+    - Monthly distribution + yearly-unique now use a single `$group` aggregation pipeline over the year slice.
+    - Demographics (age/gender/country/region/city) now use per-field `$group` aggregation pipelines — no document loading.
+    - `/api/analytics/commercials` mirrored: 30-day slice query + per-commercial `$group` pipeline for all-time totals + demographics via aggregation.
+    - `/api/analytics/channel/{channel_id}` filtered by `timestamp: {$gte: last_7d_iso}`.
+    - Added `db.commercial_analytics.create_index("timestamp")` in startup warmup.
+  - Verified on preview: 24h views changed from 0 → 4, weekly 37, monthly 1221, yearly 1221; countries: `{United States: 238}`; commercial stats: 24h=1, all_time=2. **Requires Deploy** for production Analytics to render correctly.
+
 ## Completed (Apr 24, 2026)
 - **Fixed black-screen for uploaded videos on Gen Z / YouTv / Scary TV channels**
   - Root cause: 183 uploaded videos across 3 channels had stale `/api/videos/{filename}` local paths in `channels.videos[]` and `schedules.videos[]` instead of the Cloudflare R2 public URL. Local files no longer existed (migrated to R2), causing 404 → `MEDIA_ERR_SRC_NOT_SUPPORTED` → infinite skip loop → black screen.

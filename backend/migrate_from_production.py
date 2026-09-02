@@ -25,7 +25,7 @@ async def fetch_production_data():
             videos_resp = await client.get(f"{PRODUCTION_URL}/upload/videos")
             uploaded_videos = videos_resp.json()
             print(f"  Found {len(uploaded_videos)} uploaded videos")
-        except:
+        except Exception:
             uploaded_videos = []
             print("  Could not fetch uploaded videos")
         
@@ -35,7 +35,7 @@ async def fetch_production_data():
             commercials_resp = await client.get(f"{PRODUCTION_URL}/commercials")
             commercials = commercials_resp.json()
             print(f"  Found {len(commercials)} commercials")
-        except:
+        except Exception:
             commercials = []
             print("  Could not fetch commercials")
         
