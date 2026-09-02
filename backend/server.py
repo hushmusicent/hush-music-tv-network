@@ -4539,6 +4539,16 @@ async def get_analytics(user: dict = Depends(require_user)):
     top_regions = sorted(regions.items(), key=lambda x: x[1], reverse=True)[:10]
     top_cities = sorted(cities.items(), key=lambda x: x[1], reverse=True)[:10]
     
+    # Yearly totals: use a fast count query so the 50k pagination cap on
+    # `all_views` doesn't clamp the displayed "All Time Views" once traffic
+    # exceeds 50k. Pull all viewer_ids just for the yearly-unique metric.
+    yearly_total_views = await db.views.count_documents({})
+    yearly_unique_ids = set()
+    async for v in db.views.find({}, {"_id": 0, "viewer_id": 1}):
+        vid = v.get("viewer_id")
+        if vid:
+            yearly_unique_ids.add(vid)
+
     return {
         # Current/Recent
         "current_viewers": unique_5min,
@@ -4568,8 +4578,8 @@ async def get_analytics(user: dict = Depends(require_user)):
                 "distribution": monthly_views
             },
             "yearly": {
-                "total_views": len(all_views),
-                "unique_viewers": len(set(v["viewer_id"] for v in all_views))
+                "total_views": yearly_total_views,
+                "unique_viewers": len(yearly_unique_ids)
             }
         },
         

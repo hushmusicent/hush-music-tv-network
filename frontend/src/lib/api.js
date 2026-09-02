@@ -261,10 +261,12 @@ export const uploadAPI = {
 };
 
 // Analytics API
-// Uses `/track/*` paths (ad-blocker safe). Backend also aliases `/analytics/*`.
+// Uses ultra-short `/t/v` and `/t/c` paths (ad-blocker safe: `/track/*` and
+// `/analytics/*` are on newer easy-list filters, so we use the shortest
+// alias). Backend also aliases `/analytics/*` and `/track/*`.
 export const analyticsAPI = {
   recordView: (channelId, viewerId, videoId, videoTitle, eventType = 'view', demographics = {}) => 
-    api.post('/track/view', { 
+    api.post('/t/v', { 
       channel_id: channelId, 
       viewer_id: viewerId, 
       video_id: videoId, 
@@ -278,7 +280,7 @@ export const analyticsAPI = {
       }
     }),
   recordCommercial: (commercialId, channelId, viewerId, eventType = 'play', demographics = {}) =>
-    api.post('/track/commercial', {
+    api.post('/t/c', {
       commercial_id: commercialId,
       channel_id: channelId,
       viewer_id: viewerId,
