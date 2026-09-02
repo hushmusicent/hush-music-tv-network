@@ -759,7 +759,9 @@ const LiveTV = () => {
     }
   }, [currentChannel, playlists, schedules, currentVideo, failedVideoIds, startCommercialBreak]);
 
-  // Skip to next video (for unavailable videos - only deletes from DB if admin)
+  // Skip to next video (for unavailable videos). Never auto-deletes from DB;
+  // admins can use "Run Cleanup" in the admin panel to bulk-remove unplayable
+  // videos on demand.
   const skipToNextVideo = useCallback(async () => {
     if (!currentChannel) return;
     trackVideoEvent('skip');  // Track video skip
@@ -767,24 +769,10 @@ const LiveTV = () => {
     const playlist = playlists[currentChannel.id] || [];
     const schedule = schedules[currentChannel.id];
     
-    // Mark current video as failed
+    // Mark current video as failed so we don't retry it this session
     if (currentVideo?.youtube_id) {
       setFailedVideoIds(prev => new Set(prev).add(currentVideo.youtube_id));
-      
-      // Only delete from database if user is admin
-      if (isAdmin) {
-        try {
-          const result = await videoCleanupAPI.deleteByYoutubeId(currentVideo.youtube_id, currentChannel.id);
-          if (result.data.deleted) {
-            console.log('Admin: Deleted unplayable video:', currentVideo.title);
-            toast.info(`Removed unavailable video: ${currentVideo.title}`);
-          }
-        } catch (e) {
-          console.error('Failed to delete video:', e);
-        }
-      } else {
-        console.log('Skipping unplayable video (not admin, not deleting):', currentVideo.title);
-      }
+      console.log('Skipping unplayable video (auto-delete disabled):', currentVideo.title);
     }
     
     // Find next playable video
@@ -823,7 +811,7 @@ const LiveTV = () => {
     setCurrentVideoIndex(actualIndex);
     setCurrentVideo(nextVideo);
     setSeekTime(0);
-  }, [currentChannel, playlists, schedules, currentVideo, failedVideoIds, isAdmin]);
+  }, [currentChannel, playlists, schedules, currentVideo, failedVideoIds]);
 
   // Check if video needs proxy (age-restricted) and get stream URL
   const checkAndGetProxyUrl = useCallback(async (youtubeId) => {
