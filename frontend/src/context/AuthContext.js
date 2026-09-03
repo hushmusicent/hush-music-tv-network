@@ -25,25 +25,28 @@ export const AuthProvider = ({ children }) => {
   };
 
   useEffect(() => {
-    const loadUser = async () => {
+    const loadUser = () => {
       const token = localStorage.getItem('token');
       const savedUser = localStorage.getItem('user');
-      
+
       if (token && savedUser) {
         try {
           const parsedUser = JSON.parse(savedUser);
           setUser(parsedUser);
           setIsAuthenticated(true);
-          
-          // Verify token is still valid (in background)
-          try {
-            const response = await authAPI.getMe();
-            setUser(response.data);
-            localStorage.setItem('user', JSON.stringify(response.data));
-          } catch (verifyError) {
-            console.error('Token validation failed:', verifyError);
-            clearAuth();
-          }
+
+          // Verify the token in the background so the UI is interactive
+          // from the first frame (critical for Fire TV / Amazon Appstore
+          // compliance: no gate on a network call at launch).
+          authAPI.getMe()
+            .then((response) => {
+              setUser(response.data);
+              localStorage.setItem('user', JSON.stringify(response.data));
+            })
+            .catch((verifyError) => {
+              console.error('Token validation failed:', verifyError);
+              clearAuth();
+            });
         } catch (error) {
           console.error('Error parsing saved user:', error);
           clearAuth();

@@ -58,6 +58,16 @@ Build a TV network app named "Hush Music TV Network" with admin-only channel/vid
   - Verified end-to-end by testing agent: 6/6 backend tests + full frontend Edit modal flow pass. Pytest at `/app/backend/tests/test_commercials_assign.py`.
 
 
+## Completed (Feb 27, 2026)
+- **Fixed Amazon Fire TV rejection: "installs but fails to present an interactive UI on launch"**
+  - Root cause: `LiveTV.jsx` (the Fire TV `start_url`) rendered a full-page "Loading Live TV…" spinner with **zero interactive elements** while awaiting `/api/schedule/live`. Combined with the 30s axios timeout in `prefetch.js`, the Amazon automated reviewer landed on a permanently non-interactive screen if the fetch was slow or failed.
+  - Fixes (all preserve existing playback logic):
+    - `LiveTV.jsx`: replaced the blocking full-page loader with an interactive shell — HUSH MUSIC TV header, Home button, "Tuning in…" panel, and a **Retry** button — all clickable from the first frame. Added a `loadError` state that renders a dedicated error screen with **Retry** + **Back to Home** buttons when the fetch fails, so the UI is never dead.
+    - `prefetch.js`: reduced axios timeout from 30s → 8s so failures surface to the UI (and the retry button) instead of hanging.
+    - `AuthContext.js`: token verification is now fire-and-forget (no `await`) so `loading` clears on the same tick — nothing at app boot blocks the first paint on a network call.
+  - Verified in headless Chrome at 500ms after DOMContentLoaded: `live-tv-loading` shell visible, `live-tv-loading-home-btn` and `live-tv-loading-retry-btn` both present and clickable. Full LiveTV page renders once `/api/schedule/live` resolves.
+  - **Requires Deploy** for production.
+
 ## Completed (Feb 26, 2026)
 - **Fixed Analytics Overview/Time Analysis showing all zeros on production**
   - Root cause: `/api/analytics/stats` and `/api/analytics/commercials` used `db.views.find({}).to_list(50000)` with no sort. On production (60,600+ views) MongoDB returned the OLDEST 50k documents in natural order, so the in-Python 24h/7d/30d filters found nothing and every recent metric rendered as 0. "All Time Views" stayed correct because it was already using `count_documents`.

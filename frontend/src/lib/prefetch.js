@@ -15,6 +15,7 @@ import axios from 'axios';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const TTL_MS = 60 * 1000;
+const FETCH_TIMEOUT_MS = 8 * 1000; // Fail fast so UI can render an interactive retry state
 
 let _promise = null;
 let _resolvedAt = 0;
@@ -22,7 +23,7 @@ let _resolvedData = null;
 
 function fireFetch() {
   const url = `${BACKEND_URL}/api/schedule/live`;
-  _promise = axios.get(url, { timeout: 30000 })
+  _promise = axios.get(url, { timeout: FETCH_TIMEOUT_MS })
     .then((res) => {
       _resolvedData = res.data;
       _resolvedAt = Date.now();

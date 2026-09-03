@@ -190,6 +190,7 @@ const LiveTV = () => {
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
   const [seekTime, setSeekTime] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
   const [isMuted, setIsMuted] = useState(false);
   const [showChannelList, setShowChannelList] = useState(window.innerWidth >= 768); // Start collapsed on mobile
   const [showAdminPanel, setShowAdminPanel] = useState(false);
@@ -334,6 +335,7 @@ const LiveTV = () => {
   const loadChannelsAndPlaylists = async () => {
     try {
       setLoading(true);
+      setLoadError(null);
       
       // Prefer prefetched data (kicked off at app boot). Falls back to a
       // fresh network call inside the helper if the cache is empty/stale.
@@ -405,6 +407,7 @@ const LiveTV = () => {
       }
     } catch (error) {
       console.error('Failed to load playlists:', error);
+      setLoadError(error?.message || 'Unable to reach the network. Check your connection and try again.');
       toast.error('Failed to load channels');
     } finally {
       setLoading(false);
@@ -1276,11 +1279,91 @@ const LiveTV = () => {
   };
 
   if (loading) {
+    // Interactive first-frame shell for Fire TV / Amazon Appstore compliance.
+    // We deliberately do NOT gate the whole app on a data fetch — the sidebar
+    // toggle, Home link, and Retry button must all be usable while the
+    // schedule loads (or fails to load).
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
-        <div className="text-center">
-          <Radio size={48} className="mx-auto mb-4 text-primary animate-pulse" />
-          <p className="text-gray-400">Loading Live TV...</p>
+      <div className="min-h-screen bg-black text-white flex flex-col" data-testid="live-tv-loading">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
+          <div className="flex items-center gap-3">
+            <Radio size={24} className="text-primary" />
+            <span className="font-heading text-xl tracking-wide">HUSH MUSIC TV</span>
+          </div>
+          <Button
+            variant="ghost"
+            onClick={() => navigate('/')}
+            className="h-9 px-3 text-white hover:bg-white/10"
+            data-testid="live-tv-loading-home-btn"
+          >
+            Home
+          </Button>
+        </div>
+        <div className="flex-1 flex items-center justify-center px-6">
+          <div className="text-center max-w-md">
+            <Radio size={48} className="mx-auto mb-4 text-primary animate-pulse" />
+            <p className="text-white text-lg font-medium mb-2">Tuning in…</p>
+            <p className="text-gray-400 text-sm mb-6">
+              Loading channels from the network.
+            </p>
+            <Button
+              onClick={() => {
+                invalidateLiveSchedule();
+                loadChannelsAndPlaylists();
+              }}
+              className="bg-primary hover:bg-primary-hover text-white px-6"
+              data-testid="live-tv-loading-retry-btn"
+            >
+              Retry
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (loadError && channels.length === 0) {
+    return (
+      <div className="min-h-screen bg-black text-white flex flex-col" data-testid="live-tv-error">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
+          <div className="flex items-center gap-3">
+            <Radio size={24} className="text-primary" />
+            <span className="font-heading text-xl tracking-wide">HUSH MUSIC TV</span>
+          </div>
+          <Button
+            variant="ghost"
+            onClick={() => navigate('/')}
+            className="h-9 px-3 text-white hover:bg-white/10"
+            data-testid="live-tv-error-home-btn"
+          >
+            Home
+          </Button>
+        </div>
+        <div className="flex-1 flex items-center justify-center px-6">
+          <div className="text-center max-w-md">
+            <Tv size={48} className="mx-auto mb-4 text-gray-500" />
+            <p className="text-white text-lg font-medium mb-2">Can't reach the network</p>
+            <p className="text-gray-400 text-sm mb-6">{loadError}</p>
+            <div className="flex items-center justify-center gap-3">
+              <Button
+                onClick={() => {
+                  invalidateLiveSchedule();
+                  loadChannelsAndPlaylists();
+                }}
+                className="bg-primary hover:bg-primary-hover text-white px-6"
+                data-testid="live-tv-error-retry-btn"
+              >
+                Retry
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => navigate('/')}
+                className="border-white/20 text-white hover:bg-white/10 px-6"
+              >
+                Back to Home
+              </Button>
+            </div>
+          </div>
         </div>
       </div>
     );
