@@ -21,6 +21,11 @@ Sign up: https://play.google.com/console
 Verification: 24-48h waiting period.
 
 ### 2. Generate the Android app (TWA wrapper)
+
+The Android build config lives at **`/app/android-app/twa-manifest.json`**
+and is pinned to **Android 16 (API 36)** — `targetSdkVersion` and
+`compileSdkVersion` are both `36`, `minSdkVersion` is `21`.
+
 Use PWABuilder — zero code, 5 minutes:
 1. https://pwabuilder.com → enter `https://broadcaster.emergent.host`
 2. Click **Package for Stores → Android**
@@ -28,7 +33,11 @@ Use PWABuilder — zero code, 5 minutes:
 4. App name: `Hush Music TV`
 5. Version code: `1`
 6. Version name: `1.0.0`
-7. Download the ZIP → contains signed `.aab` (Android App Bundle)
+7. In **Advanced**: set **Target SDK: 36** and **Compile SDK: 36**
+8. Download the ZIP → contains signed `.aab` (Android App Bundle)
+
+Alternatively, use Bubblewrap CLI locally with the manifest already in
+`/app/android-app/twa-manifest.json` (see `/app/android-app/README.md`).
 
 ### 3. Update assetlinks.json with your SHA-256
 The PWABuilder ZIP contains a text file with your signing cert's SHA-256.
