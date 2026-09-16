@@ -23,6 +23,7 @@ import jwt
 import bcrypt
 import httpx
 import tempfile
+from audio_normalize_hook import normalize_upload_audio
 
 logger = logging.getLogger(__name__)
 
@@ -906,6 +907,8 @@ async def register_direct_upload(
     # Auto A/V sync audit (presigned direct upload path)
     object_key = f"videos/{video_id}.mp4"
     asyncio.create_task(audit_and_fix_av_sync(video_id, public_url, object_key))
+    # Auto LUFS normalize (on-upload hook)
+    asyncio.create_task(normalize_upload_audio(db, "uploaded_videos", video_id, public_url, object_key))
 
     return {
         "id": video_id,
@@ -1085,6 +1088,8 @@ async def background_r2_upload(video_id: str, local_path: str, object_key: str):
             # audio/video streams drift, so newly uploaded files never reach a
             # channel with broken lip sync.
             asyncio.create_task(audit_and_fix_av_sync(video_id, result["url"], object_key))
+            # Auto LUFS normalize (on-upload hook)
+            asyncio.create_task(normalize_upload_audio(db, "uploaded_videos", video_id, result["url"], object_key))
 
             # Also rewrite any channel videos that reference the old /api/videos/ URL
             try:
@@ -1285,6 +1290,8 @@ async def complete_chunked_upload(
         # Auto A/V sync audit (small chunked upload that finished synchronously to R2)
         if video_doc["storage_type"] == "r2" and video_url.startswith("http"):
             asyncio.create_task(audit_and_fix_av_sync(video_id, video_url, object_key))
+            # Auto LUFS normalize (on-upload hook)
+            asyncio.create_task(normalize_upload_audio(db, "uploaded_videos", video_id, video_url, object_key))
 
         return {
             "id": video_id,
@@ -1399,6 +1406,8 @@ async def upload_video(
     # Auto A/V sync audit when stored on R2 (small synchronous upload path)
     if storage_type == "r2":
         asyncio.create_task(audit_and_fix_av_sync(video_id, video_url, f"videos/{filename}"))
+        # Auto LUFS normalize (on-upload hook)
+        asyncio.create_task(normalize_upload_audio(db, "uploaded_videos", video_id, video_url, f"videos/{filename}"))
 
     return UploadedVideoResponse(
         id=video_id,
@@ -1572,6 +1581,8 @@ async def upload_commercial(
         response_doc = dict(commercial_doc)
         
         await db.commercials.insert_one(commercial_doc)
+        # Auto LUFS normalize (on-upload hook)
+        asyncio.create_task(normalize_upload_audio(db, "commercials", commercial_id, r2_result["url"], r2_key))
         
         return response_doc
         
@@ -1810,6 +1821,8 @@ async def complete_chunked_commercial_upload(
         response_doc = dict(commercial_doc)
         
         await db.commercials.insert_one(commercial_doc)
+        # Auto LUFS normalize (on-upload hook)
+        asyncio.create_task(normalize_upload_audio(db, "commercials", commercial_id, r2_result["url"], r2_key))
         
         # Clean up session
         del commercial_upload_sessions[upload_id]
