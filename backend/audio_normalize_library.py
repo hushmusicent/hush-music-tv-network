@@ -8,6 +8,13 @@ applies loudnorm + light denoise, re-uploads to R2 with `-c:v copy`
 
 Idempotent — writes {lufs, audio_normalized:true} into DB so re-runs skip
 completed items. Safe to kill and restart.
+
+Usage:
+  python audio_normalize_library.py                       # scan + fix uploaded_videos
+  python audio_normalize_library.py all                   # same
+  python audio_normalize_library.py scan                  # scan only
+  python audio_normalize_library.py fix                   # fix only
+  python audio_normalize_library.py all commercials       # process commercials collection
 """
 import asyncio, os, re, sys, json, tempfile, time
 from urllib.parse import urlparse
@@ -26,6 +33,9 @@ TARGET_LUFS = -16.0
 OFF_THRESHOLD = 3.0          # ≥3 LUFS off target ⇒ re-encode
 SCAN_CONCURRENCY = 10
 FIX_CONCURRENCY = 5
+
+# Collection is set from argv in main(); defaults to uploaded_videos.
+COLLECTION_NAME = 'uploaded_videos'
 
 
 async def measure_lufs(url):
@@ -96,14 +106,15 @@ async def apply_loudnorm_and_denoise(url, target_lufs=-16.0, current_lufs=None, 
 
 # ────────────────────────── phase 1 ──────────────────────────
 async def scan_phase():
-    print(f"\n=== Phase 1: Scan library ===")
-    # Only measure videos that don't already have `lufs` recorded
+    coll = db[COLLECTION_NAME]
+    print(f"\n=== Phase 1: Scan {COLLECTION_NAME} ===")
+    # Only measure items that don't already have `lufs` recorded
     query = {'url': {'$regex': '^https://'}, 'lufs': {'$exists': False}}
-    total = await db.uploaded_videos.count_documents(query)
+    total = await coll.count_documents(query)
     if total == 0:
-        print(f"  All videos already scanned (found lufs on all). Skipping.")
+        print(f"  All items already scanned (found lufs on all). Skipping.")
         return
-    print(f"  {total} videos to scan (~{total*1.2/60:.0f} min at 10 parallel)")
+    print(f"  {total} items to scan (~{total*1.2/60:.0f} min at 10 parallel)")
     sem = asyncio.Semaphore(SCAN_CONCURRENCY)
     processed = 0
     start = time.time()
@@ -118,7 +129,7 @@ async def scan_phase():
                 update = {'lufs': lufs, 'peak_dbtp': peak}
             else:
                 update = {'lufs_measure_failed': True}
-            await db.uploaded_videos.update_one({'_id': doc['_id']}, {'$set': update})
+            await coll.update_one({'_id': doc['_id']}, {'$set': update})
             processed += 1
             if processed % 25 == 0:
                 elapsed = time.time() - start
@@ -126,7 +137,7 @@ async def scan_phase():
                 eta = (total - processed) / max(rate, 0.1)
                 print(f"  scan progress: {processed}/{total}  ({rate:.1f}/s, ETA {eta/60:.1f}m)")
 
-    cursor = db.uploaded_videos.find(query, {'url': 1})
+    cursor = coll.find(query, {'url': 1})
     tasks = []
     async for doc in cursor:
         tasks.append(asyncio.create_task(work(doc)))
@@ -136,7 +147,8 @@ async def scan_phase():
 
 # ────────────────────────── phase 2 ──────────────────────────
 async def fix_phase():
-    print(f"\n=== Phase 2: Fix outliers (>|{OFF_THRESHOLD}| LUFS off {TARGET_LUFS}) ===")
+    coll = db[COLLECTION_NAME]
+    print(f"\n=== Phase 2: Fix outliers in {COLLECTION_NAME} (>|{OFF_THRESHOLD}| LUFS off {TARGET_LUFS}) ===")
     # Outliers: lufs set, not already normalized, and off target
     query = {
         'lufs': {'$exists': True},
@@ -145,11 +157,11 @@ async def fix_phase():
             '$gt': [{'$abs': {'$subtract': ['$lufs', TARGET_LUFS]}}, OFF_THRESHOLD]
         }
     }
-    total = await db.uploaded_videos.count_documents(query)
+    total = await coll.count_documents(query)
     if total == 0:
         print("  No outliers to fix.")
         return
-    print(f"  {total} outlier videos to normalize (~{total*30/3600:.1f} hours at 2 parallel)")
+    print(f"  {total} outlier items to normalize (~{total*30/3600:.1f} hours at 5 parallel)")
     sem = asyncio.Semaphore(FIX_CONCURRENCY)
     done = 0
     ok_count = 0
@@ -164,13 +176,13 @@ async def fix_phase():
                 current_peak=doc.get('peak_dbtp'),
             )
             if ok:
-                await db.uploaded_videos.update_one(
+                await coll.update_one(
                     {'_id': doc['_id']},
                     {'$set': {'audio_normalized': True, 'audio_normalized_at': time.time()}}
                 )
                 ok_count += 1
             else:
-                await db.uploaded_videos.update_one(
+                await coll.update_one(
                     {'_id': doc['_id']},
                     {'$set': {'audio_normalize_failed': msg}}
                 )
@@ -181,7 +193,7 @@ async def fix_phase():
                 eta_h = (total - done) / max(rate, 0.001) / 3600
                 print(f"  fix progress: {done}/{total} (ok={ok_count}) — ETA {eta_h:.1f}h")
 
-    cursor = db.uploaded_videos.find(query, {'url': 1, 'lufs': 1, 'peak_dbtp': 1})
+    cursor = coll.find(query, {'url': 1, 'lufs': 1, 'peak_dbtp': 1})
     tasks = []
     async for doc in cursor:
         tasks.append(asyncio.create_task(work(doc)))
@@ -190,7 +202,14 @@ async def fix_phase():
 
 
 async def main():
+    global COLLECTION_NAME
     mode = sys.argv[1] if len(sys.argv) > 1 else 'all'
+    if len(sys.argv) > 2:
+        COLLECTION_NAME = sys.argv[2]
+    if COLLECTION_NAME not in ('uploaded_videos', 'commercials'):
+        print(f"Unknown collection: {COLLECTION_NAME}")
+        sys.exit(1)
+    print(f"[collection={COLLECTION_NAME}] [mode={mode}]")
     if mode in ('scan', 'all'):
         await scan_phase()
     if mode in ('fix', 'all'):
