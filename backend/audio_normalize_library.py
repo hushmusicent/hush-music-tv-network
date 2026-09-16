@@ -39,10 +39,12 @@ COLLECTION_NAME = 'uploaded_videos'
 
 
 async def measure_lufs(url):
-    """Sample-based LUFS measurement — reads 90s of audio, no download."""
+    """LUFS measurement — reads up to 90s of audio from the start of the file.
+    Starts at 0 (no seek) so short commercials (<30s) don't fail with "nothing
+    to decode after seek"."""
     try:
         proc = await asyncio.create_subprocess_exec(
-            'ffmpeg', '-nostdin', '-ss', '30', '-t', '90', '-i', url,
+            'ffmpeg', '-nostdin', '-t', '90', '-i', url,
             '-af', 'loudnorm=I=-16:TP=-1.5:LRA=11:print_format=json',
             '-f', 'null', '-',
             stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.PIPE,

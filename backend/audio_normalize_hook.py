@@ -37,8 +37,12 @@ if _FFMPEG_BIN_DIR not in os.environ.get("PATH", ""):
 async def _measure_lufs(url: str):
     """Return (integrated_lufs, peak_dbtp) for the remote video, or None."""
     try:
+        # Analyse the first 90 s from the start of the file. Starting at 0
+        # (instead of seeking to 30 s) is critical for short clips like
+        # commercials (10-30 s), which would otherwise fail with "nothing to
+        # decode after seek".
         proc = await asyncio.create_subprocess_exec(
-            "ffmpeg", "-nostdin", "-ss", "30", "-t", "90", "-i", url,
+            "ffmpeg", "-nostdin", "-t", "90", "-i", url,
             "-af", "loudnorm=I=-16:TP=-1.5:LRA=11:print_format=json",
             "-f", "null", "-",
             stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.PIPE,
