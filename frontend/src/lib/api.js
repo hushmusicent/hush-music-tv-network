@@ -67,6 +67,8 @@ export const channelsAPI = {
   removeVideo: (channelId, videoId) => api.delete(`/channels/${channelId}/videos/${videoId}`),
   updateVideo: (channelId, videoId, data) => api.put(`/channels/${channelId}/videos/${videoId}`, data),
   reorderVideos: (channelId, videoIds) => api.put(`/channels/${channelId}/videos/reorder`, videoIds),
+  // Vimeo metadata (returns {vimeo_id, title, duration, thumbnail})
+  getVimeoMetadata: (url) => api.post('/videos/vimeo/metadata', { url }),
   
   // Schedule
   addSchedule: (channelId, data) => api.post(`/channels/${channelId}/schedule`, data),

@@ -10,6 +10,7 @@ import asyncio
 def ensure_ffmpeg():
     pass  # No-op, rely on system ffmpeg or Python fallback
 import os
+import re
 import logging
 import shutil
 import subprocess
@@ -173,20 +174,22 @@ class VideoItem(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     youtube_id: Optional[str] = None
+    vimeo_id: Optional[str] = None
     video_url: Optional[str] = None  # For uploaded videos
     title: str
     thumbnail: Optional[str] = None
     duration: int = 0  # in seconds
     order: int = 0
-    type: str = "youtube"  # "youtube" or "uploaded"
+    type: str = "youtube"  # "youtube", "uploaded", or "vimeo"
 
 class VideoCreate(BaseModel):
     youtube_id: Optional[str] = None
+    vimeo_id: Optional[str] = None
     title: str
     thumbnail: Optional[str] = None
     duration: int = 0
     video_url: Optional[str] = None  # For uploaded videos
-    type: str = "youtube"  # "youtube" or "uploaded"
+    type: str = "youtube"  # "youtube", "uploaded", or "vimeo"
 
 class ScheduleSlot(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -199,6 +202,32 @@ class ScheduleSlotCreate(BaseModel):
     video_id: str
     start_time: str
     day_of_week: int
+
+
+class VimeoMetadataRequest(BaseModel):
+    url: str
+
+
+VIMEO_ID_PATTERNS = [
+    re.compile(r"vimeo\.com/(?:video/)?(\d+)"),
+    re.compile(r"vimeo\.com/channels/[^/]+/(\d+)"),
+    re.compile(r"vimeo\.com/groups/[^/]+/videos/(\d+)"),
+    re.compile(r"player\.vimeo\.com/video/(\d+)"),
+    re.compile(r"^(\d{6,})$"),
+]
+
+
+def extract_vimeo_id(url: str) -> Optional[str]:
+    """Extract a Vimeo numeric ID from a URL or bare ID string."""
+    if not url:
+        return None
+    url = url.strip()
+    for pat in VIMEO_ID_PATTERNS:
+        m = pat.search(url)
+        if m:
+            return m.group(1)
+    return None
+
 
 class ChannelBase(BaseModel):
     name: str
@@ -448,6 +477,39 @@ async def delete_channel(channel_id: str, user: dict = Depends(require_user)):
 
 # ===================== VIDEO ROUTES =====================
 
+@api_router.post("/videos/vimeo/metadata")
+async def get_vimeo_metadata(payload: VimeoMetadataRequest, user: dict = Depends(require_user)):
+    """Given a Vimeo URL or numeric ID, return {vimeo_id, title, duration, thumbnail}.
+    Uses Vimeo's public oEmbed endpoint — no API key required for public videos.
+    Falls back to just the ID if oEmbed can't reach the video (private/deleted).
+    """
+    vimeo_id = extract_vimeo_id(payload.url)
+    if not vimeo_id:
+        raise HTTPException(status_code=400, detail="Invalid Vimeo URL or ID")
+
+    oembed_url = f"https://vimeo.com/api/oembed.json?url=https://vimeo.com/{vimeo_id}"
+    title = f"Vimeo video {vimeo_id}"
+    duration = 0
+    thumbnail = None
+    try:
+        async with httpx.AsyncClient(timeout=8.0, follow_redirects=True) as http:
+            r = await http.get(oembed_url)
+            if r.status_code == 200:
+                m = r.json()
+                title = m.get("title") or title
+                duration = int(m.get("duration") or 0)
+                thumbnail = m.get("thumbnail_url") or None
+    except Exception as e:
+        logger.warning(f"Vimeo oEmbed lookup failed for {vimeo_id}: {e}")
+
+    return {
+        "vimeo_id": vimeo_id,
+        "title": title,
+        "duration": duration,
+        "thumbnail": thumbnail,
+    }
+
+
 @api_router.post("/channels/{channel_id}/videos", response_model=ChannelResponse)
 async def add_video_to_channel(channel_id: str, data: VideoCreate, user: dict = Depends(require_user)):
     channel = await db.channels.find_one({"id": channel_id}, {"_id": 0})
@@ -480,11 +542,13 @@ async def add_video_to_channel(channel_id: str, data: VideoCreate, user: dict = 
     
     # Determine video type
     # Auto-detect: if a video_url was provided (or was rewritten to one), this is
-    # an uploaded video. Only YouTube videos lack a video_url. The model default
-    # of "youtube" is overridden whenever a real URL is present.
+    # an uploaded video. Only YouTube/Vimeo videos lack a video_url. The model
+    # default of "youtube" is overridden whenever a real URL or vimeo_id is present.
     video_type = data.type
     if data.video_url and (not video_type or video_type == "youtube"):
         video_type = "uploaded"
+    elif data.vimeo_id and (not video_type or video_type == "youtube"):
+        video_type = "vimeo"
     elif not video_type:
         video_type = "youtube"
     
@@ -494,10 +558,11 @@ async def add_video_to_channel(channel_id: str, data: VideoCreate, user: dict = 
         if data.youtube_id:
             thumbnail = f"https://img.youtube.com/vi/{data.youtube_id}/maxresdefault.jpg"
         else:
-            thumbnail = None  # Uploaded videos may not have thumbnails
+            thumbnail = None  # Uploaded/Vimeo may set their own; ok to leave None
     
     video = VideoItem(
         youtube_id=data.youtube_id,
+        vimeo_id=data.vimeo_id,
         video_url=data.video_url,
         title=data.title,
         thumbnail=thumbnail,
@@ -506,13 +571,15 @@ async def add_video_to_channel(channel_id: str, data: VideoCreate, user: dict = 
         type=video_type
     )
 
-    # Server-side dedup: prevent the same YouTube video or the same R2 video URL
-    # from being added twice to a channel. Returns the existing channel unchanged
-    # rather than appending a duplicate.
+    # Server-side dedup: prevent the same YouTube/Vimeo video or the same R2
+    # video URL from being added twice to a channel. Returns the existing
+    # channel unchanged rather than appending a duplicate.
     existing_videos = channel.get("videos", [])
     is_dup = False
     if data.youtube_id:
         is_dup = any(v.get("youtube_id") == data.youtube_id for v in existing_videos)
+    elif data.vimeo_id:
+        is_dup = any(v.get("vimeo_id") == data.vimeo_id for v in existing_videos)
     elif data.video_url:
         is_dup = any(v.get("video_url") == data.video_url for v in existing_videos)
     if is_dup:

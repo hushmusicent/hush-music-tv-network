@@ -58,6 +58,14 @@ Build a TV network app named "Hush Music TV Network" with admin-only channel/vid
   - Verified end-to-end by testing agent: 6/6 backend tests + full frontend Edit modal flow pass. Pytest at `/app/backend/tests/test_commercials_assign.py`.
 
 
+## Completed (Feb 28, 2026 — later)
+- **Vimeo video support (Channel Creator + LiveTV player)**
+  - Backend: added `vimeo_id` to `VideoItem` / `VideoCreate`, type union now `youtube | uploaded | vimeo`. Auto-detects type when `vimeo_id` is provided. Dedup check includes vimeo_id. Added `POST /api/videos/vimeo/metadata` that extracts a Vimeo ID from URL variants (`vimeo.com/12345`, `vimeo.com/channels/…/12345`, `vimeo.com/groups/…/videos/12345`, `player.vimeo.com/video/12345`, or a raw numeric ID) and fetches title/duration/thumbnail via Vimeo's public oEmbed endpoint (no API key needed).
+  - Channel Creator: playlist section now has 3 tabs (YouTube / Vimeo / Upload). Vimeo tab accepts URL or embed link, calls the metadata endpoint, and adds the video with `type: 'vimeo'`. Playlist thumbnails and "Vimeo" badge render on each Vimeo item.
+  - LiveTV player: dynamically loads the Vimeo Player SDK once, and when the current video is a Vimeo clip it constructs `new Vimeo.Player('vimeo-player', {id, autoplay, muted, controls:false, responsive, title:false, byline:false, portrait:false, dnt:true})`. Wires `ended → playNextVideo`, `error → skipToNextVideo`, and syncs the app-level mute toggle. Click overlay toggles play/pause; double-click toggles fullscreen. Rendered inline with `w-full h-full` so it looks clean on both mobile and TV.
+  - `isUploadedVideo` derived state now excludes Vimeo videos so the existing YouTube/Upload branches don't collide with the Vimeo branch.
+  - The existing YouTube URL and MP4 upload flows are unchanged — broadcasters can still choose any of the three.
+
 ## Completed (Feb 28, 2026)
 - **On-upload LUFS auto-normalize hook**
   - New module `/app/backend/audio_normalize_hook.py` exposing `normalize_upload_audio(db, collection_name, doc_id, url, r2_key)` — same target LUFS (−16), same ≥3 LUFS threshold, same filter chain (highpass 60Hz + static gain + peak limiter, `-c:v copy`) as the batch script.

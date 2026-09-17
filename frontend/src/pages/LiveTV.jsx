@@ -304,6 +304,88 @@ const LiveTV = () => {
     }
   }, []);
 
+  // Load Vimeo Player SDK once
+  useEffect(() => {
+    if (window.Vimeo && window.Vimeo.Player) return;
+    if (document.querySelector('script[data-sdk="vimeo"]')) return;
+    const tag = document.createElement('script');
+    tag.src = 'https://player.vimeo.com/api/player.js';
+    tag.async = true;
+    tag.setAttribute('data-sdk', 'vimeo');
+    document.head.appendChild(tag);
+  }, []);
+
+  // Wire up the Vimeo player when the current video is a Vimeo clip.
+  // Uses the Vimeo Player SDK for onEnded → next-video handoff, mirroring
+  // the YouTube IFrame API integration above.
+  const vimeoPlayerRef = useRef(null);
+  useEffect(() => {
+    if (!isVimeoVideo || !currentVideo?.vimeo_id) return;
+
+    let cancelled = false;
+    let handle;
+
+    const attach = () => {
+      if (cancelled) return;
+      if (!window.Vimeo || !window.Vimeo.Player) {
+        handle = setTimeout(attach, 200);
+        return;
+      }
+      const container = document.getElementById('vimeo-player');
+      if (!container) {
+        handle = setTimeout(attach, 200);
+        return;
+      }
+      // Tear down any previous instance first
+      if (vimeoPlayerRef.current) {
+        try { vimeoPlayerRef.current.destroy(); } catch (e) {}
+        vimeoPlayerRef.current = null;
+      }
+      try {
+        const player = new window.Vimeo.Player(container, {
+          id: currentVideo.vimeo_id,
+          autoplay: true,
+          muted: isMuted,
+          controls: false,
+          responsive: true,
+          dnt: true,
+          title: false,
+          byline: false,
+          portrait: false,
+        });
+        vimeoPlayerRef.current = player;
+        player.on('ended', () => {
+          if (cancelled) return;
+          console.log('Vimeo video ended');
+          playNextVideoRef.current?.();
+        });
+        player.on('error', (err) => {
+          console.error('Vimeo error:', err);
+          if (!cancelled) skipToNextVideoRef.current?.();
+        });
+      } catch (e) {
+        console.error('Failed to init Vimeo player:', e);
+      }
+    };
+
+    attach();
+    return () => {
+      cancelled = true;
+      if (handle) clearTimeout(handle);
+      if (vimeoPlayerRef.current) {
+        try { vimeoPlayerRef.current.destroy(); } catch (e) {}
+        vimeoPlayerRef.current = null;
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isVimeoVideo, currentVideo?.vimeo_id]);
+
+  // Keep the Vimeo player's mute state in sync with the app-level mute toggle
+  useEffect(() => {
+    if (!isVimeoVideo || !vimeoPlayerRef.current) return;
+    try { vimeoPlayerRef.current.setMuted(isMuted); } catch (e) {}
+  }, [isMuted, isVimeoVideo]);
+
   // Load channels and playlists on mount, set session start time
   const hasInitialized = useRef(false);
   useEffect(() => {
@@ -688,7 +770,8 @@ const LiveTV = () => {
     }, 1500);
   };
 
-  const isUploadedVideo = currentVideo && (currentVideo.video_url || !currentVideo.youtube_id);
+  const isVimeoVideo = currentVideo && (currentVideo.vimeo_id || currentVideo.type === 'vimeo');
+  const isUploadedVideo = currentVideo && !isVimeoVideo && (currentVideo.video_url || !currentVideo.youtube_id);
   
   // Check if current channel is using synchronized schedule mode (via use_schedule flag)
   const isCurrentChannelScheduled = currentChannel?.use_schedule === true;
@@ -1536,7 +1619,7 @@ const LiveTV = () => {
             </div>
           )}
 
-          {currentVideo?.youtube_id && !isUploadedVideo && !useProxyPlayer && (
+          {currentVideo?.youtube_id && !isUploadedVideo && !isVimeoVideo && !useProxyPlayer && (
             <div className={`relative ${isFullscreen ? 'w-full h-full' : 'w-full h-full'}`}>
               <div 
                 id="youtube-player" 
@@ -1559,8 +1642,41 @@ const LiveTV = () => {
             </div>
           )}
 
+          {/* Vimeo iframe player — SDK attaches an <iframe> inside this div */}
+          {isVimeoVideo && currentVideo?.vimeo_id && (
+            <div className={`relative ${isFullscreen ? 'w-full h-full' : 'w-full h-full'}`}>
+              <div
+                id="vimeo-player"
+                className="w-full h-full [&_iframe]:w-full [&_iframe]:h-full [&_iframe]:absolute [&_iframe]:inset-0"
+                data-testid="vimeo-player-container"
+              />
+              <div
+                className="absolute inset-0 z-10 cursor-pointer"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (vimeoPlayerRef.current) {
+                    vimeoPlayerRef.current.getPaused().then((paused) => {
+                      if (paused) {
+                        vimeoPlayerRef.current.play(); setIsPaused(false);
+                      } else {
+                        vimeoPlayerRef.current.pause(); setIsPaused(true);
+                      }
+                    }).catch(() => {});
+                  }
+                }}
+                onDoubleClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  toggleFullscreen();
+                }}
+                data-testid="video-lock-overlay-vimeo"
+              />
+            </div>
+          )}
+
           {/* Proxy video player for age-restricted content */}
-          {currentVideo?.youtube_id && !isUploadedVideo && useProxyPlayer && proxyVideoUrl && (
+          {currentVideo?.youtube_id && !isUploadedVideo && !isVimeoVideo && useProxyPlayer && proxyVideoUrl && (
             <div className="relative w-full h-full">
               <video
                 ref={proxyVideoRef}

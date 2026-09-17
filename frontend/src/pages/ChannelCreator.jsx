@@ -67,6 +67,7 @@ const ChannelCreator = () => {
   const [videos, setVideos] = useState([]);
   const [newVideoUrl, setNewVideoUrl] = useState('');
   const [newVideoDuration, setNewVideoDuration] = useState('');
+  const [newVimeoUrl, setNewVimeoUrl] = useState('');
   const [addingVideo, setAddingVideo] = useState(false);
   const [editingVideoId, setEditingVideoId] = useState(null);
   const [editingDuration, setEditingDuration] = useState('');
@@ -179,6 +180,84 @@ const ChannelCreator = () => {
       if (match) return match[1];
     }
     return null;
+  };
+
+  const extractVimeoId = (url) => {
+    const patterns = [
+      /vimeo\.com\/(?:video\/)?(\d+)/,
+      /vimeo\.com\/channels\/[^/]+\/(\d+)/,
+      /vimeo\.com\/groups\/[^/]+\/videos\/(\d+)/,
+      /player\.vimeo\.com\/video\/(\d+)/,
+      /^(\d{6,})$/,
+    ];
+    for (const p of patterns) {
+      const m = url.match(p);
+      if (m) return m[1];
+    }
+    return null;
+  };
+
+  const handleAddVimeoVideo = async () => {
+    const rawUrl = newVimeoUrl.trim();
+    const vimeoId = extractVimeoId(rawUrl);
+    if (!vimeoId) {
+      toast.error('Invalid Vimeo URL or ID');
+      return;
+    }
+    if (videos.some(v => v.vimeo_id === vimeoId)) {
+      toast.error('This Vimeo video is already in the playlist');
+      return;
+    }
+
+    setAddingVideo(true);
+    try {
+      // Fetch metadata (title, duration, thumbnail) via oEmbed
+      let meta = { title: `Vimeo ${vimeoId}`, duration: 300, thumbnail: null };
+      try {
+        const resp = await channelsAPI.getVimeoMetadata(rawUrl);
+        if (resp?.data) meta = { ...meta, ...resp.data };
+      } catch (e) {
+        console.warn('Vimeo metadata lookup failed; using defaults', e);
+      }
+
+      let newVideo = {
+        id: `temp-${Date.now()}`,
+        vimeo_id: vimeoId,
+        title: meta.title || `Vimeo ${vimeoId}`,
+        thumbnail: meta.thumbnail || null,
+        duration: meta.duration || 300,
+        order: videos.length,
+        type: 'vimeo',
+      };
+
+      if (isEditing) {
+        try {
+          const response = await channelsAPI.addVideo(channelId, {
+            vimeo_id: vimeoId,
+            title: newVideo.title,
+            thumbnail: newVideo.thumbnail,
+            duration: newVideo.duration,
+            type: 'vimeo',
+          });
+          const persistedChannel = response?.data;
+          const persistedVideo = persistedChannel?.videos?.[persistedChannel.videos.length - 1];
+          if (persistedVideo?.id) {
+            newVideo = { ...newVideo, id: persistedVideo.id, _persisted: true };
+          }
+        } catch (err) {
+          console.error('Failed to persist Vimeo video:', err);
+          toast.error('Failed to save Vimeo video');
+          setAddingVideo(false);
+          return;
+        }
+      }
+
+      setVideos([...videos, newVideo]);
+      setNewVimeoUrl('');
+      toast.success('Vimeo video added');
+    } finally {
+      setAddingVideo(false);
+    }
   };
 
   const handleAddYouTubeVideo = async () => {
@@ -469,11 +548,12 @@ const ChannelCreator = () => {
         for (const video of newVideos) {
           await channelsAPI.addVideo(channelId, {
             youtube_id: video.youtube_id || null,
+            vimeo_id: video.vimeo_id || null,
             title: video.title,
             thumbnail: video.thumbnail,
             duration: video.duration,
             video_url: video.video_url || null,
-            type: video.type || (video.video_url ? 'uploaded' : 'youtube'),
+            type: video.type || (video.vimeo_id ? 'vimeo' : (video.video_url ? 'uploaded' : 'youtube')),
           });
         }
         
@@ -486,11 +566,12 @@ const ChannelCreator = () => {
         for (const video of videos) {
           await channelsAPI.addVideo(newChannelId, {
             youtube_id: video.youtube_id || null,
+            vimeo_id: video.vimeo_id || null,
             title: video.title,
             thumbnail: video.thumbnail,
             duration: video.duration,
             video_url: video.video_url || null,
-            type: video.type || (video.video_url ? 'uploaded' : 'youtube'),
+            type: video.type || (video.vimeo_id ? 'vimeo' : (video.video_url ? 'uploaded' : 'youtube')),
           });
         }
         
@@ -714,12 +795,16 @@ const ChannelCreator = () => {
             </h2>
 
             <Tabs defaultValue="youtube" className="w-full">
-              <TabsList className="grid w-full grid-cols-2 mb-4">
-                <TabsTrigger value="youtube" className="flex items-center gap-2">
+              <TabsList className="grid w-full grid-cols-3 mb-4">
+                <TabsTrigger value="youtube" className="flex items-center gap-2" data-testid="tab-youtube">
                   <Youtube size={16} />
                   YouTube
                 </TabsTrigger>
-                <TabsTrigger value="upload" className="flex items-center gap-2">
+                <TabsTrigger value="vimeo" className="flex items-center gap-2" data-testid="tab-vimeo">
+                  <Film size={16} />
+                  Vimeo
+                </TabsTrigger>
+                <TabsTrigger value="upload" className="flex items-center gap-2" data-testid="tab-upload">
                   <Upload size={16} />
                   Upload
                 </TabsTrigger>
@@ -753,6 +838,33 @@ const ChannelCreator = () => {
                     Add
                   </Button>
                 </div>
+              </TabsContent>
+
+              {/* Vimeo Tab */}
+              <TabsContent value="vimeo" className="space-y-4">
+                <div className="flex gap-2">
+                  <Input
+                    value={newVimeoUrl}
+                    onChange={(e) => setNewVimeoUrl(e.target.value)}
+                    placeholder="Paste Vimeo URL, embed link, or numeric ID..."
+                    className="flex-1 bg-black/50 border-white/10"
+                    data-testid="vimeo-url-input"
+                  />
+                  <Button
+                    type="button"
+                    onClick={handleAddVimeoVideo}
+                    disabled={!newVimeoUrl.trim() || addingVideo}
+                    className="bg-sky-600 hover:bg-sky-700"
+                    data-testid="add-vimeo-btn"
+                  >
+                    <Plus size={18} className="mr-1" />
+                    Add
+                  </Button>
+                </div>
+                <p className="text-xs text-gray-500">
+                  Supported: vimeo.com/12345, player.vimeo.com/video/12345, channels/… links, or a raw numeric ID.
+                  Public videos only — private (login-required) videos won't play.
+                </p>
               </TabsContent>
 
               {/* Upload Tab */}
@@ -864,6 +976,16 @@ const ChannelCreator = () => {
                               e.target.src = `https://img.youtube.com/vi/${video.youtube_id}/mqdefault.jpg`;
                             }}
                           />
+                        ) : video.vimeo_id && video.thumbnail ? (
+                          <img
+                            src={video.thumbnail}
+                            alt={video.title}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : video.vimeo_id ? (
+                          <div className="w-full h-full flex items-center justify-center bg-sky-950/40">
+                            <Film size={20} className="text-sky-400" />
+                          </div>
                         ) : (
                           <div className="w-full h-full flex items-center justify-center">
                             <FileVideo size={20} className="text-gray-500" />
@@ -885,6 +1007,10 @@ const ChannelCreator = () => {
                           {video.youtube_id ? (
                             <span className="text-xs text-red-400 flex items-center gap-1">
                               <Youtube size={10} /> YouTube
+                            </span>
+                          ) : video.vimeo_id ? (
+                            <span className="text-xs text-sky-400 flex items-center gap-1">
+                              <Film size={10} /> Vimeo
                             </span>
                           ) : (
                             <span className="text-xs text-primary flex items-center gap-1">
