@@ -315,76 +315,7 @@ const LiveTV = () => {
     document.head.appendChild(tag);
   }, []);
 
-  // Wire up the Vimeo player when the current video is a Vimeo clip.
-  // Uses the Vimeo Player SDK for onEnded → next-video handoff, mirroring
-  // the YouTube IFrame API integration above.
   const vimeoPlayerRef = useRef(null);
-  useEffect(() => {
-    if (!isVimeoVideo || !currentVideo?.vimeo_id) return;
-
-    let cancelled = false;
-    let handle;
-
-    const attach = () => {
-      if (cancelled) return;
-      if (!window.Vimeo || !window.Vimeo.Player) {
-        handle = setTimeout(attach, 200);
-        return;
-      }
-      const container = document.getElementById('vimeo-player');
-      if (!container) {
-        handle = setTimeout(attach, 200);
-        return;
-      }
-      // Tear down any previous instance first
-      if (vimeoPlayerRef.current) {
-        try { vimeoPlayerRef.current.destroy(); } catch (e) {}
-        vimeoPlayerRef.current = null;
-      }
-      try {
-        const player = new window.Vimeo.Player(container, {
-          id: currentVideo.vimeo_id,
-          autoplay: true,
-          muted: isMuted,
-          controls: false,
-          responsive: true,
-          dnt: true,
-          title: false,
-          byline: false,
-          portrait: false,
-        });
-        vimeoPlayerRef.current = player;
-        player.on('ended', () => {
-          if (cancelled) return;
-          console.log('Vimeo video ended');
-          playNextVideoRef.current?.();
-        });
-        player.on('error', (err) => {
-          console.error('Vimeo error:', err);
-          if (!cancelled) skipToNextVideoRef.current?.();
-        });
-      } catch (e) {
-        console.error('Failed to init Vimeo player:', e);
-      }
-    };
-
-    attach();
-    return () => {
-      cancelled = true;
-      if (handle) clearTimeout(handle);
-      if (vimeoPlayerRef.current) {
-        try { vimeoPlayerRef.current.destroy(); } catch (e) {}
-        vimeoPlayerRef.current = null;
-      }
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isVimeoVideo, currentVideo?.vimeo_id]);
-
-  // Keep the Vimeo player's mute state in sync with the app-level mute toggle
-  useEffect(() => {
-    if (!isVimeoVideo || !vimeoPlayerRef.current) return;
-    try { vimeoPlayerRef.current.setMuted(isMuted); } catch (e) {}
-  }, [isMuted, isVimeoVideo]);
 
   // Load channels and playlists on mount, set session start time
   const hasInitialized = useRef(false);
@@ -772,6 +703,77 @@ const LiveTV = () => {
 
   const isVimeoVideo = currentVideo && (currentVideo.vimeo_id || currentVideo.type === 'vimeo');
   const isUploadedVideo = currentVideo && !isVimeoVideo && (currentVideo.video_url || !currentVideo.youtube_id);
+
+  // Wire up the Vimeo player when the current video is a Vimeo clip.
+  // Uses the Vimeo Player SDK for onEnded → next-video handoff, mirroring
+  // the YouTube IFrame API integration above. Placed AFTER isVimeoVideo is
+  // defined so React's TDZ doesn't crash on the deps array.
+  useEffect(() => {
+    if (!isVimeoVideo || !currentVideo?.vimeo_id) return;
+
+    let cancelled = false;
+    let handle;
+
+    const attach = () => {
+      if (cancelled) return;
+      if (!window.Vimeo || !window.Vimeo.Player) {
+        handle = setTimeout(attach, 200);
+        return;
+      }
+      const container = document.getElementById('vimeo-player');
+      if (!container) {
+        handle = setTimeout(attach, 200);
+        return;
+      }
+      if (vimeoPlayerRef.current) {
+        try { vimeoPlayerRef.current.destroy(); } catch (e) {}
+        vimeoPlayerRef.current = null;
+      }
+      try {
+        const player = new window.Vimeo.Player(container, {
+          id: currentVideo.vimeo_id,
+          autoplay: true,
+          muted: isMuted,
+          controls: false,
+          responsive: true,
+          dnt: true,
+          title: false,
+          byline: false,
+          portrait: false,
+        });
+        vimeoPlayerRef.current = player;
+        player.on('ended', () => {
+          if (cancelled) return;
+          console.log('Vimeo video ended');
+          playNextVideoRef.current?.();
+        });
+        player.on('error', (err) => {
+          console.error('Vimeo error:', err);
+          if (!cancelled) skipToNextVideoRef.current?.();
+        });
+      } catch (e) {
+        console.error('Failed to init Vimeo player:', e);
+      }
+    };
+
+    attach();
+    return () => {
+      cancelled = true;
+      if (handle) clearTimeout(handle);
+      if (vimeoPlayerRef.current) {
+        try { vimeoPlayerRef.current.destroy(); } catch (e) {}
+        vimeoPlayerRef.current = null;
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isVimeoVideo, currentVideo?.vimeo_id]);
+
+  // Keep the Vimeo player's mute state in sync with the app-level mute toggle
+  useEffect(() => {
+    if (!isVimeoVideo || !vimeoPlayerRef.current) return;
+    try { vimeoPlayerRef.current.setMuted(isMuted); } catch (e) {}
+  }, [isMuted, isVimeoVideo]);
+
   
   // Check if current channel is using synchronized schedule mode (via use_schedule flag)
   const isCurrentChannelScheduled = currentChannel?.use_schedule === true;

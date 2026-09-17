@@ -5575,7 +5575,9 @@ async def generate_24h_schedule(channel: dict, date: str, force_random: bool = F
             "title": video.get("title", "Untitled"),
             "thumbnail": video.get("thumbnail"),
             "youtube_id": video.get("youtube_id"),
+            "vimeo_id": video.get("vimeo_id"),
             "video_url": video.get("video_url"),  # Include video_url for uploaded videos
+            "type": video.get("type"),  # "youtube" | "uploaded" | "vimeo"
             "start_time": f"{start_h:02d}:{start_m:02d}:{start_s:02d}",
             "end_time": f"{end_h:02d}:{end_m:02d}:{end_s:02d}",
             "duration": duration
@@ -5598,12 +5600,14 @@ async def generate_24h_schedule(channel: dict, date: str, force_random: bool = F
 class ScheduleVideoInput(BaseModel):
     video_id: str
     youtube_id: Optional[str] = None
+    vimeo_id: Optional[str] = None
     title: str
     duration: int
     start_time: str
     end_time: str
     video_url: Optional[str] = None
     thumbnail: Optional[str] = None
+    type: Optional[str] = None
 
 class SaveScheduleInput(BaseModel):
     channel_id: str
@@ -5634,12 +5638,14 @@ async def save_schedule(data: SaveScheduleInput, current_user: dict = Depends(ge
             {
                 "video_id": v.video_id,
                 "youtube_id": v.youtube_id,
+                "vimeo_id": v.vimeo_id,
                 "title": v.title,
                 "thumbnail": v.thumbnail,
                 "duration": v.duration,
                 "start_time": v.start_time,
                 "end_time": v.end_time,
                 "video_url": v.video_url,
+                "type": v.type,
             }
             for v in data.videos
         ],
@@ -5797,11 +5803,13 @@ async def migrate_data_from_old_build(user: dict = Depends(require_user)):
                 new_video = {
                     "id": old_video.get("id") or str(uuid.uuid4()),
                     "youtube_id": old_video.get("youtube_id"),
+                    "vimeo_id": old_video.get("vimeo_id"),
                     "video_url": old_video.get("video_url"),  # Preserve uploaded video URLs
                     "title": old_video.get("title", "Untitled"),
                     "thumbnail": old_video.get("thumbnail"),
                     "duration": old_video.get("duration", 300),
-                    "order": len(current_videos) + len(videos_to_add)
+                    "order": len(current_videos) + len(videos_to_add),
+                    "type": old_video.get("type"),
                 }
                 videos_to_add.append(new_video)
         
