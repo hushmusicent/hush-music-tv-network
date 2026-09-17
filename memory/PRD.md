@@ -58,6 +58,13 @@ Build a TV network app named "Hush Music TV Network" with admin-only channel/vid
   - Verified end-to-end by testing agent: 6/6 backend tests + full frontend Edit modal flow pass. Pytest at `/app/backend/tests/test_commercials_assign.py`.
 
 
+## Completed (Feb 28, 2026 — Vimeo commercials)
+- **Vimeo video support for commercials** — same 3-way choice available for ads
+  - Backend: `CommercialResponse` model now includes `vimeo_id` + `type` (`"uploaded" | "vimeo"`). New `POST /api/commercials/vimeo` endpoint accepts `{url, channel_ids, is_global}`, extracts the Vimeo ID via the shared `extract_vimeo_id()` helper, fetches title/duration/thumbnail via public oEmbed (no API key), and persists a full commercial doc.
+  - Admin Commercials page: added a "Or add a Vimeo commercial" input + `Add Vimeo` button beneath the existing MP4 upload. Reuses the same channel-selection state (`is_global` / `selectedChannelIds`), so the same commercial can be scoped globally or to specific channels regardless of upload source. Vimeo commercials render a poster thumbnail (or a placeholder with the Film icon) in the grid, with a sky-blue "Vimeo" badge in the top-left.
+  - LiveTV commercial-break player: now branches — if the current commercial has a `vimeo_id`, it renders `#commercial-vimeo-player` and the Vimeo Player SDK constructs an inline iframe (`controls:false, title:false, byline:false, portrait:false, responsive, dnt:true`) with `setVolume(0.6)` matching the MP4 branch's quieter audio. `ended` and `error` events wire straight to the existing `handleCommercialEnded` so the break progression is identical to MP4 ads. MP4 commercials keep the original `<video>` element path.
+  - Verified: `POST /api/commercials/vimeo {"url":"https://vimeo.com/76979871"}` → returns full doc with `vimeo_id: "76979871"`, `type: "vimeo"`, `is_global: true`; Mongo shows the record persisted correctly.
+
 ## Completed (Feb 28, 2026 — later)
 - **Vimeo video support (Channel Creator + LiveTV player)**
   - Backend: added `vimeo_id` to `VideoItem` / `VideoCreate`, type union now `youtube | uploaded | vimeo`. Auto-detects type when `vimeo_id` is provided. Dedup check includes vimeo_id. Added `POST /api/videos/vimeo/metadata` that extracts a Vimeo ID from URL variants (`vimeo.com/12345`, `vimeo.com/channels/…/12345`, `vimeo.com/groups/…/videos/12345`, `player.vimeo.com/video/12345`, or a raw numeric ID) and fetches title/duration/thumbnail via Vimeo's public oEmbed endpoint (no API key needed).

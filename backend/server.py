@@ -798,6 +798,8 @@ class CommercialResponse(BaseModel):
     duration: int = 30  # Default 30 seconds
     thumbnail: Optional[str] = None
     created_at: str
+    vimeo_id: Optional[str] = None
+    type: str = "uploaded"  # "uploaded" or "vimeo"
     channel_ids: List[str] = []  # Empty list means ALL channels, otherwise specific channel IDs
     is_global: bool = False  # True = plays on all channels
 
@@ -1669,6 +1671,75 @@ class CommercialRegister(BaseModel):
     size: int = 0
     channel_ids: List[str] = []
     is_global: bool = False
+
+
+class VimeoCommercialCreate(BaseModel):
+    url: str  # Vimeo URL, embed link, or numeric ID
+    channel_ids: List[str] = []
+    is_global: bool = False
+
+
+@api_router.post("/commercials/vimeo")
+async def create_vimeo_commercial(
+    data: VimeoCommercialCreate,
+    user: dict = Depends(require_user),
+):
+    """Register a Vimeo video as a commercial. No file upload — just the URL."""
+    if not user.get("is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    vimeo_id = extract_vimeo_id(data.url)
+    if not vimeo_id:
+        raise HTTPException(status_code=400, detail="Invalid Vimeo URL or ID")
+
+    # Fetch title/duration/thumbnail via public oEmbed (no API key).
+    title = f"Vimeo commercial {vimeo_id}"
+    duration = 30
+    thumbnail = None
+    try:
+        async with httpx.AsyncClient(timeout=8.0, follow_redirects=True) as http:
+            r = await http.get(
+                f"https://vimeo.com/api/oembed.json?url=https://vimeo.com/{vimeo_id}"
+            )
+            if r.status_code == 200:
+                m = r.json()
+                title = m.get("title") or title
+                duration = int(m.get("duration") or duration)
+                thumbnail = m.get("thumbnail_url") or None
+    except Exception as e:
+        logger.warning(f"Vimeo commercial oEmbed lookup failed for {vimeo_id}: {e}")
+
+    is_global = data.is_global or len(data.channel_ids) == 0
+
+    valid_channel_ids: List[str] = []
+    if not is_global and data.channel_ids:
+        existing = await db.channels.find(
+            {"id": {"$in": data.channel_ids}}, {"_id": 0, "id": 1}
+        ).to_list(length=len(data.channel_ids))
+        existing_ids = {c["id"] for c in existing}
+        valid_channel_ids = [cid for cid in data.channel_ids if cid in existing_ids]
+        if not valid_channel_ids:
+            is_global = True
+
+    commercial_id = str(uuid.uuid4())
+    commercial_doc = {
+        "id": commercial_id,
+        "filename": f"vimeo-{vimeo_id}",
+        "original_name": title,
+        "url": f"https://vimeo.com/{vimeo_id}",  # Reference URL (LiveTV uses vimeo_id)
+        "vimeo_id": vimeo_id,
+        "type": "vimeo",
+        "size": 0,
+        "duration": duration,
+        "thumbnail": thumbnail,
+        "channel_ids": [] if is_global else valid_channel_ids,
+        "is_global": is_global,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    response_doc = dict(commercial_doc)
+    await db.commercials.insert_one(commercial_doc)
+    return response_doc
 
 
 @api_router.post("/commercials/register")

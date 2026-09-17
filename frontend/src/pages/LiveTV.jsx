@@ -774,6 +774,71 @@ const LiveTV = () => {
     try { vimeoPlayerRef.current.setMuted(isMuted); } catch (e) {}
   }, [isMuted, isVimeoVideo]);
 
+  // Wire up the Vimeo player for Vimeo-hosted COMMERCIALS during a break.
+  // Mirrors the primary Vimeo player integration but scoped to the
+  // commercial break container so program playback isn't disturbed.
+  const commercialVimeoRef = useRef(null);
+  useEffect(() => {
+    if (!isCommercialBreak) return;
+    const cc = commercialBreakVideos[currentCommercialIndex];
+    if (!cc || !cc.vimeo_id) return;
+
+    let cancelled = false;
+    let handle;
+
+    const attach = () => {
+      if (cancelled) return;
+      if (!window.Vimeo || !window.Vimeo.Player) {
+        handle = setTimeout(attach, 200);
+        return;
+      }
+      const container = document.getElementById('commercial-vimeo-player');
+      if (!container) {
+        handle = setTimeout(attach, 200);
+        return;
+      }
+      if (commercialVimeoRef.current) {
+        try { commercialVimeoRef.current.destroy(); } catch (e) {}
+        commercialVimeoRef.current = null;
+      }
+      try {
+        const player = new window.Vimeo.Player(container, {
+          id: cc.vimeo_id,
+          autoplay: true,
+          muted: isMuted,
+          controls: false,
+          responsive: true,
+          dnt: true,
+          title: false,
+          byline: false,
+          portrait: false,
+        });
+        commercialVimeoRef.current = player;
+        try { player.setVolume(0.6); } catch (_) {}
+        player.on('ended', () => {
+          if (!cancelled) handleCommercialEnded();
+        });
+        player.on('error', () => {
+          if (!cancelled) handleCommercialEnded();
+        });
+      } catch (e) {
+        console.error('Failed to init Vimeo commercial player:', e);
+        if (!cancelled) handleCommercialEnded();
+      }
+    };
+    attach();
+
+    return () => {
+      cancelled = true;
+      if (handle) clearTimeout(handle);
+      if (commercialVimeoRef.current) {
+        try { commercialVimeoRef.current.destroy(); } catch (e) {}
+        commercialVimeoRef.current = null;
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isCommercialBreak, currentCommercialIndex, commercialBreakVideos]);
+
   
   // Check if current channel is using synchronized schedule mode (via use_schedule flag)
   const isCurrentChannelScheduled = currentChannel?.use_schedule === true;
@@ -1588,18 +1653,33 @@ const LiveTV = () => {
           {/* Commercial Break Player */}
           {isCommercialBreak && commercialBreakVideos.length > 0 && (
             <div className="absolute inset-0 z-50 bg-black">
-              {/* Commercial video — quieter than program audio */}
-              <video
-                ref={commercialVideoRef}
-                src={commercialBreakVideos[currentCommercialIndex]?.url}
-                className="w-full h-full object-contain"
-                autoPlay
-                muted={isMuted}
-                playsInline
-                onLoadedData={(e) => { try { e.target.volume = 0.6; } catch (_) {} }}
-                onEnded={handleCommercialEnded}
-                onError={handleCommercialEnded}
-              />
+              {(() => {
+                const cc = commercialBreakVideos[currentCommercialIndex];
+                if (cc?.vimeo_id) {
+                  // Vimeo-hosted commercial — SDK-driven iframe
+                  return (
+                    <div
+                      id="commercial-vimeo-player"
+                      className="w-full h-full [&_iframe]:w-full [&_iframe]:h-full [&_iframe]:absolute [&_iframe]:inset-0"
+                      data-testid="commercial-vimeo-player"
+                    />
+                  );
+                }
+                // MP4-hosted commercial — quieter than program audio
+                return (
+                  <video
+                    ref={commercialVideoRef}
+                    src={cc?.url}
+                    className="w-full h-full object-contain"
+                    autoPlay
+                    muted={isMuted}
+                    playsInline
+                    onLoadedData={(e) => { try { e.target.volume = 0.6; } catch (_) {} }}
+                    onEnded={handleCommercialEnded}
+                    onError={handleCommercialEnded}
+                  />
+                );
+              })()}
               
               {/* Commercial overlay info */}
               <div className="absolute top-4 right-4 bg-black/70 backdrop-blur-sm rounded-lg px-3 py-2 z-10">

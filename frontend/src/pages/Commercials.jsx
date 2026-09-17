@@ -27,6 +27,8 @@ const Commercials = () => {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isGlobal, setIsGlobal] = useState(true); // Default to all channels
   const [selectedChannelIds, setSelectedChannelIds] = useState([]); // For specific channel selection
+  const [newVimeoUrl, setNewVimeoUrl] = useState('');
+  const [addingVimeo, setAddingVimeo] = useState(false);
   
   // Edit modal state
   const [editingCommercial, setEditingCommercial] = useState(null);
@@ -376,6 +378,44 @@ const Commercials = () => {
               <span className="text-sm text-yellow-400">Select at least one channel</span>
             )}
           </div>
+
+          {/* Vimeo URL commercial */}
+          <div className="mt-4 pt-4 border-t border-white/10">
+            <label className="text-sm text-gray-300 font-medium block mb-2">Or add a Vimeo commercial</label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newVimeoUrl}
+                onChange={(e) => setNewVimeoUrl(e.target.value)}
+                placeholder="Paste Vimeo URL, embed link, or numeric ID..."
+                className="flex-1 h-10 px-3 rounded-md bg-black/50 border border-white/10 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-sky-500/50"
+                disabled={addingVimeo}
+                data-testid="vimeo-commercial-input"
+              />
+              <Button
+                type="button"
+                onClick={handleAddVimeoCommercial}
+                disabled={!newVimeoUrl.trim() || addingVimeo || (!isGlobal && selectedChannelIds.length === 0)}
+                className="bg-sky-600 hover:bg-sky-700"
+                data-testid="add-vimeo-commercial-btn"
+              >
+                {addingVimeo ? (
+                  <>
+                    <Loader2 size={16} className="mr-2 animate-spin" />
+                    Adding...
+                  </>
+                ) : (
+                  <>
+                    <Film size={16} className="mr-2" />
+                    Add Vimeo
+                  </>
+                )}
+              </Button>
+            </div>
+            <p className="text-xs text-gray-500 mt-1">
+              Public Vimeo videos only. Uses the same channel selection above.
+            </p>
+          </div>
           
           {uploading && (
             <div className="mt-4">
@@ -436,11 +476,30 @@ const Commercials = () => {
           {filteredCommercials.map(commercial => (
             <Card key={commercial.id} className="bg-[#12121a] border-white/10 overflow-hidden">
               <div className="aspect-video bg-black relative group">
-                <video
-                  src={commercial.url}
-                  className="w-full h-full object-cover"
-                  preload="metadata"
-                />
+                {commercial.vimeo_id ? (
+                  commercial.thumbnail ? (
+                    <img
+                      src={commercial.thumbnail}
+                      alt={commercial.original_name}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center bg-sky-950/40">
+                      <Film size={40} className="text-sky-400" />
+                    </div>
+                  )
+                ) : (
+                  <video
+                    src={commercial.url}
+                    className="w-full h-full object-cover"
+                    preload="metadata"
+                  />
+                )}
+                {commercial.vimeo_id && (
+                  <span className="absolute top-2 left-2 text-[10px] font-medium px-1.5 py-0.5 rounded bg-sky-600/90 text-white flex items-center gap-1">
+                    <Film size={10} /> Vimeo
+                  </span>
+                )}
                 <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                   <Button
                     size="icon"
