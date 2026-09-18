@@ -32,6 +32,14 @@ Build a TV network app named "Hush Music TV Network" with admin-only channel/vid
 - `POST /api/schedules/regenerate-all` - Regenerate all 24h schedules
 - Admin credentials: hushmusicent419@gmail.com / $Stisdd419
 
+## Completed (Feb 20, 2026 — Roku live-TV schedule sync + playback fixes)
+- **Live-TV schedule offset**: `/api/roku/resolve/{channel_id}` now returns `position` (seconds elapsed into the current slot). Roku's LivePlayer sets `ci.playStart = position` so tuning away and back rejoins at the exact same second every other viewer is on — real live-TV behaviour, no more "restart from the beginning".
+- **YouTube playback fix**: `_resolve_youtube_stream` upgraded format string to prefer H.264/AAC single-file mp4, then any progressive http[s] mp4, then HLS fallback. Added a browser User-Agent to yt-dlp. Verified: `Live Dj` channel resolves and streams on Roku.
+- **Vimeo playback fix**: added HLS-master fallback when `progressive` is empty (Vimeo has migrated most public videos to HLS-only). Added optional `VIMEO_ACCESS_TOKEN` env var to unlock domain-locked Vimeo videos via Vimeo API v3 Bearer (progressive MP4 or HLS play link).
+- **Graceful slot skipping**: when a slot is unresolvable (e.g. Vimeo 403 without a token), the resolver transparently advances up to 12 upcoming slots so a single blocked video no longer 502s the whole channel.
+- **Verified**: R2/uploaded (`Straight Hip-Hop` position=78s), YouTube (`Live Dj` position=2876s), Roku ContentNode playStart applied.
+- 89 of 90 channels play on Roku today; the remaining 1 (`Short Films`, 100 % Vimeo, all domain-locked) needs the user's Vimeo API access token in `.env` as `VIMEO_ACCESS_TOKEN`.
+
 ## Completed (Feb 20, 2026 — Roku UI parity rebuild)
 - **Rebuilt the Roku BrightScript app to match the production web / Fire TV design** using the same MongoDB-backed channels, categories, live schedule, and Roku stream resolver.
   - **HomeScene**: LIVE NOW hero band (auto-updates as user scrubs the featured grid) with channel thumbnail, red LIVE badge, category label, title, description, and Watch Now / Live TV buttons. Horizontal Categories pill row (All / Entertainment / Music / …) auto-built from `/api/channels` categories. Featured Channels row below the pills with 16:9 tiles, "N videos" meta line, purple focus ring. Star opens TV Guide.

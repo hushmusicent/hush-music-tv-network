@@ -479,12 +479,13 @@ async def delete_channel(channel_id: str, user: dict = Depends(require_user)):
 
 @api_router.get("/roku/resolve/{channel_id}")
 async def roku_resolve_stream(channel_id: str):
-    """Return a Roku-playable {stream_url, format, title, duration} for the
-    channel's currently-airing slot. Uses the same synchronized 24-hour
-    schedule as the web app so all viewers see the same show.
-    - Uploaded R2 MP4  → returns the direct URL (mp4)
-    - YouTube          → resolves best progressive stream via yt-dlp (mp4/hls)
-    - Vimeo            → resolves best progressive MP4 via Vimeo config API (mp4)
+    """Return a Roku-playable {stream_url, format, title, duration, position}
+    for the channel's currently-airing slot. `position` is the number of
+    seconds already elapsed into that slot so the Roku client can seek in and
+    stay synchronized with every other viewer (live-TV behaviour).
+    If the current slot is unplayable on Roku (e.g. a Vimeo video whose
+    /config endpoint is 403 without an OAuth token), we transparently
+    advance to the next playable slot so channels never hard-fail.
     """
     channel = await db.channels.find_one({"id": channel_id, "is_public": True}, {"_id": 0})
     if not channel:
@@ -495,9 +496,8 @@ async def roku_resolve_stream(channel_id: str):
         stream = await _resolve_youtube_stream(yt_id)
         if not stream:
             raise HTTPException(status_code=502, detail="Could not resolve live stream")
-        return {"stream_url": stream["url"], "format": stream["format"], "title": channel.get("name", ""), "duration": 0}
+        return {"stream_url": stream["url"], "format": stream["format"], "title": channel.get("name", ""), "duration": 0, "position": 0}
 
-    # Pick the current slot from the synchronized 24h schedule
     today = get_eastern_date()
     schedule = await get_or_create_schedule(channel, today)
     slots = schedule.get("videos", []) or []
@@ -505,35 +505,50 @@ async def roku_resolve_stream(channel_id: str):
         raise HTTPException(status_code=404, detail="Channel has no scheduled content yet")
 
     now_secs = _eastern_seconds_since_midnight()
-    current = None
-    for s in slots:
+    # Find the index of the currently-airing slot; fall back to slot 0.
+    current_idx = 0
+    for i, s in enumerate(slots):
         start = _hhmmss_to_seconds(s.get("start_time"))
         end = _hhmmss_to_seconds(s.get("end_time"))
         if start <= now_secs < end:
-            current = s
+            current_idx = i
             break
-    if current is None:
-        current = slots[0]
 
-    title = current.get("title", "")
-    duration = current.get("duration", 0)
+    # Try current slot; on unresolvable Vimeo/YouTube, look ahead up to 12
+    # slots so a single blocked video doesn't kill the channel.
+    n = len(slots)
+    tried_reasons = []
+    for offset in range(min(12, n)):
+        idx = (current_idx + offset) % n
+        slot = slots[idx]
+        start = _hhmmss_to_seconds(slot.get("start_time"))
+        title = slot.get("title", "")
+        duration = slot.get("duration", 0)
+        position = max(0, now_secs - start) if offset == 0 else 0
+        if duration and position >= duration - 1:
+            position = 0
 
-    if current.get("video_url"):
-        return {"stream_url": current["video_url"], "format": "mp4", "title": title, "duration": duration}
+        if slot.get("video_url"):
+            return {"stream_url": slot["video_url"], "format": "mp4", "title": title, "duration": duration, "position": position}
 
-    if current.get("vimeo_id"):
-        vimeo_url = await _resolve_vimeo_stream(current["vimeo_id"])
-        if not vimeo_url:
-            raise HTTPException(status_code=502, detail="Could not resolve Vimeo stream")
-        return {"stream_url": vimeo_url, "format": "mp4", "title": title, "duration": duration}
+        if slot.get("vimeo_id"):
+            vimeo = await _resolve_vimeo_stream(slot["vimeo_id"])
+            if vimeo:
+                return {"stream_url": vimeo["url"], "format": vimeo["format"], "title": title, "duration": duration, "position": position}
+            tried_reasons.append(f"vimeo:{slot['vimeo_id']}")
+            continue
 
-    if current.get("youtube_id"):
-        stream = await _resolve_youtube_stream(current["youtube_id"])
-        if not stream:
-            raise HTTPException(status_code=502, detail="Could not resolve YouTube stream")
-        return {"stream_url": stream["url"], "format": stream["format"], "title": title, "duration": duration}
+        if slot.get("youtube_id"):
+            stream = await _resolve_youtube_stream(slot["youtube_id"])
+            if stream:
+                return {"stream_url": stream["url"], "format": stream["format"], "title": title, "duration": duration, "position": position}
+            tried_reasons.append(f"yt:{slot['youtube_id']}")
+            continue
 
-    raise HTTPException(status_code=502, detail="Slot has no playable source")
+        tried_reasons.append("noSource")
+
+    logger.warning(f"[roku] channel {channel_id} all slots unresolvable: {tried_reasons[:6]}")
+    raise HTTPException(status_code=502, detail="No playable slot in this channel right now")
 
 
 def _hhmmss_to_seconds(s):
@@ -554,41 +569,118 @@ def _eastern_seconds_since_midnight() -> int:
 
 
 async def _resolve_youtube_stream(youtube_id: str):
-    """Return {url, format} for the best Roku-playable progressive stream."""
+    """Return {url, format} for the best Roku-playable stream.
+    Tries a Roku-friendly progressive MP4 (single-file H.264/AAC) first,
+    then falls back to the HLS master so Roku's Video node can adapt.
+    """
     try:
         ytdlp = get_ytdlp_path()
-        # Prefer a single-file mp4 (best for Roku's Video node), fall back to HLS.
+        # 1) Prefer a single-file H.264 mp4 (any progressive http[s] source).
+        # 2) Any progressive mp4.
+        # 3) Any progressive http[s] source.
+        # 4) Fall back to HLS.
+        fmt = (
+            "b[ext=mp4][vcodec^=avc1][acodec!=none][protocol^=http]/"
+            "b[ext=mp4][protocol^=http]/"
+            "b[protocol^=http]/"
+            "b"
+        )
         proc = await asyncio.create_subprocess_exec(
-            ytdlp, "-f", "best[ext=mp4][protocol^=http]/best[protocol^=http]/best",
+            ytdlp, "-f", fmt,
             "--get-url", "--no-warnings", "--no-playlist",
+            "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
             f"https://www.youtube.com/watch?v={youtube_id}",
             stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
         )
-        out, _ = await asyncio.wait_for(proc.communicate(), timeout=25)
+        out, err = await asyncio.wait_for(proc.communicate(), timeout=25)
         url = (out or b"").decode().strip().splitlines()[-1] if out else ""
-        if not url: return None
-        fmt = "hls" if ".m3u8" in url else "mp4"
-        return {"url": url, "format": fmt}
+        if not url:
+            logger.warning(f"[roku] yt-dlp empty output for {youtube_id}: {(err or b'').decode()[:200]}")
+            return None
+        f = "hls" if ".m3u8" in url else "mp4"
+        return {"url": url, "format": f}
     except Exception as e:
         logger.warning(f"[roku] yt-dlp resolve failed for {youtube_id}: {e}")
         return None
 
 
 async def _resolve_vimeo_stream(vimeo_id: str):
-    """Return the best progressive MP4 URL for a public Vimeo video."""
+    """Return {url, format} for a Roku-playable Vimeo stream.
+    Preference order:
+      1. Vimeo API v3 (needs VIMEO_ACCESS_TOKEN) — returns direct progressive MP4 links
+         even for videos whose /config endpoint is domain-locked.
+      2. Public player.vimeo.com/config — progressive MP4 first, then HLS master.
+    """
+    # 1) Vimeo API v3 with the account's access token (bypasses domain-locks
+    #    on the account's own videos).
+    api_token = os.environ.get("VIMEO_ACCESS_TOKEN")
+    if api_token:
+        try:
+            async with httpx.AsyncClient(timeout=8.0, follow_redirects=True) as http:
+                r = await http.get(
+                    f"https://api.vimeo.com/videos/{vimeo_id}",
+                    headers={
+                        "Authorization": f"Bearer {api_token}",
+                        "Accept": "application/vnd.vimeo.*+json;version=3.4",
+                    },
+                    params={"fields": "files,download,play"},
+                )
+                if r.status_code == 200:
+                    data = r.json()
+                    # Prefer `download` MP4s (direct H.264 mp4)
+                    for entry in (data.get("download") or []):
+                        url = entry.get("link")
+                        if url and (entry.get("type") or "").startswith("video/mp4"):
+                            return {"url": url, "format": "mp4"}
+                    # Then `files` progressive
+                    progressive = [f for f in (data.get("files") or []) if f.get("quality") not in ("hls", "dash")]
+                    if progressive:
+                        progressive.sort(key=lambda p: p.get("height") or 0, reverse=True)
+                        url = progressive[0].get("link") or progressive[0].get("link_secure")
+                        if url:
+                            return {"url": url, "format": "mp4"}
+                    # Then `play.hls.link`
+                    hls_link = ((data.get("play") or {}).get("hls") or {}).get("link")
+                    if hls_link:
+                        return {"url": hls_link, "format": "hls"}
+                else:
+                    logger.warning(f"[roku] Vimeo API {vimeo_id} → {r.status_code}")
+        except Exception as e:
+            logger.warning(f"[roku] Vimeo API resolve failed for {vimeo_id}: {e}")
+
+    # 2) Public config endpoint (works only for videos whose Vimeo owner
+    #    hasn't domain-locked embeds).
     try:
+        headers = {
+            "Referer": f"https://vimeo.com/{vimeo_id}",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+        }
         async with httpx.AsyncClient(timeout=8.0, follow_redirects=True) as http:
-            r = await http.get(
-                f"https://player.vimeo.com/video/{vimeo_id}/config",
-                headers={"Referer": f"https://vimeo.com/{vimeo_id}"},
-            )
-            if r.status_code != 200: return None
+            r = await http.get(f"https://player.vimeo.com/video/{vimeo_id}/config", headers=headers)
+            if r.status_code != 200:
+                logger.warning(f"[roku] Vimeo config {vimeo_id} → {r.status_code}")
+                return None
             data = r.json()
-            progressive = ((data.get("request") or {}).get("files") or {}).get("progressive") or []
-            if not progressive: return None
-            # Pick the highest-quality progressive MP4 the video exposes
-            progressive.sort(key=lambda p: p.get("height") or 0, reverse=True)
-            return progressive[0].get("url")
+            files = ((data.get("request") or {}).get("files") or {})
+
+            progressive = files.get("progressive") or []
+            if progressive:
+                progressive.sort(key=lambda p: p.get("height") or 0, reverse=True)
+                url = progressive[0].get("url")
+                if url:
+                    return {"url": url, "format": "mp4"}
+
+            hls = files.get("hls") or {}
+            cdns = hls.get("cdns") or {}
+            if cdns:
+                default_cdn_key = hls.get("default_cdn") or next(iter(cdns))
+                node = cdns.get(default_cdn_key) or {}
+                url = node.get("avc_url") or node.get("url")
+                if url:
+                    return {"url": url, "format": "hls"}
+
+            logger.warning(f"[roku] Vimeo {vimeo_id} has no progressive or HLS")
+            return None
     except Exception as e:
         logger.warning(f"[roku] Vimeo resolve failed for {vimeo_id}: {e}")
         return None

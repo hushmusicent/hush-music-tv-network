@@ -297,6 +297,10 @@
             ci.url = r.stream_url
             ci.streamFormat = pickFormat(r.format)
             ci.title = r.title
+            ' Seek to the scheduled offset so tuning in mid-show stays LIVE.
+            pos = 0
+            if r.position <> invalid then pos = r.position
+            if pos > 0 then ci.playStart = pos
             m.video.content = ci
             m.video.control = "play"
         end sub
