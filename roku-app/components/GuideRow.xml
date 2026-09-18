@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+    GuideRow — one channel row inside TVGuideScene.
+    Mirrors screenshot 2: [thumbnail 60x60] [Channel name / "Now: <title>"]
+    Right side lists the currently airing block (colored) with time · duration and a LIVE badge.
+    Focus glow: purple left-bar + brighter text.
+-->
+<component name="GuideRow" extends="Group">
+    <interface>
+        <field id="itemContent" type="node" onChange="onContentChange" />
+        <field id="focusPercent" type="float" onChange="onFocusChange" />
+    </interface>
+
+    <children>
+        <Rectangle id="bg" width="1792" height="96" color="0x00000000" />
+        <Rectangle id="focusBar" width="4" height="96" color="0x7C3AEDFF" opacity="0" />
+        <Rectangle id="rowDivider" width="1792" height="1" translation="[0, 95]" color="0x1F1F1FFF" />
+        <Poster
+            id="poster"
+            width="72"
+            height="72"
+            translation="[20, 12]"
+            loadDisplayMode="scaleToFill"
+            failedBitmapUri="pkg:/images/icon_side_hd.png"
+        />
+        <!-- Left column: channel name + "Now:" line -->
+        <Label
+            id="name"
+            translation="[112, 20]"
+            width="440"
+            text=""
+            color="0xFFFFFFFF"
+            font="font:MediumBoldSystemFont"
+        />
+        <Label
+            id="now"
+            translation="[112, 54]"
+            width="440"
+            text=""
+            color="0xEF4444FF"
+            font="font:SmallSystemFont"
+        />
+        <!-- Right side: current program block, colored -->
+        <Rectangle id="progBg" translation="[600, 16]" width="1170" height="64" color="0x2A1B4AFF" />
+        <Rectangle id="progAccent" translation="[600, 16]" width="4" height="64" color="0x7C3AEDFF" />
+        <Label
+            id="progTitle"
+            translation="[616, 22]"
+            width="900"
+            text=""
+            color="0xFFFFFFFF"
+            font="font:MediumBoldSystemFont"
+        />
+        <Label
+            id="progMeta"
+            translation="[616, 52]"
+            width="900"
+            text=""
+            color="0xE5E7EBFF"
+            font="font:SmallSystemFont"
+        />
+        <Rectangle id="liveBadgeBg" translation="[1670, 32]" width="90" height="30" color="0xEF4444FF" />
+        <Label
+            id="liveBadge"
+            translation="[1670, 32]"
+            width="90"
+            height="30"
+            horizAlign="center"
+            vertAlign="center"
+            text="● LIVE"
+            color="0xFFFFFFFF"
+            font="font:SmallBoldSystemFont"
+        />
+    </children>
+
+    <script type="text/brightscript"><![CDATA[
+        sub init()
+            m.bg = m.top.findNode("bg")
+            m.focusBar = m.top.findNode("focusBar")
+            m.poster = m.top.findNode("poster")
+            m.name = m.top.findNode("name")
+            m.now = m.top.findNode("now")
+            m.progBg = m.top.findNode("progBg")
+            m.progAccent = m.top.findNode("progAccent")
+            m.progTitle = m.top.findNode("progTitle")
+            m.progMeta = m.top.findNode("progMeta")
+            m.liveBadgeBg = m.top.findNode("liveBadgeBg")
+            m.liveBadge = m.top.findNode("liveBadge")
+
+            m.colors = [
+                "0x2A1B4AFF", ' purple
+                "0x1E3A5FFF", ' blue
+                "0x3F1D38FF", ' magenta
+                "0x1F3A2CFF", ' green
+                "0x4A2F1BFF", ' amber
+                "0x3B1F1FFF"  ' red-brown
+            ]
+            m.accents = [
+                "0x7C3AEDFF",
+                "0x3B82F6FF",
+                "0xEC4899FF",
+                "0x10B981FF",
+                "0xF59E0BFF",
+                "0xEF4444FF"
+            ]
+        end sub
+
+        sub onContentChange()
+            it = m.top.itemContent
+            if it = invalid then return
+            m.poster.uri = it.HDGRIDPOSTERURL
+            m.name.text = it.title
+            m.now.text = "Now: " + it.description
+            m.progTitle.text = it.description
+            m.progMeta.text = it.shortDescriptionLine1
+            ' Cycle color by index (Roku exposes it via id if we choose to use it;
+            ' fallback to hash of title so the whole guide is not one color).
+            idx = Abs(hashCode(it.title)) mod m.colors.Count()
+            m.progBg.color = m.colors[idx]
+            m.progAccent.color = m.accents[idx]
+            hasLive = it.shortDescriptionLine2
+            if hasLive = "1"
+                m.liveBadgeBg.opacity = 1
+                m.liveBadge.opacity = 1
+            else
+                m.liveBadgeBg.opacity = 0
+                m.liveBadge.opacity = 0
+            end if
+        end sub
+
+        sub onFocusChange()
+            p = m.top.focusPercent
+            m.focusBar.opacity = p
+            if p > 0.5
+                m.bg.color = "0x1B1B1BFF"
+            else
+                m.bg.color = "0x00000000"
+            end if
+        end sub
+
+        function hashCode(s as string) as integer
+            h = 0
+            for i = 0 to Len(s) - 1
+                h = (h * 31 + Asc(Mid(s, i + 1, 1))) mod 100003
+            end for
+            return h
+        end function
+    ]]></script>
+</component>

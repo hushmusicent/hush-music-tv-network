@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+    DrawerRow — one row inside the LivePlayer's slide-in Channels drawer.
+    Mirrors screenshot 1: [thumbnail 60x60] [name / N videos]  [channel #]
+    Focus glow: purple left-bar + light background.
+-->
+<component name="DrawerRow" extends="Group">
+    <interface>
+        <field id="itemContent" type="node" onChange="onContentChange" />
+        <field id="focusPercent" type="float" onChange="onFocusChange" />
+    </interface>
+
+    <children>
+        <Rectangle id="bg" width="640" height="90" color="0x00000000" />
+        <Rectangle id="focusBar" width="4" height="90" color="0x7C3AEDFF" opacity="0" />
+        <Poster
+            id="poster"
+            width="70"
+            height="70"
+            translation="[20, 10]"
+            loadDisplayMode="scaleToFill"
+            failedBitmapUri="pkg:/images/icon_side_hd.png"
+        />
+        <Label
+            id="name"
+            translation="[110, 20]"
+            width="440"
+            text=""
+            color="0xFFFFFFFF"
+            font="font:MediumBoldSystemFont"
+        />
+        <Label
+            id="count"
+            translation="[110, 52]"
+            width="440"
+            text=""
+            color="0x9CA3AFFF"
+            font="font:SmallSystemFont"
+        />
+        <Label
+            id="num"
+            translation="[576, 20]"
+            width="56"
+            height="50"
+            horizAlign="right"
+            vertAlign="center"
+            text=""
+            color="0xE5E7EBFF"
+            font="font:MediumBoldSystemFont"
+        />
+    </children>
+
+    <script type="text/brightscript"><![CDATA[
+        sub init()
+            m.bg = m.top.findNode("bg")
+            m.focusBar = m.top.findNode("focusBar")
+            m.poster = m.top.findNode("poster")
+            m.name = m.top.findNode("name")
+            m.count = m.top.findNode("count")
+            m.num = m.top.findNode("num")
+        end sub
+
+        sub onContentChange()
+            it = m.top.itemContent
+            if it = invalid then return
+            m.poster.uri = it.HDGRIDPOSTERURL
+            m.name.text = it.title
+            m.count.text = it.description
+            m.num.text = it.shortDescriptionLine1
+        end sub
+
+        sub onFocusChange()
+            p = m.top.focusPercent
+            m.focusBar.opacity = p
+            if p > 0.5
+                m.bg.color = "0x2A1B4AFF"
+                m.name.color = "0xFFFFFFFF"
+            else
+                m.bg.color = "0x00000000"
+                m.name.color = "0xE5E7EBFF"
+            end if
+        end sub
+    ]]></script>
+</component>

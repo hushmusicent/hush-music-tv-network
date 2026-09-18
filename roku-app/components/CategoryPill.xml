@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+    CategoryPill — matches the web app's rounded pill filter buttons.
+    Unfocused: dark surface with white text.
+    Focused:   primary-purple background with white text.
+    Selected (shortDescriptionLine1 == "1"): purple border ring even when unfocused.
+-->
+<component name="CategoryPill" extends="Group">
+    <interface>
+        <field id="itemContent" type="node" onChange="onContentChange" />
+        <field id="focusPercent" type="float" onChange="onFocusChange" />
+    </interface>
+
+    <children>
+        <Rectangle id="bg" width="220" height="56" color="0x1F1F1FFF" />
+        <Rectangle id="border" width="220" height="56" color="0x00000000" />
+        <Label
+            id="lbl"
+            translation="[0, 0]"
+            width="220"
+            height="56"
+            horizAlign="center"
+            vertAlign="center"
+            text=""
+            color="0xFFFFFFFF"
+            font="font:MediumBoldSystemFont"
+        />
+    </children>
+
+    <script type="text/brightscript"><![CDATA[
+        sub init()
+            m.bg = m.top.findNode("bg")
+            m.border = m.top.findNode("border")
+            m.lbl = m.top.findNode("lbl")
+        end sub
+
+        sub onContentChange()
+            it = m.top.itemContent
+            if it = invalid then return
+            m.lbl.text = it.title + " " + it.description
+            if it.shortDescriptionLine1 = "1"
+                m.border.color = "0x7C3AEDFF"
+            else
+                m.border.color = "0x00000000"
+            end if
+        end sub
+
+        sub onFocusChange()
+            p = m.top.focusPercent
+            if p > 0.5
+                m.bg.color = "0x7C3AEDFF"
+                m.lbl.color = "0xFFFFFFFF"
+            else
+                m.bg.color = "0x1F1F1FFF"
+                m.lbl.color = "0xE5E7EBFF"
+            end if
+        end sub
+    ]]></script>
+</component>

@@ -32,6 +32,14 @@ Build a TV network app named "Hush Music TV Network" with admin-only channel/vid
 - `POST /api/schedules/regenerate-all` - Regenerate all 24h schedules
 - Admin credentials: hushmusicent419@gmail.com / $Stisdd419
 
+## Completed (Feb 20, 2026 — Roku UI parity rebuild)
+- **Rebuilt the Roku BrightScript app to match the production web / Fire TV design** using the same MongoDB-backed channels, categories, live schedule, and Roku stream resolver.
+  - **HomeScene**: LIVE NOW hero band (auto-updates as user scrubs the featured grid) with channel thumbnail, red LIVE badge, category label, title, description, and Watch Now / Live TV buttons. Horizontal Categories pill row (All / Entertainment / Music / …) auto-built from `/api/channels` categories. Featured Channels row below the pills with 16:9 tiles, "N videos" meta line, purple focus ring. Star opens TV Guide.
+  - **LivePlayer**: Left slide-in Channels drawer (screenshot-matching layout: thumb + name + N videos + channel number, purple LIVE header, "Playlist: <date>"). Top-right Now Playing card (● LIVE, live clock, channel + video title + duration). Bottom-right channel pager (▲ N ▼ "of M"). Remote: UP/DOWN change channel · LEFT open drawer · RIGHT close drawer · OK play/pause · BACK exit. Overlay auto-hides after 5s. All existing playback + "Tuning in…" splash preserved for the yt-dlp resolve delay.
+  - **TVGuideScene**: 24-Hour Schedule header with today's date + "Now" indicator. Per-channel rows show logo + name + "Now: <title>" + a currently-airing color-cycled program block with start-time · duration and a red ● LIVE badge. UP/DOWN scroll · OK tunes in · BACK closes guide. Data sourced from `/api/schedule/live` for synchronized playback.
+  - **New components**: `CategoryPill.xml`, `DrawerRow.xml`, `GuideRow.xml` for reusable focusable rows.
+  - **Repackaged**: `/app/frontend/public/downloads/hush-music-tv-roku.zip` (450 KB). Served at `/downloads/hush-music-tv-roku.zip` (200 OK verified). **Requires Deploy** for production `broadcaster.emergent.host` serving.
+
 ## Completed (Feb 6, 2026)
 - **Roku LivePlayer loading UI**: Added a full-screen branded "Tuning in..." panel with the Hush Music TV wordmark, channel name, animated dots and a marquee-style pulse-bar animation shown during the ~7.5s `yt-dlp` YouTube stream resolution. Auto-hides once the video's `state == "playing"`, and on any playback/network error. BACK button remains responsive during the loading state (stops video, closes the LivePlayer). Fixes the "frozen splash" impression when tuning into YouTube-sourced channels on Roku.
 - Repackaged `/app/frontend/public/downloads/hush-music-tv-roku.zip` (444 KB). User must click Deploy for the new zip to be served on `broadcaster.emergent.host`.

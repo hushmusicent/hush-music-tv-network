@@ -1,100 +1,214 @@
 <?xml version="1.0" encoding="utf-8" ?>
+<!--
+    HomeScene — mirrors the production web/Fire TV home screen:
+      · LIVE NOW hero band (featured channel thumb + red LIVE badge + name +
+        Watch Now / Live TV buttons)
+      · Horizontal pill row for Categories (All / Entertainment / Music / …)
+      · 4×2 responsive grid of featured channels (all filtered by category)
+      · Star button opens the full TV Guide
+-->
 <component name="HomeScene" extends="Scene">
     <interface>
         <field id="apiBase" type="string" value="https://broadcaster.emergent.host" />
     </interface>
 
     <children>
-        <!-- Solid dark background matches web app's #0A0A0A -->
+        <!-- ================= BACKGROUND ================= -->
         <Rectangle width="1920" height="1080" color="0x0A0A0AFF" />
 
-        <!-- Hero band with subtle purple → black gradient stripe -->
-        <Rectangle width="1920" height="6" translation="[0, 0]" color="0x7C3AEDFF" />
-        <Rectangle width="1920" height="220" translation="[0, 6]" color="0x111111FF" />
-
-        <!-- Branding — purple pill + wordmark, mirroring the web header -->
-        <Rectangle id="brandDot" width="48" height="48" translation="[80, 92]" color="0x7C3AEDFF" />
+        <!-- ================= TOP HEADER STRIPE ================= -->
+        <Rectangle width="1920" height="6" color="0x7C3AEDFF" />
+        <Rectangle width="1920" height="90" translation="[0, 6]" color="0x111111FF" />
+        <Rectangle id="brandDot" width="40" height="40" translation="[64, 32]" color="0x7C3AEDFF" />
         <Label
             id="brand"
-            translation="[144, 72]"
+            translation="[120, 18]"
             text="HUSH MUSIC TV"
             color="0xFFFFFFFF"
             font="font:LargeBoldSystemFont"
         />
         <Label
             id="tagline"
-            translation="[146, 132]"
+            translation="[120, 62]"
             text="24/7 LIVE TV NETWORK"
             color="0x7C3AEDFF"
-            font="font:MediumSystemFont"
+            font="font:SmallSystemFont"
         />
 
-        <!-- Tabs: Live · Guide (Fire TV style bar) -->
-        <Rectangle id="tabLiveBg"   width="180" height="48" translation="[1420, 92]" color="0x7C3AEDFF" />
-        <Label
-            id="tabLive"
-            translation="[1420, 92]"
-            width="180"
-            height="48"
-            horizAlign="center"
-            vertAlign="center"
-            text="LIVE"
-            color="0xFFFFFFFF"
-            font="font:MediumBoldSystemFont"
+        <!-- ================= HERO BAND ================= -->
+        <!-- Poster fills the full width, dark gradient on left for text -->
+        <Poster
+            id="heroPoster"
+            width="1920"
+            height="520"
+            translation="[0, 96]"
+            loadDisplayMode="scaleToFill"
+            failedBitmapUri="pkg:/images/splash_fhd.png"
         />
-        <Rectangle id="tabGuideBg" width="180" height="48" translation="[1620, 92]" color="0x1F1F1FFF" />
+        <Rectangle width="960" height="520" translation="[0, 96]" color="0x0A0A0ACC" />
+        <Rectangle width="1920" height="120" translation="[0, 496]" color="0x0A0A0AFF" opacity="0.8" />
+
+        <!-- Hero content -->
+        <Rectangle id="liveBadgeBg" width="120" height="34" translation="[80, 210]" color="0xEF4444FF" />
         <Label
-            id="tabGuide"
-            translation="[1620, 92]"
-            width="180"
-            height="48"
+            id="liveBadge"
+            translation="[80, 210]"
+            width="120"
+            height="34"
             horizAlign="center"
             vertAlign="center"
-            text="TV GUIDE"
+            text="LIVE NOW"
+            color="0xFFFFFFFF"
+            font="font:SmallBoldSystemFont"
+        />
+        <Label
+            id="heroCategory"
+            translation="[214, 214]"
+            text=""
+            color="0x9CA3AFFF"
+            font="font:SmallBoldSystemFont"
+        />
+        <Label
+            id="heroTitle"
+            translation="[80, 258]"
+            width="1200"
+            text=""
+            color="0xFFFFFFFF"
+            font="font:LargeBoldSystemFont"
+        />
+        <Label
+            id="heroDesc"
+            translation="[80, 340]"
+            width="1200"
+            text="Tune in to the best content 24/7"
             color="0xE5E7EBFF"
             font="font:MediumSystemFont"
         />
 
+        <!-- Hero buttons (row) -->
+        <Group id="heroBtns" translation="[80, 420]">
+            <Rectangle id="watchNowBg" width="240" height="72" color="0x7C3AEDFF" />
+            <Label
+                id="watchNowLbl"
+                translation="[0, 0]"
+                width="240"
+                height="72"
+                horizAlign="center"
+                vertAlign="center"
+                text="▶  Watch Now"
+                color="0xFFFFFFFF"
+                font="font:MediumBoldSystemFont"
+            />
+            <Rectangle id="liveTvBg" translation="[260, 0]" width="240" height="72" color="0x00000000">
+                <Rectangle width="240" height="2" color="0xEF4444FF" />
+                <Rectangle width="240" height="2" translation="[0, 70]" color="0xEF4444FF" />
+                <Rectangle width="2" height="72" color="0xEF4444FF" />
+                <Rectangle width="2" height="72" translation="[238, 0]" color="0xEF4444FF" />
+            </Rectangle>
+            <Label
+                id="liveTvLbl"
+                translation="[260, 0]"
+                width="240"
+                height="72"
+                horizAlign="center"
+                vertAlign="center"
+                text="●  Live TV"
+                color="0xFFFFFFFF"
+                font="font:MediumBoldSystemFont"
+            />
+        </Group>
+
+        <!-- ================= CATEGORIES ROW ================= -->
+        <Label
+            id="catHeader"
+            translation="[64, 640]"
+            text="CATEGORIES"
+            color="0x7C3AEDFF"
+            font="font:MediumBoldSystemFont"
+        />
+
+        <MarkupGrid
+            id="categoryGrid"
+            translation="[64, 682]"
+            itemComponentName="CategoryPill"
+            basePosterSize="[220, 56]"
+            itemSize="[220, 56]"
+            itemSpacing="[12, 0]"
+            numColumns="8"
+            numRows="1"
+            drawFocusFeedback="false"
+            focusable="true"
+        />
+
+        <!-- ================= FEATURED CHANNELS GRID ================= -->
+        <Label
+            id="chHeader"
+            translation="[64, 760]"
+            text="FEATURED CHANNELS"
+            color="0x7C3AEDFF"
+            font="font:MediumBoldSystemFont"
+        />
+
+        <MarkupGrid
+            id="grid"
+            translation="[64, 800]"
+            itemComponentName="ChannelTile"
+            basePosterSize="[280, 200]"
+            itemSize="[288, 208]"
+            itemSpacing="[16, 16]"
+            numColumns="6"
+            numRows="1"
+            drawFocusFeedback="false"
+            focusable="true"
+        />
+
+        <!-- ================= STATUS + KEY HINT ================= -->
         <Label
             id="status"
-            translation="[80, 990]"
-            width="1760"
-            height="40"
+            translation="[64, 1020]"
+            width="1200"
+            height="30"
             text="Loading channels…"
             color="0x9CA3AFFF"
             font="font:SmallSystemFont"
         />
         <Label
             id="hint"
-            translation="[80, 1030]"
-            width="1760"
+            translation="[64, 1050]"
+            width="1792"
             height="30"
-            text="Up/Down/Left/Right: navigate  ·  OK: tune in  ·  * (Star): open TV Guide  ·  Back: exit"
+            text="↑ Categories  ·  ↓ Channels  ·  OK: Watch Now  ·  ★ TV Guide  ·  Back: Exit"
             color="0x6B7280FF"
             font="font:SmallSystemFont"
-        />
-
-        <MarkupGrid
-            id="grid"
-            translation="[80, 260]"
-            itemComponentName="ChannelTile"
-            basePosterSize="[320, 220]"
-            itemSize="[336, 236]"
-            itemSpacing="[16, 16]"
-            numColumns="5"
-            numRows="3"
-            drawFocusFeedback="false"
-            focusable="true"
         />
     </children>
 
     <script type="text/brightscript"><![CDATA[
         sub init()
+            m.heroPoster = m.top.findNode("heroPoster")
+            m.heroTitle = m.top.findNode("heroTitle")
+            m.heroDesc = m.top.findNode("heroDesc")
+            m.heroCategory = m.top.findNode("heroCategory")
+            m.watchNowBg = m.top.findNode("watchNowBg")
+            m.watchNowLbl = m.top.findNode("watchNowLbl")
+            m.liveTvBg = m.top.findNode("liveTvBg")
+            m.liveTvLbl = m.top.findNode("liveTvLbl")
+
+            m.categoryGrid = m.top.findNode("categoryGrid")
             m.grid = m.top.findNode("grid")
             m.status = m.top.findNode("status")
+
+            m.selectedCategory = "All"
+            m.focusZone = "grid"    ' "hero" | "cats" | "grid"
+            m.heroBtnIndex = 0      ' 0 = Watch Now, 1 = Live TV
+
+            m.categoryGrid.observeField("itemSelected", "onCategorySelected")
+            m.categoryGrid.observeField("itemFocused", "onCategoryFocused")
             m.grid.observeField("itemSelected", "onChannelSelected")
             m.grid.observeField("itemFocused", "onChannelFocused")
+
             m.grid.setFocus(true)
+            renderHeroButtons()
             fetchChannels()
         end sub
 
@@ -114,36 +228,138 @@
                 return
             end if
             m.channels = payload.list
-            content = CreateObject("roSGNode", "ContentNode")
-            for each ch in m.channels
-                it = content.createChild("ContentNode")
-                it.title = ch.name
-                it.HDGRIDPOSTERURL = firstNonEmpty(ch.thumbnail, "pkg:/images/icon_side_hd.png")
-                it.id = ch.id
-            end for
-            m.grid.content = content
-            m.status.text = "Ready — " + m.channels.Count().ToStr() + " channels"
+            m.categories = buildCategoryList(m.channels)
+            renderCategories()
+            m.selectedCategory = "All"
+            renderChannels()
+            if m.channels.Count() > 0
+                setHeroChannel(m.channels[0])
+            end if
+            m.status.text = m.channels.Count().ToStr() + " channels  ·  Category: " + m.selectedCategory
         end sub
 
         sub onChannelsError()
             m.status.text = "Network error: " + m.fetcher.error
         end sub
 
-        function firstNonEmpty(a as dynamic, b as string) as string
-            if a <> invalid and type(a) = "String" and a <> "" then return a
-            return b
+        ' -------- Category logic --------
+        function buildCategoryList(channels) as object
+            counts = {}
+            order = ["All"]
+            counts["All"] = channels.Count()
+            for each ch in channels
+                cname = ch.category
+                if cname = invalid or cname = "" then cname = "Other"
+                if counts[cname] = invalid
+                    counts[cname] = 0
+                    order.Push(cname)
+                end if
+                counts[cname] = counts[cname] + 1
+            end for
+            list = []
+            for each name in order
+                list.Push({ name: name, count: counts[name] })
+            end for
+            return list
         end function
+
+        sub renderCategories()
+            content = CreateObject("roSGNode", "ContentNode")
+            for each c in m.categories
+                it = content.createChild("ContentNode")
+                it.title = c.name
+                it.description = "(" + c.count.ToStr() + ")"
+                if c.name = m.selectedCategory
+                    it.shortDescriptionLine1 = "1"
+                else
+                    it.shortDescriptionLine1 = "0"
+                end if
+            end for
+            m.categoryGrid.content = content
+        end sub
+
+        sub onCategoryFocused()
+            idx = m.categoryGrid.itemFocused
+            if idx < 0 or idx >= m.categories.Count() then return
+            m.status.text = "Category: " + m.categories[idx].name
+        end sub
+
+        sub onCategorySelected()
+            idx = m.categoryGrid.itemSelected
+            if idx < 0 or idx >= m.categories.Count() then return
+            m.selectedCategory = m.categories[idx].name
+            renderCategories()
+            renderChannels()
+            m.grid.setFocus(true)
+            m.focusZone = "grid"
+        end sub
+
+        ' -------- Channel grid --------
+        sub renderChannels()
+            content = CreateObject("roSGNode", "ContentNode")
+            m.visibleChannels = []
+            for each ch in m.channels
+                cname = ch.category
+                if cname = invalid or cname = "" then cname = "Other"
+                if m.selectedCategory = "All" or m.selectedCategory = cname
+                    it = content.createChild("ContentNode")
+                    it.title = ch.name
+                    vcount = 0
+                    if ch.videos <> invalid then vcount = ch.videos.Count()
+                    it.description = vcount.ToStr() + " videos"
+                    it.shortDescriptionLine1 = cname
+                    it.HDGRIDPOSTERURL = firstNonEmpty(ch.thumbnail, "pkg:/images/icon_side_hd.png")
+                    it.id = ch.id
+                    m.visibleChannels.Push(ch)
+                end if
+            end for
+            m.grid.content = content
+        end sub
 
         sub onChannelFocused()
             idx = m.grid.itemFocused
-            if idx < 0 or idx >= m.channels.Count() then return
-            m.status.text = "Focused: " + m.channels[idx].name + "  ·  press OK to tune in"
+            if m.visibleChannels = invalid or idx < 0 or idx >= m.visibleChannels.Count() then return
+            setHeroChannel(m.visibleChannels[idx])
+        end sub
+
+        sub setHeroChannel(ch as object)
+            m.heroChannel = ch
+            m.heroTitle.text = UCase(ch.name)
+            if ch.description <> invalid and ch.description <> ""
+                m.heroDesc.text = ch.description
+            else
+                m.heroDesc.text = "Tune in to the best content 24/7"
+            end if
+            cat = ch.category
+            if cat = invalid or cat = "" then cat = "TV"
+            m.heroCategory.text = UCase(cat)
+            m.heroPoster.uri = firstNonEmpty(ch.thumbnail, "pkg:/images/splash_fhd.png")
         end sub
 
         sub onChannelSelected()
             idx = m.grid.itemSelected
-            if idx < 0 or idx >= m.channels.Count() then return
-            ch = m.channels[idx]
+            if m.visibleChannels = invalid or idx < 0 or idx >= m.visibleChannels.Count() then return
+            openPlayer(m.visibleChannels[idx])
+        end sub
+
+        ' -------- Hero button focus visuals --------
+        sub renderHeroButtons()
+            if m.focusZone = "hero" and m.heroBtnIndex = 0
+                m.watchNowBg.color = "0xA855F7FF"
+                m.watchNowLbl.color = "0xFFFFFFFF"
+            else
+                m.watchNowBg.color = "0x7C3AEDFF"
+                m.watchNowLbl.color = "0xFFFFFFFF"
+            end if
+            if m.focusZone = "hero" and m.heroBtnIndex = 1
+                m.liveTvBg.color = "0xEF4444FF"
+            else
+                m.liveTvBg.color = "0x00000000"
+            end if
+        end sub
+
+        ' -------- Player + Guide --------
+        sub openPlayer(ch as object)
             m.status.text = "Tuning in to " + ch.name + "…"
             player = m.top.findNode("player")
             if player = invalid
@@ -152,7 +368,12 @@
                 player.apiBase = m.top.apiBase
                 player.observeField("closed", "onPlayerClosed")
             end if
-            player.channel = { id: ch.id, name: ch.name }
+            ' Pass the full visible channel list so the drawer / channel-up-down work.
+            player.setField("channelList", m.visibleChannels)
+            for i = 0 to m.visibleChannels.Count() - 1
+                if m.visibleChannels[i].id = ch.id then player.currentIndex = i
+            end for
+            player.channel = { id: ch.id, name: ch.name, thumbnail: ch.thumbnail }
             player.visible = true
             player.setFocus(true)
         end sub
@@ -161,6 +382,7 @@
             player = m.top.findNode("player")
             if player <> invalid then player.visible = false
             m.grid.setFocus(true)
+            m.focusZone = "grid"
         end sub
 
         sub openGuide()
@@ -174,16 +396,13 @@
             end if
             guide.visible = true
             guide.setFocus(true)
-            m.top.findNode("tabLiveBg").color  = "0x1F1F1FFF"
-            m.top.findNode("tabGuideBg").color = "0x7C3AEDFF"
         end sub
 
         sub onGuideClosed()
             g = m.top.findNode("guide")
             if g <> invalid then g.visible = false
-            m.top.findNode("tabLiveBg").color  = "0x7C3AEDFF"
-            m.top.findNode("tabGuideBg").color = "0x1F1F1FFF"
             m.grid.setFocus(true)
+            m.focusZone = "grid"
         end sub
 
         sub onGuideChannelSelected()
@@ -194,28 +413,31 @@
             for each ch in m.channels
                 if ch.id = chId
                     onGuideClosed()
-                    player = m.top.findNode("player")
-                    if player = invalid
-                        player = m.top.createChild("LivePlayer")
-                        player.id = "player"
-                        player.apiBase = m.top.apiBase
-                        player.observeField("closed", "onPlayerClosed")
-                    end if
-                    player.channel = { id: ch.id, name: ch.name }
-                    player.visible = true
-                    player.setFocus(true)
+                    openPlayer(ch)
                     exit for
                 end if
             end for
         end sub
 
+        function firstNonEmpty(a as dynamic, b as string) as string
+            if a <> invalid and type(a) = "String" and a <> "" then return a
+            return b
+        end function
+
         function onKeyEvent(key as String, press as Boolean) as Boolean
             if not press then return false
+
+            if key = "options" or key = "info"
+                openGuide()
+                return true
+            end if
+
             if key = "back"
                 player = m.top.findNode("player")
                 if player <> invalid and player.visible
                     player.visible = false
                     m.grid.setFocus(true)
+                    m.focusZone = "grid"
                     return true
                 end if
                 g = m.top.findNode("guide")
@@ -223,11 +445,62 @@
                     onGuideClosed()
                     return true
                 end if
+                return false
             end if
-            if key = "options" or key = "info"
-                openGuide()
-                return true
+
+            ' Hero-zone key handling (buttons)
+            if m.focusZone = "hero"
+                if key = "up"
+                    ' Stay on hero; do nothing (already top)
+                    return true
+                end if
+                if key = "down"
+                    m.focusZone = "cats"
+                    m.categoryGrid.setFocus(true)
+                    renderHeroButtons()
+                    return true
+                end if
+                if key = "left"
+                    if m.heroBtnIndex > 0 then m.heroBtnIndex = 0
+                    renderHeroButtons()
+                    return true
+                end if
+                if key = "right"
+                    if m.heroBtnIndex < 1 then m.heroBtnIndex = 1
+                    renderHeroButtons()
+                    return true
+                end if
+                if key = "OK"
+                    if m.heroChannel <> invalid
+                        openPlayer(m.heroChannel)
+                    end if
+                    return true
+                end if
             end if
+
+            ' Categories/Grid zone: up navigates to hero buttons.
+            if key = "up"
+                if m.focusZone = "grid"
+                    m.focusZone = "cats"
+                    m.categoryGrid.setFocus(true)
+                    return true
+                end if
+                if m.focusZone = "cats"
+                    m.focusZone = "hero"
+                    m.heroBtnIndex = 0
+                    renderHeroButtons()
+                    return true
+                end if
+            end if
+
+            if key = "down"
+                if m.focusZone = "cats"
+                    m.focusZone = "grid"
+                    m.grid.setFocus(true)
+                    return true
+                end if
+            end if
+
             return false
         end function
     ]]></script>

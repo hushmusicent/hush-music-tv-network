@@ -1,7 +1,13 @@
 <?xml version="1.0" encoding="utf-8" ?>
+<!--
+    TVGuideScene — mirrors the production TV Guide (screenshot 2):
+      · Purple accent header with "TV Guide" title + "24-Hour Schedule · <today>"
+      · "Now" button + zoom hint (informational — Roku doesn't animate)
+      · Rows of channels with logo + name + "Now: <title>" and the currently
+        airing block colored (with LIVE badge) + start-time · duration
+      · UP/DOWN scroll rows · OK tune in · BACK closes guide
+-->
 <component name="TVGuideScene" extends="Group">
-    <!-- Full-screen TV Guide overlay: for each channel, shows the currently-airing
-         program title + start time. OK on any row tunes in to that channel. -->
     <interface>
         <field id="apiBase" type="string" />
         <field id="closed" type="boolean" alwaysNotify="true" />
@@ -11,42 +17,63 @@
     <children>
         <Rectangle width="1920" height="1080" color="0x0A0A0AFA" />
 
-        <!-- Header stripe matching HomeScene branding -->
+        <!-- Header stripe matches HomeScene branding -->
         <Rectangle width="1920" height="6" color="0x7C3AEDFF" />
-        <Rectangle width="1920" height="120" translation="[0, 6]" color="0x111111FF" />
+        <Rectangle width="1920" height="140" translation="[0, 6]" color="0x111111FF" />
+        <Rectangle width="48" height="48" translation="[64, 46]" color="0x7C3AEDFF" />
         <Label
             id="title"
-            translation="[80, 40]"
-            text="TV GUIDE"
+            translation="[124, 30]"
+            text="TV Guide"
             color="0xFFFFFFFF"
             font="font:LargeBoldSystemFont"
         />
         <Label
             id="subtitle"
-            translation="[80, 92]"
-            text="What's on right now across every channel"
+            translation="[124, 90]"
+            text=""
             color="0x9CA3AFFF"
             font="font:MediumSystemFont"
         />
+        <Rectangle width="180" height="52" translation="[1660, 68]" color="0xEF4444FF" opacity="0.15" />
+        <Rectangle width="180" height="2" translation="[1660, 68]" color="0xEF4444FF" />
+        <Rectangle width="180" height="2" translation="[1660, 118]" color="0xEF4444FF" />
+        <Rectangle width="2" height="52" translation="[1660, 68]" color="0xEF4444FF" />
+        <Rectangle width="2" height="52" translation="[1838, 68]" color="0xEF4444FF" />
+        <Label
+            id="nowBtn"
+            translation="[1660, 68]"
+            width="180"
+            height="52"
+            horizAlign="center"
+            vertAlign="center"
+            text="◐  Now"
+            color="0xEF4444FF"
+            font="font:MediumBoldSystemFont"
+        />
+
+        <!-- Row list -->
+        <MarkupGrid
+            id="rows"
+            translation="[64, 170]"
+            itemComponentName="GuideRow"
+            basePosterSize="[1792, 96]"
+            itemSize="[1792, 96]"
+            itemSpacing="[0, 4]"
+            numColumns="1"
+            numRows="9"
+            drawFocusFeedback="false"
+            focusable="true"
+        />
+
         <Label
             id="status"
-            translation="[80, 990]"
+            translation="[64, 1030]"
             width="1760"
-            height="40"
+            height="30"
             text="Loading guide…"
             color="0x9CA3AFFF"
             font="font:SmallSystemFont"
-        />
-
-        <LabelList
-            id="rows"
-            translation="[80, 170]"
-            itemSize="[1760, 72]"
-            numRows="11"
-            drawFocusFeedback="true"
-            focusedColor="0x7C3AEDFF"
-            color="0xE5E7EBFF"
-            font="font:MediumSystemFont"
         />
     </children>
 
@@ -54,6 +81,7 @@
         sub init()
             m.rows = m.top.findNode("rows")
             m.status = m.top.findNode("status")
+            m.subtitle = m.top.findNode("subtitle")
             m.rows.observeField("itemSelected", "onRowSelected")
             fetchSchedule()
         end sub
@@ -73,6 +101,10 @@
                 m.status.text = "No guide data"
                 return
             end if
+            dateStr = data.date
+            if dateStr = invalid then dateStr = ""
+            m.subtitle.text = "24-Hour Schedule  ·  " + dateStr
+
             nowSecs = secondsSinceMidnightET()
             content = CreateObject("roSGNode", "ContentNode")
             m.rowChannels = []
@@ -81,29 +113,36 @@
                 if cname = invalid then cname = "Unknown"
                 cid = s.channel_id
                 if cid = invalid then cid = ""
-                nowTitle = "-- off air --"
-                nowStart = ""
+                thumb = s.channel_thumbnail
+                if thumb = invalid or thumb = "" then thumb = "pkg:/images/icon_side_hd.png"
+
+                nowTitle = "off air"
+                nowMeta = ""
+                nowLive = "0"
                 if s.videos <> invalid
                     for each v in s.videos
                         startS = hhmmssToSec(v.start_time)
                         endS   = hhmmssToSec(v.end_time)
                         if nowSecs >= startS and nowSecs < endS
                             nowTitle = v.title
-                            nowStart = v.start_time
+                            durSecs = v.duration
+                            if durSecs = invalid then durSecs = endS - startS
+                            nowMeta = to12h(v.start_time) + "  ·  " + fmtDur(durSecs)
+                            nowLive = "1"
                             exit for
                         end if
                     end for
                 end if
-                pad = padRight(cname, 26)
-                startPad = padRight(nowStart, 10)
-                line = pad + "  " + startPad + "  " + nowTitle
-                if Len(line) > 140 then line = Left(line, 137) + "…"
                 it = content.createChild("ContentNode")
-                it.title = line
+                it.title = cname
+                it.description = nowTitle
+                it.shortDescriptionLine1 = nowMeta
+                it.shortDescriptionLine2 = nowLive
+                it.HDGRIDPOSTERURL = thumb
                 m.rowChannels.Push({ id: cid, name: cname })
             end for
             m.rows.content = content
-            m.status.text = "OK to tune in  ·  Back to return"
+            m.status.text = "↑↓ Navigate  ·  OK: Tune in  ·  Back: Close"
             m.rows.setFocus(true)
         end sub
 
@@ -119,23 +158,36 @@
             return Val(t[0])
         end function
 
+        function to12h(s as dynamic) as String
+            if s = invalid then return ""
+            t = s.Split(":")
+            if t.Count() < 2 then return s
+            hh = Val(t[0])
+            mm = t[1]
+            suffix = " AM"
+            if hh >= 12 then suffix = " PM"
+            if hh = 0 then hh = 12
+            if hh > 12 then hh = hh - 12
+            return hh.ToStr() + ":" + mm + suffix
+        end function
+
+        function fmtDur(secs as dynamic) as String
+            n = 0
+            if type(secs) = "Integer" then n = secs
+            if type(secs) = "roInt" then n = secs
+            if type(secs) = "Double" or type(secs) = "Float" then n = Int(secs)
+            if type(secs) = "String" then n = Val(secs)
+            mm = Int(n / 60)
+            ss = n - mm * 60
+            sss = ss.ToStr()
+            if Len(sss) < 2 then sss = "0" + sss
+            return mm.ToStr() + ":" + sss
+        end function
+
         function secondsSinceMidnightET() as Integer
-            ' Roku doesn't have zoneinfo; use system time (typically local),
-            ' but we render start_time strings straight from the server, so
-            ' "now" comparison uses local device seconds. Good enough for a
-            ' current-slot highlight; slots come from the server pre-rendered.
             dt = CreateObject("roDateTime")
             dt.ToLocalTime()
             return dt.GetHours()*3600 + dt.GetMinutes()*60 + dt.GetSeconds()
-        end function
-
-        function padRight(s as string, n as integer) as string
-            out = s
-            while Len(out) < n
-                out = out + " "
-            end while
-            if Len(out) > n then out = Left(out, n)
-            return out
         end function
 
         sub onRowSelected()
