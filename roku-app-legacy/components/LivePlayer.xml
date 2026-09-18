@@ -1,0 +1,189 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="LivePlayer" extends="Group">
+    <interface>
+        <field id="channel" type="assocarray" onChange="onChannelSet" />
+        <field id="backendBase" type="string" />
+        <field id="closed" type="boolean" alwaysNotify="true" />
+    </interface>
+    <script type="text/brightscript">
+    <![CDATA[
+        sub init()
+            m.video = m.top.findNode("video")
+            m.overlay = m.top.findNode("overlay")
+            m.channelName = m.top.findNode("channelName")
+            m.videoTitle = m.top.findNode("videoTitle")
+            m.errorLabel = m.top.findNode("errorLabel")
+            m.hideTimer = m.top.findNode("hideOverlay")
+            m.loadingBg = m.top.findNode("loadingBg")
+            m.loadingText = m.top.findNode("loadingText")
+            m.loadingSub = m.top.findNode("loadingSub")
+
+            m.hideTimer.observeField("fire", "onHideOverlay")
+            m.video.observeField("state", "onVideoState")
+        end sub
+
+        sub onChannelSet()
+            ch = m.top.channel
+            m.channelName.text = ch.name
+            showLoading(true, "Tuning in to " + ch.name + "...", "Please wait while we resolve the stream")
+            showAndScheduleHide()
+            playCurrentSlot()
+        end sub
+
+        sub playCurrentSlot()
+            ch = m.top.channel
+            nowUtc = getUtcSeconds()
+            slot = getCurrentVideo(ch, nowUtc)
+            if slot = invalid
+                showLoading(true, "No video scheduled right now", "Press BACK to return")
+                return
+            end if
+
+            m.currentSlot = slot
+            m.videoTitle.text = slot.video.title
+
+            if slot.video.video_url <> invalid and Len(slot.video.video_url) > 0
+                showLoading(true, "Loading " + slot.video.title, "Buffering video...")
+                startPlayback(slot.video.video_url, slot.seek)
+                return
+            end if
+
+            if slot.video.youtube_id <> invalid and Len(slot.video.youtube_id) > 0
+                showLoading(true, "Tuning in to " + ch.name + "...", "Resolving stream, about 10 seconds")
+                m.streamFetcher = CreateObject("roSGNode", "DataFetcher")
+                m.streamFetcher.url = m.top.backendBase + "/api/youtube/stream-info/" + slot.video.youtube_id
+                m.streamFetcher.observeField("response", "onStreamResolved")
+                m.streamFetcher.control = "RUN"
+                return
+            end if
+
+            showLoading(true, "No playable source", "Skipping to next video...")
+            skipToNext()
+        end sub
+
+        sub onStreamResolved()
+            body = m.streamFetcher.response
+            if Len(body) = 0
+                showLoading(true, "Stream unavailable", "Skipping to next video...")
+                skipToNext()
+                return
+            end if
+            info = ParseJson(body)
+            if info = invalid or info.success <> true or info.url = invalid
+                showLoading(true, "Stream unavailable", "Skipping to next video...")
+                skipToNext()
+                return
+            end if
+            showLoading(true, m.currentSlot.video.title, "Starting playback...")
+            startPlayback(info.url, m.currentSlot.seek)
+        end sub
+
+        sub startPlayback(url as String, seek as Integer)
+            content = CreateObject("roSGNode", "ContentNode")
+            content.title = m.currentSlot.video.title
+            content.url = url
+            content.streamFormat = detectFormat(url)
+            m.video.content = content
+            m.video.seekMode = "accurate"
+            m.video.seek = seek
+            m.video.control = "play"
+        end sub
+
+        function detectFormat(url as String) as String
+            u = LCase(url)
+            if Instr(1, u, ".m3u8") > 0 then return "hls"
+            if Instr(1, u, ".mpd") > 0 then return "dash"
+            return "mp4"
+        end function
+
+        sub onVideoState()
+            s = m.video.state
+            if s = "playing"
+                showLoading(false, "", "")
+            else if s = "finished"
+                playCurrentSlot()
+            else if s = "error"
+                showLoading(true, "Playback error", "Skipping to next video...")
+                skipToNext()
+            end if
+        end sub
+
+        sub skipToNext()
+            timer = CreateObject("roSGNode", "Timer")
+            timer.duration = 2
+            timer.observeField("fire", "playCurrentSlot")
+            m.top.appendChild(timer)
+            timer.control = "start"
+        end sub
+
+        sub showAndScheduleHide()
+            m.overlay.visible = true
+            m.hideTimer.control = "start"
+        end sub
+
+        sub onHideOverlay()
+            m.overlay.visible = false
+        end sub
+
+        sub showLoading(visible as Boolean, mainText as String, subText as String)
+            m.loadingBg.visible = visible
+            m.loadingText.visible = visible
+            m.loadingSub.visible = visible
+            if visible
+                m.loadingText.text = mainText
+                m.loadingSub.text = subText
+            end if
+        end sub
+
+        function onKeyEvent(key as String, press as Boolean) as Boolean
+            if not press then return false
+            if key = "back" or key = "options"
+                showLoading(false, "", "")
+                m.video.control = "stop"
+                m.top.closed = true
+                return true
+            end if
+            if key = "up" or key = "down"
+                showAndScheduleHide()
+                return true
+            end if
+            if key = "OK" or key = "play"
+                showAndScheduleHide()
+                return true
+            end if
+            return false
+        end function
+    ]]>
+    </script>
+    <children>
+        <Rectangle width="1920" height="1080" color="0x000000FF" />
+
+        <Video id="video" width="1920" height="1080" translation="[0, 0]" />
+
+        <Rectangle id="loadingBg" width="1920" height="1080" color="0x0B0B14FF" visible="false" />
+        <Label id="loadingText"
+               translation="[0, 460]"
+               width="1920"
+               horizAlign="center"
+               font="font:LargeBoldSystemFont"
+               color="0xFFFFFFFF"
+               visible="false" />
+        <Label id="loadingSub"
+               translation="[0, 560]"
+               width="1920"
+               horizAlign="center"
+               font="font:MediumSystemFont"
+               color="0xE11D48FF"
+               visible="false" />
+
+        <Group id="overlay">
+            <Rectangle width="1920" height="140" translation="[0, 0]" color="0x000000AA" />
+            <Label id="channelName" translation="[70, 40]" font="font:MediumBoldSystemFont" color="0xFFFFFFFF" />
+            <Label id="videoTitle"  translation="[70, 90]" font="font:SmallSystemFont"      color="0xCCCCCCFF" />
+        </Group>
+
+        <Label id="errorLabel" translation="[70, 900]" font="font:SmallSystemFont" color="0xFF6666FF" />
+
+        <Timer id="hideOverlay" duration="4" repeat="false" />
+    </children>
+</component>

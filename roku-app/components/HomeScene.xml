@@ -1,204 +1,138 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <component name="HomeScene" extends="Scene">
-    <interface />
-    <script type="text/brightscript">
-    <![CDATA[
+    <interface>
+        <field id="apiBase" type="string" value="https://broadcaster.emergent.host" />
+    </interface>
+
+    <children>
+        <Rectangle width="1920" height="1080" color="0x0A0A0AFF" />
+        <Label
+            id="logo"
+            translation="[80, 60]"
+            text="HUSH MUSIC TV"
+            color="0xFFFFFFFF"
+            font="font:LargeBoldSystemFont"
+        />
+        <Label
+            id="subtitle"
+            translation="[80, 118]"
+            text="Live TV Network — pick a channel to tune in"
+            color="0x9CA3AFFF"
+            font="font:MediumSystemFont"
+        />
+        <Label
+            id="status"
+            translation="[80, 990]"
+            width="1760"
+            height="40"
+            text="Loading channels…"
+            color="0xF59E0BFF"
+            font="font:SmallSystemFont"
+        />
+        <MarkupGrid
+            id="grid"
+            translation="[80, 200]"
+            itemComponentName="ChannelTile"
+            basePosterSize="[300, 200]"
+            itemSize="[320, 220]"
+            itemSpacing="[16, 16]"
+            numColumns="5"
+            numRows="3"
+            drawFocusFeedback="false"
+            focusable="true"
+        />
+    </children>
+
+    <script type="text/brightscript"><![CDATA[
         sub init()
-            m.status = m.top.findNode("statusLabel")
-            m.status.text = "Init 1/4..."
+            m.grid   = m.top.findNode("grid")
+            m.status = m.top.findNode("status")
 
-            m.title = m.top.findNode("titleLabel")
-            m.channelList = m.top.findNode("channelList")
-            m.status.text = "Init 2/4: nodes found"
+            m.grid.observeField("itemSelected", "onChannelSelected")
+            m.grid.observeField("itemFocused",  "onChannelFocused")
 
-            m.backendBase = "https://broadcaster.emergent.host"
-            m.status.text = "Init 3/4: kicking off fetch..."
+            m.grid.setFocus(true)
 
-            loadChannels()
-
-            m.channelList.observeField("itemSelected", "onChannelSelected")
-            m.channelList.observeField("itemFocused", "onChannelFocused")
-            m.status.text = "Init 4/4: waiting for channels..."
+            fetchChannels()
         end sub
 
-        sub onChannelFocused()
-            idx = m.channelList.itemFocused
-            if m.channels <> invalid and idx >= 0 and idx < m.channels.Count()
-                m.status.text = "Focused: " + m.channels[idx].name + " — press OK to play"
-            end if
-        end sub
-
-        sub loadChannels()
-            m.channelLoader = CreateObject("roSGNode", "DataFetcher")
-            m.channelLoader.url = m.backendBase + "/api/channels"
-            m.channelLoader.observeField("response", "onChannelsLoaded")
-            m.channelLoader.control = "RUN"
+        sub fetchChannels()
+            m.status.text = "Loading channels…"
+            m.fetcher = CreateObject("roSGNode", "ChannelsFetcher")
+            m.fetcher.apiBase = m.top.apiBase
+            m.fetcher.observeField("channels", "onChannelsLoaded")
+            m.fetcher.observeField("error",    "onChannelsError")
+            m.fetcher.control = "RUN"
         end sub
 
         sub onChannelsLoaded()
-            ok = m.channelLoader.success
-            body = m.channelLoader.response
-            if not ok or Len(body) = 0
-                m.status.text = "Network error. Cannot reach broadcaster.emergent.host"
+            payload = m.fetcher.channels
+            if payload = invalid or payload.list = invalid
+                m.status.text = "No channels returned"
                 return
             end if
-            m.status.text = "Got response — parsing..."
-            data = ParseJson(body)
-            if data = invalid
-                m.status.text = "JSON parse failed"
-                return
-            end if
-            if type(data) <> "roArray"
-                m.status.text = "Server returned non-array (type=" + type(data) + ")"
-                return
-            end if
-
+            m.channels = payload.list
             content = CreateObject("roSGNode", "ContentNode")
-            m.channels = []
-            for each ch in data
-                if ch.videos <> invalid and ch.videos.Count() > 0
-                    m.channels.Push(ch)
-                    item = content.createChild("ContentNode")
-                    item.title = ch.name
-                    item.description = (ch.videos.Count()).ToStr() + " videos"
-                    if ch.thumbnail <> invalid and Len(ch.thumbnail) > 0
-                        item.HDPosterUrl = ch.thumbnail
-                        item.SDPosterUrl = ch.thumbnail
-                    end if
-                end if
+            for each ch in m.channels
+                it = content.createChild("ContentNode")
+                it.title             = ch.name
+                it.HDGRIDPOSTERURL   = firstNonEmpty(ch.thumbnail, "pkg:/images/icon_side_hd.png")
+                it.id                = ch.id
             end for
-            m.channelList.content = content
-            m.status.text = "Loaded " + m.channels.Count().ToStr() + " channels   |   * = TV Guide"
-            m.channelList.setFocus(true)
+            m.grid.content = content
+            m.status.text = "Ready — " + m.channels.Count().ToStr() + " channels. Press OK to tune in."
+        end sub
+
+        sub onChannelsError()
+            m.status.text = "Network error: " + m.fetcher.error
+        end sub
+
+        function firstNonEmpty(a as dynamic, b as string) as string
+            if a <> invalid and type(a) = "String" and a <> "" then return a
+            return b
+        end function
+
+        sub onChannelFocused()
+            idx = m.grid.itemFocused
+            if idx < 0 or idx >= m.channels.Count() then return
+            m.status.text = "Focused: " + m.channels[idx].name + " — press OK to tune in"
         end sub
 
         sub onChannelSelected()
-            idx = m.channelList.itemSelected
-            m.status.text = "Click: idx=" + idx.ToStr()
-            if idx < 0 or idx >= m.channels.Count()
-                m.status.text = "Click: bad idx " + idx.ToStr()
-                return
-            end if
-            openPlayer(m.channels[idx])
-        end sub
-
-        sub openPlayer(channel as Object)
-            m.status.text = "Opening: " + channel.name + " — creating LivePlayer..."
-            player = m.top.createChild("LivePlayer")
-            if player = invalid
-                m.status.text = "ERROR: createChild(LivePlayer) returned invalid — XML parse error"
-                return
-            end if
-            if player.subtype() <> "LivePlayer"
-                m.status.text = "ERROR: created node is " + player.subtype() + " not LivePlayer"
-                return
-            end if
-            m.status.text = "LivePlayer node created — setting backendBase..."
-            player.backendBase = m.backendBase
-            m.status.text = "backendBase set — setting channel..."
-            player.channel = channel
-            m.status.text = "channel set — focusing..."
-            player.setFocus(true)
-            player.observeField("closed", "onPlayerClosed")
-            m.status.text = "LivePlayer opened for: " + channel.name
-        end sub
-
-        sub openGuide()
-            guide = m.top.createChild("TVGuide")
-            guide.backendBase = m.backendBase
-            guide.channels = m.channels
-            guide.setFocus(true)
-            guide.observeField("closed", "onGuideClosed")
-            guide.observeField("selectedChannelIndex", "onGuideChannelPicked")
-        end sub
-
-        sub onGuideChannelPicked()
-            guide = getGuideNode()
-            if guide = invalid then return
-            idx = guide.selectedChannelIndex
+            idx = m.grid.itemSelected
             if idx < 0 or idx >= m.channels.Count() then return
-            channel = m.channels[idx]
-            removeGuideNode()
-            openPlayer(channel)
-        end sub
+            ch = m.channels[idx]
+            m.status.text = "Tuning in to " + ch.name + "…"
 
-        sub onGuideClosed()
-            removeGuideNode()
-            m.channelList.setFocus(true)
-        end sub
-
-        function getGuideNode() as Object
-            for i = 0 to m.top.getChildCount() - 1
-                child = m.top.getChild(i)
-                if child.subtype() = "TVGuide" then return child
-            end for
-            return invalid
-        end function
-
-        sub removeGuideNode()
-            for i = m.top.getChildCount() - 1 to 0 step -1
-                child = m.top.getChild(i)
-                if child.subtype() = "TVGuide"
-                    m.top.removeChild(child)
-                end if
-            end for
+            player = m.top.findNode("player")
+            if player = invalid
+                player = m.top.createChild("LivePlayer")
+                player.id = "player"
+                player.apiBase = m.top.apiBase
+                player.observeField("closed", "onPlayerClosed")
+            end if
+            player.channel = { id: ch.id, name: ch.name }
+            player.visible = true
+            player.setFocus(true)
         end sub
 
         sub onPlayerClosed()
-            ' Return focus to grid
-            m.channelList.setFocus(true)
-            for i = m.top.getChildCount() - 1 to 0 step -1
-                child = m.top.getChild(i)
-                if child.subtype() = "LivePlayer"
-                    m.top.removeChild(child)
-                end if
-            end for
+            player = m.top.findNode("player")
+            if player <> invalid then player.visible = false
+            m.grid.setFocus(true)
         end sub
 
         function onKeyEvent(key as String, press as Boolean) as Boolean
-            if press
-                if key = "back"
-                    m.top.exit = true
-                    return true
-                end if
-                if key = "options" or key = "info"
-                    ' Open TV Guide
-                    openGuide()
+            if not press then return false
+            if key = "back"
+                player = m.top.findNode("player")
+                if player <> invalid and player.visible
+                    player.visible = false
+                    m.grid.setFocus(true)
                     return true
                 end if
             end if
             return false
         end function
-    ]]>
-    </script>
-    <children>
-        <!-- Full-screen black backdrop so Scene bg quirks don't leave us on white -->
-        <Rectangle
-            width="1920"
-            height="1080"
-            color="0x0A0A0AFF" />
-
-        <Label
-            id="titleLabel"
-            text="HUSH MUSIC TELEVISION"
-            font="font:MediumBoldSystemFont"
-            color="0xFFFFFFFF"
-            translation="[70, 40]"
-            width="1780" horizAlign="left" />
-
-        <Label
-            id="statusLabel"
-            text="Starting..."
-            font="font:MediumSystemFont"
-            color="0xFFCC00FF"
-            width="1780" horizAlign="left"
-            translation="[70, 110]" />
-
-        <LabelList
-            id="channelList"
-            translation="[70, 180]"
-            itemSize="[900, 60]"
-            drawFocusFeedback="true"
-            numRows="14" />
-    </children>
+    ]]></script>
 </component>

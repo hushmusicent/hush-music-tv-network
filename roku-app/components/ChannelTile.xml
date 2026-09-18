@@ -2,31 +2,48 @@
 <component name="ChannelTile" extends="Group">
     <interface>
         <field id="itemContent" type="node" onChange="onContentChange" />
+        <field id="focusPercent" type="float" onChange="onFocusChange" />
     </interface>
-    <script type="text/brightscript">
-    <![CDATA[
+
+    <children>
+        <Rectangle id="bg" width="300" height="200" color="0x111111FF" />
+        <Poster
+            id="poster"
+            width="300"
+            height="170"
+            loadDisplayMode="scaleToFill"
+            failedBitmapUri="pkg:/images/icon_side_hd.png"
+        />
+        <Label
+            id="title"
+            width="300"
+            height="26"
+            translation="[0, 172]"
+            horizAlign="center"
+            vertAlign="center"
+            color="0xFFFFFFFF"
+            font="font:SmallBoldSystemFont"
+        />
+        <Rectangle id="focusRing" width="300" height="200" color="0x8B5CF6FF" opacity="0" />
+    </children>
+
+    <script type="text/brightscript"><![CDATA[
         sub init()
-            m.bg = m.top.findNode("bg")
-            m.poster = m.top.findNode("poster")
-            m.title = m.top.findNode("title")
-            m.subtitle = m.top.findNode("subtitle")
+            m.poster    = m.top.findNode("poster")
+            m.titleLbl  = m.top.findNode("title")
+            m.focusRing = m.top.findNode("focusRing")
         end sub
 
         sub onContentChange()
-            c = m.top.itemContent
-            if c = invalid then return
-            m.title.text = c.title
-            m.subtitle.text = c.description
-            if c.HDPosterUrl <> invalid and Len(c.HDPosterUrl) > 0
-                m.poster.uri = c.HDPosterUrl
+            item = m.top.itemContent
+            if item <> invalid
+                m.poster.uri    = item.HDGRIDPOSTERURL
+                m.titleLbl.text = item.title
             end if
         end sub
-    ]]>
-    </script>
-    <children>
-        <Rectangle id="bg" width="280" height="200" color="0x1F1F2AFF" />
-        <Poster id="poster" width="280" height="140" translation="[0, 0]" loadingBitmapUri="" />
-        <Label id="title"    translation="[14, 150]" font="font:SmallBoldSystemFont" color="0xFFFFFFFF" width="252" maxLines="1" ellipsizeOnBoundary="true" />
-        <Label id="subtitle" translation="[14, 175]" font="font:ExtraSmallSystemFont" color="0xBBBBBBFF" width="252" maxLines="1" />
-    </children>
+
+        sub onFocusChange()
+            m.focusRing.opacity = m.top.focusPercent
+        end sub
+    ]]></script>
 </component>

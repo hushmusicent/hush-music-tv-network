@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="StreamResolver" extends="Task">
+    <!-- Resolves the currently-playing slot for a channel into a Roku-playable
+         stream URL by calling /api/roku/resolve/{channel_id} on the backend. -->
+    <interface>
+        <field id="apiBase" type="string" />
+        <field id="channelId" type="string" />
+        <field id="result" type="assocarray" alwaysNotify="true" />
+        <field id="error" type="string" />
+    </interface>
+
+    <script type="text/brightscript"><![CDATA[
+        sub init()
+            m.top.functionName = "run"
+        end sub
+
+        sub run()
+            xfer = CreateObject("roUrlTransfer")
+            xfer.SetUrl(m.top.apiBase + "/api/roku/resolve/" + m.top.channelId)
+            xfer.SetCertificatesFile("common:/certs/ca-bundle.crt")
+            xfer.InitClientCertificates()
+            xfer.SetRequest("GET")
+            resp = xfer.GetToString()
+            if resp = invalid or resp = ""
+                m.top.error = "Could not resolve stream"
+                return
+            end if
+            data = ParseJson(resp)
+            if data = invalid or data.stream_url = invalid or data.stream_url = ""
+                m.top.error = "No playable stream for this channel yet"
+                return
+            end if
+            m.top.result = data
+        end sub
+    ]]></script>
+</component>

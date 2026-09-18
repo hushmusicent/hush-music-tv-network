@@ -475,6 +475,125 @@ async def delete_channel(channel_id: str, user: dict = Depends(require_user)):
     
     return {"message": "Channel deleted"}
 
+# ===================== ROKU STREAM RESOLVER =====================
+
+@api_router.get("/roku/resolve/{channel_id}")
+async def roku_resolve_stream(channel_id: str):
+    """Return a Roku-playable {stream_url, format, title, duration} for the
+    channel's currently-airing slot. Uses the same synchronized 24-hour
+    schedule as the web app so all viewers see the same show.
+    - Uploaded R2 MP4  → returns the direct URL (mp4)
+    - YouTube          → resolves best progressive stream via yt-dlp (mp4/hls)
+    - Vimeo            → resolves best progressive MP4 via Vimeo config API (mp4)
+    """
+    channel = await db.channels.find_one({"id": channel_id, "is_public": True}, {"_id": 0})
+    if not channel:
+        raise HTTPException(status_code=404, detail="Channel not found")
+
+    if channel.get("is_live_stream") and channel.get("live_stream_youtube_id"):
+        yt_id = channel["live_stream_youtube_id"]
+        stream = await _resolve_youtube_stream(yt_id)
+        if not stream:
+            raise HTTPException(status_code=502, detail="Could not resolve live stream")
+        return {"stream_url": stream["url"], "format": stream["format"], "title": channel.get("name", ""), "duration": 0}
+
+    # Pick the current slot from the synchronized 24h schedule
+    today = get_eastern_date()
+    schedule = await get_or_create_schedule(channel, today)
+    slots = schedule.get("videos", []) or []
+    if not slots:
+        raise HTTPException(status_code=404, detail="Channel has no scheduled content yet")
+
+    now_secs = _eastern_seconds_since_midnight()
+    current = None
+    for s in slots:
+        start = _hhmmss_to_seconds(s.get("start_time"))
+        end = _hhmmss_to_seconds(s.get("end_time"))
+        if start <= now_secs < end:
+            current = s
+            break
+    if current is None:
+        current = slots[0]
+
+    title = current.get("title", "")
+    duration = current.get("duration", 0)
+
+    if current.get("video_url"):
+        return {"stream_url": current["video_url"], "format": "mp4", "title": title, "duration": duration}
+
+    if current.get("vimeo_id"):
+        vimeo_url = await _resolve_vimeo_stream(current["vimeo_id"])
+        if not vimeo_url:
+            raise HTTPException(status_code=502, detail="Could not resolve Vimeo stream")
+        return {"stream_url": vimeo_url, "format": "mp4", "title": title, "duration": duration}
+
+    if current.get("youtube_id"):
+        stream = await _resolve_youtube_stream(current["youtube_id"])
+        if not stream:
+            raise HTTPException(status_code=502, detail="Could not resolve YouTube stream")
+        return {"stream_url": stream["url"], "format": stream["format"], "title": title, "duration": duration}
+
+    raise HTTPException(status_code=502, detail="Slot has no playable source")
+
+
+def _hhmmss_to_seconds(s):
+    if not s: return 0
+    parts = str(s).split(":")
+    try:
+        if len(parts) == 3: return int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
+        if len(parts) == 2: return int(parts[0]) * 60 + int(parts[1])
+        return int(parts[0])
+    except Exception:
+        return 0
+
+
+def _eastern_seconds_since_midnight() -> int:
+    from zoneinfo import ZoneInfo
+    now = datetime.now(ZoneInfo("America/New_York"))
+    return now.hour * 3600 + now.minute * 60 + now.second
+
+
+async def _resolve_youtube_stream(youtube_id: str):
+    """Return {url, format} for the best Roku-playable progressive stream."""
+    try:
+        ytdlp = get_ytdlp_path()
+        # Prefer a single-file mp4 (best for Roku's Video node), fall back to HLS.
+        proc = await asyncio.create_subprocess_exec(
+            ytdlp, "-f", "best[ext=mp4][protocol^=http]/best[protocol^=http]/best",
+            "--get-url", "--no-warnings", "--no-playlist",
+            f"https://www.youtube.com/watch?v={youtube_id}",
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+        )
+        out, _ = await asyncio.wait_for(proc.communicate(), timeout=25)
+        url = (out or b"").decode().strip().splitlines()[-1] if out else ""
+        if not url: return None
+        fmt = "hls" if ".m3u8" in url else "mp4"
+        return {"url": url, "format": fmt}
+    except Exception as e:
+        logger.warning(f"[roku] yt-dlp resolve failed for {youtube_id}: {e}")
+        return None
+
+
+async def _resolve_vimeo_stream(vimeo_id: str):
+    """Return the best progressive MP4 URL for a public Vimeo video."""
+    try:
+        async with httpx.AsyncClient(timeout=8.0, follow_redirects=True) as http:
+            r = await http.get(
+                f"https://player.vimeo.com/video/{vimeo_id}/config",
+                headers={"Referer": f"https://vimeo.com/{vimeo_id}"},
+            )
+            if r.status_code != 200: return None
+            data = r.json()
+            progressive = ((data.get("request") or {}).get("files") or {}).get("progressive") or []
+            if not progressive: return None
+            # Pick the highest-quality progressive MP4 the video exposes
+            progressive.sort(key=lambda p: p.get("height") or 0, reverse=True)
+            return progressive[0].get("url")
+    except Exception as e:
+        logger.warning(f"[roku] Vimeo resolve failed for {vimeo_id}: {e}")
+        return None
+
+
 # ===================== VIDEO ROUTES =====================
 
 @api_router.post("/videos/vimeo/metadata")
