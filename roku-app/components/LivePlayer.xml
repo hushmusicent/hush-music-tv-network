@@ -1,13 +1,12 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!--
-    LivePlayer — full-screen video with:
-      · "Tuning in…" splash while yt-dlp resolves the stream
-      · Slide-in Channels drawer (screenshot 1) with focusable rows
-      · Top-right Now Playing card: [● LIVE] [12:28 PM] Channel + Video + Duration
-      · Bottom-right channel pager: ▲  N  ▼  "of M"
-      · Remote: UP/DOWN change channel · LEFT open drawer · RIGHT close drawer ·
-                OK play/pause when drawer hidden · OK tune-in when drawer open ·
-                * (star) opens TV Guide · BACK closes player
+    LivePlayer - full-screen video with:
+      * Tuning-in splash while yt-dlp resolves the stream
+      * Channels drawer (left) with focusable rows
+      * Top-right Now Playing card
+      * Bottom-right channel pager
+      * Remote: UP/DOWN change channel . LEFT open drawer . RIGHT close drawer
+                . OK play/pause when drawer hidden . BACK closes player
 -->
 <component name="LivePlayer" extends="Group">
     <interface>
@@ -19,11 +18,9 @@
     </interface>
 
     <children>
-        <!-- Full-screen video underneath everything -->
         <Rectangle id="dim" width="1920" height="1080" color="0x000000FF" />
         <Video id="video" width="1920" height="1080" />
 
-        <!-- ========== Tuning-in splash ========== -->
         <Rectangle id="loading" width="1920" height="1080" color="0x0A0A0AFF">
             <Rectangle width="1920" height="6" color="0x7C3AEDFF" />
             <Rectangle id="loadingDot" width="48" height="48" translation="[936, 476]" color="0x7C3AEDFF" />
@@ -33,7 +30,7 @@
                 width="1920"
                 height="60"
                 horizAlign="center"
-                text="Tuning in…"
+                text="Tuning in..."
                 color="0xFFFFFFFF"
                 font="font:MediumBoldSystemFont"
             />
@@ -47,16 +44,8 @@
                 color="0x9CA3AFFF"
                 font="font:SmallSystemFont"
             />
-            <Animation duration="0.8" repeat="true" easeFunction="linear">
-                <FloatFieldInterpolator
-                    key="[0.0, 0.5, 1.0]"
-                    keyValue="[1.0, 0.35, 1.0]"
-                    fieldToInterp="loadingDot.opacity"
-                />
-            </Animation>
         </Rectangle>
 
-        <!-- ========== Now Playing card (top-right) ========== -->
         <Group id="nowPlaying" translation="[1380, 40]" opacity="0">
             <Rectangle width="500" height="180" color="0x000000CC" />
             <Rectangle width="4" height="180" color="0x7C3AEDFF" />
@@ -104,7 +93,6 @@
             />
         </Group>
 
-        <!-- ========== Channel Pager (bottom-right) ========== -->
         <Group id="pager" translation="[1740, 880]" opacity="0">
             <Rectangle width="140" height="180" color="0x000000CC" />
             <Label
@@ -114,7 +102,7 @@
                 height="40"
                 horizAlign="center"
                 vertAlign="center"
-                text="▲"
+                text="UP"
                 color="0xFFFFFFFF"
                 font="font:MediumBoldSystemFont"
             />
@@ -136,7 +124,7 @@
                 height="40"
                 horizAlign="center"
                 vertAlign="center"
-                text="▼"
+                text="DN"
                 color="0xFFFFFFFF"
                 font="font:MediumBoldSystemFont"
             />
@@ -152,12 +140,10 @@
             />
         </Group>
 
-        <!-- ========== Channels Drawer (slides in from left) ========== -->
         <Group id="drawer" translation="[-720, 0]" visible="true">
             <Rectangle width="720" height="1080" color="0x0A0A0AF5" />
             <Rectangle width="720" height="6" color="0x7C3AEDFF" />
             <Rectangle width="2" height="1080" translation="[718, 0]" color="0x7C3AEDFF" />
-            <!-- Header -->
             <Rectangle id="drawerHeaderIcon" width="36" height="36" translation="[24, 40]" color="0x7C3AEDFF" />
             <Label
                 id="drawerTitle"
@@ -173,13 +159,6 @@
                 color="0x9CA3AFFF"
                 font="font:SmallSystemFont"
             />
-            <Label
-                id="drawerClose"
-                translation="[660, 30]"
-                text="✕"
-                color="0xFFFFFFFF"
-                font="font:LargeBoldSystemFont"
-            />
             <MarkupGrid
                 id="drawerList"
                 translation="[40, 140]"
@@ -194,22 +173,6 @@
             />
         </Group>
 
-        <!-- Slide animation for drawer show/hide -->
-        <Animation id="drawerIn" duration="0.28" repeat="false" easeFunction="outQuad">
-            <Vector2DFieldInterpolator
-                key="[0, 1]"
-                keyValue="[[-720, 0], [0, 0]]"
-                fieldToInterp="drawer.translation"
-            />
-        </Animation>
-        <Animation id="drawerOut" duration="0.28" repeat="false" easeFunction="inQuad">
-            <Vector2DFieldInterpolator
-                key="[0, 1]"
-                keyValue="[[0, 0], [-720, 0]]"
-                fieldToInterp="drawer.translation"
-            />
-        </Animation>
-
         <Label
             id="errorLbl"
             translation="[80, 940]"
@@ -221,9 +184,7 @@
             visible="false"
         />
 
-        <!-- Clock tick (1s) -->
         <Timer id="clockTimer" repeat="true" duration="1" />
-        <!-- Overlay auto-hide (5s) -->
         <Timer id="hideTimer" repeat="false" duration="5" />
     </children>
 
@@ -247,8 +208,6 @@
             m.drawer = m.top.findNode("drawer")
             m.drawerList = m.top.findNode("drawerList")
             m.drawerDate = m.top.findNode("drawerDate")
-            m.drawerIn = m.top.findNode("drawerIn")
-            m.drawerOut = m.top.findNode("drawerOut")
 
             m.clockTimer = m.top.findNode("clockTimer")
             m.hideTimer = m.top.findNode("hideTimer")
@@ -270,10 +229,11 @@
 
         sub onChannelChange()
             ch = m.top.channel
-            if ch = invalid or ch.id = invalid then return
+            if ch = invalid then return
+            if ch.id = invalid then return
             closeDrawer()
             m.errorLbl.visible = false
-            m.loadingLbl.text = "Tuning in to " + ch.name + "…"
+            m.loadingLbl.text = "Tuning in to " + ch.name + "..."
             m.loading.visible = true
             populateDrawer()
             m.resolver = CreateObject("roSGNode", "StreamResolver")
@@ -288,16 +248,20 @@
 
         sub onStreamResolved()
             r = m.resolver.result
-            if r = invalid or r.stream_url = invalid then return
+            if r = invalid then return
+            if r.stream_url = invalid then return
             m.currentTitle = r.title
-            if r.duration <> invalid then m.currentDuration = r.duration else m.currentDuration = 0
+            if r.duration <> invalid
+                m.currentDuration = r.duration
+            else
+                m.currentDuration = 0
+            end if
             renderNowPlaying()
 
             ci = CreateObject("roSGNode", "ContentNode")
             ci.url = r.stream_url
             ci.streamFormat = pickFormat(r.format)
             ci.title = r.title
-            ' Seek to the scheduled offset so tuning in mid-show stays LIVE.
             pos = 0
             if r.position <> invalid then pos = r.position
             if pos > 0 then ci.playStart = pos
@@ -332,7 +296,7 @@
             if state = "playing"
                 m.loading.visible = false
             else if state = "error"
-                m.errorLbl.text = "Playback error — advancing"
+                m.errorLbl.text = "Playback error - advancing"
                 m.errorLbl.visible = true
                 m.loading.visible = false
                 stepChannel(1)
@@ -341,7 +305,6 @@
             end if
         end sub
 
-        ' -------- Now Playing / Clock --------
         sub renderNowPlaying()
             ch = m.top.channel
             if ch = invalid then return
@@ -380,7 +343,6 @@
             updateClock()
         end sub
 
-        ' -------- Overlay show/hide --------
         sub showOverlay()
             m.nowPlaying.opacity = 1
             m.pager.opacity = 1
@@ -396,7 +358,6 @@
             m.overlayVisible = false
         end sub
 
-        ' -------- Drawer --------
         sub populateDrawer()
             list = m.top.channelList
             if list = invalid then return
@@ -422,8 +383,7 @@
             if m.drawerOpen then return
             populateDrawer()
             m.drawerOpen = true
-            m.drawerOut.control = "stop"
-            m.drawerIn.control = "start"
+            m.drawer.translation = [0, 0]
             m.drawerList.setFocus(true)
             m.drawerList.jumpToItem = m.top.currentIndex
             showOverlay()
@@ -432,8 +392,7 @@
         sub closeDrawer()
             if not m.drawerOpen then return
             m.drawerOpen = false
-            m.drawerIn.control = "stop"
-            m.drawerOut.control = "start"
+            m.drawer.translation = [-720, 0]
             m.top.setFocus(true)
         end sub
 
@@ -446,7 +405,6 @@
             m.top.channel = { id: ch.id, name: ch.name, thumbnail: ch.thumbnail }
         end sub
 
-        ' -------- Channel up/down --------
         sub stepChannel(delta as integer)
             list = m.top.channelList
             if list = invalid or list.Count() = 0 then return
@@ -459,7 +417,7 @@
             m.top.channel = { id: ch.id, name: ch.name, thumbnail: ch.thumbnail }
         end sub
 
-        function onKeyEvent(key as String, press as Boolean) as Boolean
+        function onKeyEvent(key as string, press as boolean) as boolean
             if not press then return false
 
             if key = "back"
@@ -472,7 +430,6 @@
                 return true
             end if
 
-            ' If drawer is open, let the drawer list handle up/down/OK.
             if m.drawerOpen
                 if key = "right"
                     closeDrawer()
@@ -487,11 +444,11 @@
                 openDrawer()
                 return true
             end if
-            if key = "up" or key = "channelup"
+            if key = "up"
                 stepChannel(-1)
                 return true
             end if
-            if key = "down" or key = "channeldown"
+            if key = "down"
                 stepChannel(1)
                 return true
             end if
