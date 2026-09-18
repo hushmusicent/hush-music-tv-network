@@ -6,44 +6,54 @@
     </interface>
 
     <children>
-        <Rectangle id="bg" width="300" height="200" color="0x111111FF" />
+        <!-- Card background (mirrors the web app's card-on-dark aesthetic) -->
+        <Rectangle id="bg" width="320" height="220" color="0x111111FF" />
         <Poster
             id="poster"
-            width="300"
-            height="170"
+            width="320"
+            height="180"
             loadDisplayMode="scaleToFill"
             failedBitmapUri="pkg:/images/icon_side_hd.png"
         />
+        <!-- Bottom gradient bar so title stays legible over bright thumbs -->
+        <Rectangle id="titleBar" width="320" height="42" translation="[0, 178]" color="0x000000CC" />
         <Label
             id="title"
             width="300"
-            height="26"
-            translation="[0, 172]"
-            horizAlign="center"
+            height="42"
+            translation="[10, 178]"
             vertAlign="center"
             color="0xFFFFFFFF"
             font="font:SmallBoldSystemFont"
         />
-        <Rectangle id="focusRing" width="300" height="200" color="0x8B5CF6FF" opacity="0" />
+        <!-- Purple focus ring — matches hsl(263 70% 58%) primary from the web -->
+        <Rectangle id="focusTop"    width="320" height="4"   translation="[0, 0]"    color="0x7C3AEDFF" opacity="0" />
+        <Rectangle id="focusBottom" width="320" height="4"   translation="[0, 216]"  color="0x7C3AEDFF" opacity="0" />
+        <Rectangle id="focusLeft"   width="4"   height="220" translation="[0, 0]"    color="0x7C3AEDFF" opacity="0" />
+        <Rectangle id="focusRight"  width="4"   height="220" translation="[316, 0]"  color="0x7C3AEDFF" opacity="0" />
     </children>
 
     <script type="text/brightscript"><![CDATA[
         sub init()
-            m.poster    = m.top.findNode("poster")
-            m.titleLbl  = m.top.findNode("title")
-            m.focusRing = m.top.findNode("focusRing")
+            m.poster = m.top.findNode("poster")
+            m.titleLbl = m.top.findNode("title")
+            m.rings = [m.top.findNode("focusTop"), m.top.findNode("focusBottom"),
+                       m.top.findNode("focusLeft"), m.top.findNode("focusRight")]
         end sub
 
         sub onContentChange()
             item = m.top.itemContent
             if item <> invalid
-                m.poster.uri    = item.HDGRIDPOSTERURL
+                m.poster.uri = item.HDGRIDPOSTERURL
                 m.titleLbl.text = item.title
             end if
         end sub
 
         sub onFocusChange()
-            m.focusRing.opacity = m.top.focusPercent
+            p = m.top.focusPercent
+            for each r in m.rings
+                r.opacity = p
+            end for
         end sub
     ]]></script>
 </component>

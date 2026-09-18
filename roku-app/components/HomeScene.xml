@@ -5,36 +5,81 @@
     </interface>
 
     <children>
+        <!-- Solid dark background matches web app's #0A0A0A -->
         <Rectangle width="1920" height="1080" color="0x0A0A0AFF" />
+
+        <!-- Hero band with subtle purple → black gradient stripe -->
+        <Rectangle width="1920" height="6" translation="[0, 0]" color="0x7C3AEDFF" />
+        <Rectangle width="1920" height="220" translation="[0, 6]" color="0x111111FF" />
+
+        <!-- Branding — purple pill + wordmark, mirroring the web header -->
+        <Rectangle id="brandDot" width="48" height="48" translation="[80, 92]" color="0x7C3AEDFF" />
         <Label
-            id="logo"
-            translation="[80, 60]"
+            id="brand"
+            translation="[144, 72]"
             text="HUSH MUSIC TV"
             color="0xFFFFFFFF"
             font="font:LargeBoldSystemFont"
         />
         <Label
-            id="subtitle"
-            translation="[80, 118]"
-            text="Live TV Network — pick a channel to tune in"
-            color="0x9CA3AFFF"
+            id="tagline"
+            translation="[146, 132]"
+            text="24/7 LIVE TV NETWORK"
+            color="0x7C3AEDFF"
             font="font:MediumSystemFont"
         />
+
+        <!-- Tabs: Live · Guide (Fire TV style bar) -->
+        <Rectangle id="tabLiveBg"   width="180" height="48" translation="[1420, 92]" color="0x7C3AEDFF" />
+        <Label
+            id="tabLive"
+            translation="[1420, 92]"
+            width="180"
+            height="48"
+            horizAlign="center"
+            vertAlign="center"
+            text="LIVE"
+            color="0xFFFFFFFF"
+            font="font:MediumBoldSystemFont"
+        />
+        <Rectangle id="tabGuideBg" width="180" height="48" translation="[1620, 92]" color="0x1F1F1FFF" />
+        <Label
+            id="tabGuide"
+            translation="[1620, 92]"
+            width="180"
+            height="48"
+            horizAlign="center"
+            vertAlign="center"
+            text="TV GUIDE"
+            color="0xE5E7EBFF"
+            font="font:MediumSystemFont"
+        />
+
         <Label
             id="status"
             translation="[80, 990]"
             width="1760"
             height="40"
             text="Loading channels…"
-            color="0xF59E0BFF"
+            color="0x9CA3AFFF"
             font="font:SmallSystemFont"
         />
+        <Label
+            id="hint"
+            translation="[80, 1030]"
+            width="1760"
+            height="30"
+            text="Up/Down/Left/Right: navigate  ·  OK: tune in  ·  * (Star): open TV Guide  ·  Back: exit"
+            color="0x6B7280FF"
+            font="font:SmallSystemFont"
+        />
+
         <MarkupGrid
             id="grid"
-            translation="[80, 200]"
+            translation="[80, 260]"
             itemComponentName="ChannelTile"
-            basePosterSize="[300, 200]"
-            itemSize="[320, 220]"
+            basePosterSize="[320, 220]"
+            itemSize="[336, 236]"
             itemSpacing="[16, 16]"
             numColumns="5"
             numRows="3"
@@ -45,14 +90,11 @@
 
     <script type="text/brightscript"><![CDATA[
         sub init()
-            m.grid   = m.top.findNode("grid")
+            m.grid = m.top.findNode("grid")
             m.status = m.top.findNode("status")
-
             m.grid.observeField("itemSelected", "onChannelSelected")
-            m.grid.observeField("itemFocused",  "onChannelFocused")
-
+            m.grid.observeField("itemFocused", "onChannelFocused")
             m.grid.setFocus(true)
-
             fetchChannels()
         end sub
 
@@ -61,7 +103,7 @@
             m.fetcher = CreateObject("roSGNode", "ChannelsFetcher")
             m.fetcher.apiBase = m.top.apiBase
             m.fetcher.observeField("channels", "onChannelsLoaded")
-            m.fetcher.observeField("error",    "onChannelsError")
+            m.fetcher.observeField("error", "onChannelsError")
             m.fetcher.control = "RUN"
         end sub
 
@@ -75,12 +117,12 @@
             content = CreateObject("roSGNode", "ContentNode")
             for each ch in m.channels
                 it = content.createChild("ContentNode")
-                it.title             = ch.name
-                it.HDGRIDPOSTERURL   = firstNonEmpty(ch.thumbnail, "pkg:/images/icon_side_hd.png")
-                it.id                = ch.id
+                it.title = ch.name
+                it.HDGRIDPOSTERURL = firstNonEmpty(ch.thumbnail, "pkg:/images/icon_side_hd.png")
+                it.id = ch.id
             end for
             m.grid.content = content
-            m.status.text = "Ready — " + m.channels.Count().ToStr() + " channels. Press OK to tune in."
+            m.status.text = "Ready — " + m.channels.Count().ToStr() + " channels"
         end sub
 
         sub onChannelsError()
@@ -95,7 +137,7 @@
         sub onChannelFocused()
             idx = m.grid.itemFocused
             if idx < 0 or idx >= m.channels.Count() then return
-            m.status.text = "Focused: " + m.channels[idx].name + " — press OK to tune in"
+            m.status.text = "Focused: " + m.channels[idx].name + "  ·  press OK to tune in"
         end sub
 
         sub onChannelSelected()
@@ -103,7 +145,6 @@
             if idx < 0 or idx >= m.channels.Count() then return
             ch = m.channels[idx]
             m.status.text = "Tuning in to " + ch.name + "…"
-
             player = m.top.findNode("player")
             if player = invalid
                 player = m.top.createChild("LivePlayer")
@@ -122,6 +163,52 @@
             m.grid.setFocus(true)
         end sub
 
+        sub openGuide()
+            guide = m.top.findNode("guide")
+            if guide = invalid
+                guide = m.top.createChild("TVGuideScene")
+                guide.id = "guide"
+                guide.apiBase = m.top.apiBase
+                guide.observeField("closed", "onGuideClosed")
+                guide.observeField("selectedChannelId", "onGuideChannelSelected")
+            end if
+            guide.visible = true
+            guide.setFocus(true)
+            m.top.findNode("tabLiveBg").color  = "0x1F1F1FFF"
+            m.top.findNode("tabGuideBg").color = "0x7C3AEDFF"
+        end sub
+
+        sub onGuideClosed()
+            g = m.top.findNode("guide")
+            if g <> invalid then g.visible = false
+            m.top.findNode("tabLiveBg").color  = "0x7C3AEDFF"
+            m.top.findNode("tabGuideBg").color = "0x1F1F1FFF"
+            m.grid.setFocus(true)
+        end sub
+
+        sub onGuideChannelSelected()
+            g = m.top.findNode("guide")
+            if g = invalid then return
+            chId = g.selectedChannelId
+            if chId = invalid or chId = "" then return
+            for each ch in m.channels
+                if ch.id = chId
+                    onGuideClosed()
+                    player = m.top.findNode("player")
+                    if player = invalid
+                        player = m.top.createChild("LivePlayer")
+                        player.id = "player"
+                        player.apiBase = m.top.apiBase
+                        player.observeField("closed", "onPlayerClosed")
+                    end if
+                    player.channel = { id: ch.id, name: ch.name }
+                    player.visible = true
+                    player.setFocus(true)
+                    exit for
+                end if
+            end for
+        end sub
+
         function onKeyEvent(key as String, press as Boolean) as Boolean
             if not press then return false
             if key = "back"
@@ -131,6 +218,15 @@
                     m.grid.setFocus(true)
                     return true
                 end if
+                g = m.top.findNode("guide")
+                if g <> invalid and g.visible
+                    onGuideClosed()
+                    return true
+                end if
+            end if
+            if key = "options" or key = "info"
+                openGuide()
+                return true
             end if
             return false
         end function

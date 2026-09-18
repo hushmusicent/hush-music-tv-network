@@ -9,10 +9,14 @@
     <children>
         <Rectangle id="dim" width="1920" height="1080" color="0x000000FF" />
         <Video id="video" width="1920" height="1080" />
+
+        <!-- Loading screen mirrors Fire TV's "Tuning in…" splash -->
         <Rectangle id="loading" width="1920" height="1080" color="0x0A0A0AFF">
+            <Rectangle width="1920" height="6" color="0x7C3AEDFF" />
+            <Rectangle id="loadingDot" width="48" height="48" translation="[936, 476]" color="0x7C3AEDFF" />
             <Label
                 id="loadingLbl"
-                translation="[0, 500]"
+                translation="[0, 540]"
                 width="1920"
                 height="60"
                 horizAlign="center"
@@ -22,7 +26,7 @@
             />
             <Label
                 id="loadingSub"
-                translation="[0, 570]"
+                translation="[0, 604]"
                 width="1920"
                 height="40"
                 horizAlign="center"
@@ -31,6 +35,39 @@
                 font="font:SmallSystemFont"
             />
         </Rectangle>
+
+        <!-- Now-playing overlay: fades in on channel change -->
+        <Group id="nowPlaying" opacity="0" translation="[80, 920]">
+            <Rectangle width="1200" height="120" color="0x000000BB" />
+            <Rectangle width="4" height="120" color="0x7C3AEDFF" />
+            <Label
+                id="npChannel"
+                translation="[24, 14]"
+                text=""
+                color="0x7C3AEDFF"
+                font="font:SmallBoldSystemFont"
+            />
+            <Label
+                id="npTitle"
+                translation="[24, 44]"
+                width="1160"
+                height="40"
+                text=""
+                color="0xFFFFFFFF"
+                font="font:MediumBoldSystemFont"
+            />
+            <Label
+                id="npMeta"
+                translation="[24, 88]"
+                text=""
+                color="0x9CA3AFFF"
+                font="font:SmallSystemFont"
+            />
+            <Animation id="npFade" duration="0.4" repeat="false" easeFunction="outQuad">
+                <FloatFieldInterpolator key="[0,1]" keyValue="[0,1]" fieldToInterp="nowPlaying.opacity" />
+            </Animation>
+        </Group>
+
         <Label
             id="errorLbl"
             translation="[80, 940]"
@@ -45,10 +82,15 @@
 
     <script type="text/brightscript"><![CDATA[
         sub init()
-            m.video      = m.top.findNode("video")
-            m.loading    = m.top.findNode("loading")
+            m.video = m.top.findNode("video")
+            m.loading = m.top.findNode("loading")
             m.loadingLbl = m.top.findNode("loadingLbl")
-            m.errorLbl   = m.top.findNode("errorLbl")
+            m.errorLbl = m.top.findNode("errorLbl")
+            m.npChannel = m.top.findNode("npChannel")
+            m.npTitle = m.top.findNode("npTitle")
+            m.npMeta = m.top.findNode("npMeta")
+            m.nowPlaying = m.top.findNode("nowPlaying")
+            m.npFade = m.top.findNode("npFade")
             m.video.observeField("state", "onVideoState")
         end sub
 
@@ -56,25 +98,34 @@
             ch = m.top.channel
             if ch = invalid or ch.id = invalid then return
             m.errorLbl.visible = false
-            m.loadingLbl.text  = "Tuning in to " + ch.name + "…"
-            m.loading.visible  = true
-
+            m.loadingLbl.text = "Tuning in to " + ch.name + "…"
+            m.loading.visible = true
+            m.nowPlaying.opacity = 0
             m.resolver = CreateObject("roSGNode", "StreamResolver")
-            m.resolver.apiBase   = m.top.apiBase
+            m.resolver.apiBase = m.top.apiBase
             m.resolver.channelId = ch.id
             m.resolver.observeField("result", "onStreamResolved")
-            m.resolver.observeField("error",  "onStreamError")
-            m.resolver.control   = "RUN"
+            m.resolver.observeField("error", "onStreamError")
+            m.resolver.control = "RUN"
         end sub
 
         sub onStreamResolved()
             r = m.resolver.result
             if r = invalid or r.stream_url = invalid then return
+            ch = m.top.channel
+            m.npChannel.text = UCase(ch.name)
+            m.npTitle.text = r.title
+            if r.duration <> invalid and r.duration > 0
+                m.npMeta.text = "Now playing  ·  " + fmtDur(r.duration)
+            else
+                m.npMeta.text = "Now playing"
+            end if
+            m.npFade.control = "start"
 
             ci = CreateObject("roSGNode", "ContentNode")
-            ci.url          = r.stream_url
+            ci.url = r.stream_url
             ci.streamFormat = pickFormat(r.format)
-            ci.title        = r.title
+            ci.title = r.title
             m.video.content = ci
             m.video.control = "play"
         end sub
@@ -82,14 +133,22 @@
         function pickFormat(fmt as dynamic) as string
             if fmt = invalid then return "mp4"
             f = LCase(fmt)
-            if f = "hls"  then return "hls"
+            if f = "hls" then return "hls"
             if f = "dash" then return "dash"
             return "mp4"
         end function
 
+        function fmtDur(secs as integer) as string
+            m = Int(secs / 60)
+            s = secs - m * 60
+            ss = s.ToStr()
+            if Len(ss) < 2 then ss = "0" + ss
+            return m.ToStr() + ":" + ss
+        end function
+
         sub onStreamError()
-            m.loading.visible  = false
-            m.errorLbl.text    = m.resolver.error
+            m.loading.visible = false
+            m.errorLbl.text = m.resolver.error
             m.errorLbl.visible = true
         end sub
 
@@ -98,11 +157,12 @@
             if state = "playing"
                 m.loading.visible = false
             else if state = "error"
-                m.errorLbl.text    = "Playback error — will retry"
+                m.errorLbl.text = "Playback error — advancing"
                 m.errorLbl.visible = true
-                m.loading.visible  = false
+                m.loading.visible = false
+                onChannelChange()
             else if state = "finished"
-                ' Auto-advance: ask the backend for the next slot.
+                ' Auto-advance to the next scheduled slot.
                 onChannelChange()
             end if
         end sub

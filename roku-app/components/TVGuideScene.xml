@@ -1,0 +1,156 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="TVGuideScene" extends="Group">
+    <!-- Full-screen TV Guide overlay: for each channel, shows the currently-airing
+         program title + start time. OK on any row tunes in to that channel. -->
+    <interface>
+        <field id="apiBase" type="string" />
+        <field id="closed" type="boolean" alwaysNotify="true" />
+        <field id="selectedChannelId" type="string" alwaysNotify="true" />
+    </interface>
+
+    <children>
+        <Rectangle width="1920" height="1080" color="0x0A0A0AFA" />
+
+        <!-- Header stripe matching HomeScene branding -->
+        <Rectangle width="1920" height="6" color="0x7C3AEDFF" />
+        <Rectangle width="1920" height="120" translation="[0, 6]" color="0x111111FF" />
+        <Label
+            id="title"
+            translation="[80, 40]"
+            text="TV GUIDE"
+            color="0xFFFFFFFF"
+            font="font:LargeBoldSystemFont"
+        />
+        <Label
+            id="subtitle"
+            translation="[80, 92]"
+            text="What's on right now across every channel"
+            color="0x9CA3AFFF"
+            font="font:MediumSystemFont"
+        />
+        <Label
+            id="status"
+            translation="[80, 990]"
+            width="1760"
+            height="40"
+            text="Loading guide…"
+            color="0x9CA3AFFF"
+            font="font:SmallSystemFont"
+        />
+
+        <LabelList
+            id="rows"
+            translation="[80, 170]"
+            itemSize="[1760, 72]"
+            numRows="11"
+            drawFocusFeedback="true"
+            focusedColor="0x7C3AEDFF"
+            color="0xE5E7EBFF"
+            font="font:MediumSystemFont"
+        />
+    </children>
+
+    <script type="text/brightscript"><![CDATA[
+        sub init()
+            m.rows = m.top.findNode("rows")
+            m.status = m.top.findNode("status")
+            m.rows.observeField("itemSelected", "onRowSelected")
+            fetchSchedule()
+        end sub
+
+        sub fetchSchedule()
+            m.status.text = "Loading guide…"
+            m.fetcher = CreateObject("roSGNode", "ScheduleFetcher")
+            m.fetcher.apiBase = m.top.apiBase
+            m.fetcher.observeField("result", "onScheduleLoaded")
+            m.fetcher.observeField("error", "onScheduleError")
+            m.fetcher.control = "RUN"
+        end sub
+
+        sub onScheduleLoaded()
+            data = m.fetcher.result
+            if data = invalid or data.schedules = invalid
+                m.status.text = "No guide data"
+                return
+            end if
+            nowSecs = secondsSinceMidnightET()
+            content = CreateObject("roSGNode", "ContentNode")
+            m.rowChannels = []
+            for each s in data.schedules
+                cname = s.channel_name
+                if cname = invalid then cname = "Unknown"
+                cid = s.channel_id
+                if cid = invalid then cid = ""
+                nowTitle = "-- off air --"
+                nowStart = ""
+                if s.videos <> invalid
+                    for each v in s.videos
+                        startS = hhmmssToSec(v.start_time)
+                        endS   = hhmmssToSec(v.end_time)
+                        if nowSecs >= startS and nowSecs < endS
+                            nowTitle = v.title
+                            nowStart = v.start_time
+                            exit for
+                        end if
+                    end for
+                end if
+                pad = padRight(cname, 26)
+                startPad = padRight(nowStart, 10)
+                line = pad + "  " + startPad + "  " + nowTitle
+                if Len(line) > 140 then line = Left(line, 137) + "…"
+                it = content.createChild("ContentNode")
+                it.title = line
+                m.rowChannels.Push({ id: cid, name: cname })
+            end for
+            m.rows.content = content
+            m.status.text = "OK to tune in  ·  Back to return"
+            m.rows.setFocus(true)
+        end sub
+
+        sub onScheduleError()
+            m.status.text = "Guide error: " + m.fetcher.error
+        end sub
+
+        function hhmmssToSec(s as dynamic) as Integer
+            if s = invalid then return 0
+            t = s.Split(":")
+            if t.Count() >= 3 then return Val(t[0])*3600 + Val(t[1])*60 + Val(t[2])
+            if t.Count() = 2 then return Val(t[0])*60 + Val(t[1])
+            return Val(t[0])
+        end function
+
+        function secondsSinceMidnightET() as Integer
+            ' Roku doesn't have zoneinfo; use system time (typically local),
+            ' but we render start_time strings straight from the server, so
+            ' "now" comparison uses local device seconds. Good enough for a
+            ' current-slot highlight; slots come from the server pre-rendered.
+            dt = CreateObject("roDateTime")
+            dt.ToLocalTime()
+            return dt.GetHours()*3600 + dt.GetMinutes()*60 + dt.GetSeconds()
+        end function
+
+        function padRight(s as string, n as integer) as string
+            out = s
+            while Len(out) < n
+                out = out + " "
+            end while
+            if Len(out) > n then out = Left(out, n)
+            return out
+        end function
+
+        sub onRowSelected()
+            idx = m.rows.itemSelected
+            if m.rowChannels = invalid or idx < 0 or idx >= m.rowChannels.Count() then return
+            m.top.selectedChannelId = m.rowChannels[idx].id
+        end sub
+
+        function onKeyEvent(key as String, press as Boolean) as Boolean
+            if not press then return false
+            if key = "back"
+                m.top.closed = true
+                return true
+            end if
+            return false
+        end function
+    ]]></script>
+</component>
