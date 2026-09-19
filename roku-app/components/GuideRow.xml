@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!--
-    GuideRow — one channel row inside TVGuideScene.
+    GuideRow - one channel row inside TVGuideScene.
     Mirrors screenshot 2: [thumbnail 60x60] [Channel name / "Now: <title>"]
-    Right side lists the currently airing block (colored) with time · duration and a LIVE badge.
+    Right side lists the currently airing block (colored) with time - duration and a LIVE badge.
     Focus glow: purple left-bar + brighter text.
 -->
 <component name="GuideRow" extends="Group">
@@ -67,7 +67,7 @@
             height="30"
             horizAlign="center"
             vertAlign="center"
-            text="● LIVE"
+            text="* LIVE"
             color="0xFFFFFFFF"
             font="font:SmallBoldSystemFont"
         />
@@ -105,7 +105,7 @@
             ]
         end sub
 
-        sub onContentChange()
+        sub onContentChange(nv as dynamic)
             it = m.top.itemContent
             if it = invalid then return
             m.poster.uri = it.HDGRIDPOSTERURL
@@ -128,7 +128,7 @@
             end if
         end sub
 
-        sub onFocusChange()
+        sub onFocusChange(nv as dynamic)
             p = m.top.focusPercent
             m.focusBar.opacity = p
             if p > 0.5

@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!--
-    TVGuideScene — mirrors the production TV Guide (screenshot 2):
-      · Purple accent header with "TV Guide" title + "24-Hour Schedule · <today>"
-      · "Now" button + zoom hint (informational — Roku doesn't animate)
-      · Rows of channels with logo + name + "Now: <title>" and the currently
-        airing block colored (with LIVE badge) + start-time · duration
-      · UP/DOWN scroll rows · OK tune in · BACK closes guide
+    TVGuideScene - mirrors the production TV Guide (screenshot 2):
+      - Purple accent header with "TV Guide" title + "24-Hour Schedule - <today>"
+      - "Now" button + zoom hint (informational - Roku doesn't animate)
+      - Rows of channels with logo + name + "Now: <title>" and the currently
+        airing block colored (with LIVE badge) + start-time - duration
+      - UP/DOWN scroll rows - OK tune in - BACK closes guide
 -->
 <component name="TVGuideScene" extends="Group">
     <interface>
@@ -47,7 +47,7 @@
             height="52"
             horizAlign="center"
             vertAlign="center"
-            text="◐  Now"
+            text="?  Now"
             color="0xEF4444FF"
             font="font:MediumBoldSystemFont"
         />
@@ -71,7 +71,7 @@
             translation="[64, 1030]"
             width="1760"
             height="30"
-            text="Loading guide…"
+            text="Loading guide..."
             color="0x9CA3AFFF"
             font="font:SmallSystemFont"
         />
@@ -87,7 +87,7 @@
         end sub
 
         sub fetchSchedule()
-            m.status.text = "Loading guide…"
+            m.status.text = "Loading guide..."
             m.fetcher = CreateObject("roSGNode", "ScheduleFetcher")
             m.fetcher.apiBase = m.top.apiBase
             m.fetcher.observeField("result", "onScheduleLoaded")
@@ -103,7 +103,7 @@
             end if
             dateStr = data.date
             if dateStr = invalid then dateStr = ""
-            m.subtitle.text = "24-Hour Schedule  ·  " + dateStr
+            m.subtitle.text = "24-Hour Schedule  -  " + dateStr
 
             nowSecs = secondsSinceMidnightET()
             content = CreateObject("roSGNode", "ContentNode")
@@ -127,7 +127,7 @@
                             nowTitle = v.title
                             durSecs = v.duration
                             if durSecs = invalid then durSecs = endS - startS
-                            nowMeta = to12h(v.start_time) + "  ·  " + fmtDur(durSecs)
+                            nowMeta = to12h(v.start_time) + "  -  " + fmtDur(durSecs)
                             nowLive = "1"
                             exit for
                         end if
@@ -142,7 +142,7 @@
                 m.rowChannels.Push({ id: cid, name: cname })
             end for
             m.rows.content = content
-            m.status.text = "↑↓ Navigate  ·  OK: Tune in  ·  Back: Close"
+            m.status.text = "^v Navigate  -  OK: Tune in  -  Back: Close"
             m.rows.setFocus(true)
         end sub
 

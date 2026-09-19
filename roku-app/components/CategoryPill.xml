@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!--
-    CategoryPill — matches the web app's rounded pill filter buttons.
+    CategoryPill - matches the web app's rounded pill filter buttons.
     Unfocused: dark surface with white text.
     Focused:   primary-purple background with white text.
     Selected (shortDescriptionLine1 == "1"): purple border ring even when unfocused.
@@ -34,7 +34,7 @@
             m.lbl = m.top.findNode("lbl")
         end sub
 
-        sub onContentChange()
+        sub onContentChange(nv as dynamic)
             it = m.top.itemContent
             if it = invalid then return
             m.lbl.text = it.title + " " + it.description
@@ -45,7 +45,7 @@
             end if
         end sub
 
-        sub onFocusChange()
+        sub onFocusChange(nv as dynamic)
             p = m.top.focusPercent
             if p > 0.5
                 m.bg.color = "0x7C3AEDFF"

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!--
-    DrawerRow — one row inside the LivePlayer's slide-in Channels drawer.
+    DrawerRow - one row inside the LivePlayer's slide-in Channels drawer.
     Mirrors screenshot 1: [thumbnail 60x60] [name / N videos]  [channel #]
     Focus glow: purple left-bar + light background.
 -->
@@ -60,7 +60,7 @@
             m.num = m.top.findNode("num")
         end sub
 
-        sub onContentChange()
+        sub onContentChange(nv as dynamic)
             it = m.top.itemContent
             if it = invalid then return
             m.poster.uri = it.HDGRIDPOSTERURL
@@ -69,7 +69,7 @@
             m.num.text = it.shortDescriptionLine1
         end sub
 
-        sub onFocusChange()
+        sub onFocusChange(nv as dynamic)
             p = m.top.focusPercent
             m.focusBar.opacity = p
             if p > 0.5

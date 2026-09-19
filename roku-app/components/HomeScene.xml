@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!--
-    HomeScene — mirrors the production web/Fire TV home screen:
-      · LIVE NOW hero band (featured channel thumb + red LIVE badge + name +
+    HomeScene - mirrors the production web/Fire TV home screen:
+      - LIVE NOW hero band (featured channel thumb + red LIVE badge + name +
         Watch Now / Live TV buttons)
-      · Horizontal pill row for Categories (All / Entertainment / Music / …)
-      · 4×2 responsive grid of featured channels (all filtered by category)
-      · Star button opens the full TV Guide
+      - Horizontal pill row for Categories (All / Entertainment / Music / ...)
+      - 4?2 responsive grid of featured channels (all filtered by category)
+      - Star button opens the full TV Guide
 -->
 <component name="HomeScene" extends="Scene">
     <interface>
@@ -95,7 +95,7 @@
                 height="72"
                 horizAlign="center"
                 vertAlign="center"
-                text="▶  Watch Now"
+                text=">  Watch Now"
                 color="0xFFFFFFFF"
                 font="font:MediumBoldSystemFont"
             />
@@ -112,7 +112,7 @@
                 height="72"
                 horizAlign="center"
                 vertAlign="center"
-                text="●  Live TV"
+                text="*  Live TV"
                 color="0xFFFFFFFF"
                 font="font:MediumBoldSystemFont"
             />
@@ -168,7 +168,7 @@
             translation="[64, 1020]"
             width="1200"
             height="30"
-            text="Loading channels…"
+            text="Loading channels..."
             color="0x9CA3AFFF"
             font="font:SmallSystemFont"
         />
@@ -177,7 +177,7 @@
             translation="[64, 1050]"
             width="1792"
             height="30"
-            text="↑ Categories  ·  ↓ Channels  ·  OK: Watch Now  ·  ★ TV Guide  ·  Back: Exit"
+            text="^ Categories  -  v Channels  -  OK: Watch Now  -  * TV Guide  -  Back: Exit"
             color="0x6B7280FF"
             font="font:SmallSystemFont"
         />
@@ -213,7 +213,7 @@
         end sub
 
         sub fetchChannels()
-            m.status.text = "Loading channels…"
+            m.status.text = "Loading channels..."
             m.fetcher = CreateObject("roSGNode", "ChannelsFetcher")
             m.fetcher.apiBase = m.top.apiBase
             m.fetcher.observeField("channels", "onChannelsLoaded")
@@ -235,7 +235,7 @@
             if m.channels.Count() > 0
                 setHeroChannel(m.channels[0])
             end if
-            m.status.text = m.channels.Count().ToStr() + " channels  ·  Category: " + m.selectedCategory
+            m.status.text = m.channels.Count().ToStr() + " channels  -  Category: " + m.selectedCategory
         end sub
 
         sub onChannelsError()
@@ -360,7 +360,7 @@
 
         ' -------- Player + Guide --------
         sub openPlayer(ch as object)
-            m.status.text = "Tuning in to " + ch.name + "…"
+            m.status.text = "Tuning in to " + ch.name + "..."
             player = m.top.findNode("player")
             if player = invalid
                 player = m.top.createChild("LivePlayer")

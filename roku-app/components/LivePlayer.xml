@@ -1,12 +1,9 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!--
-    LivePlayer - full-screen video with:
-      * Tuning-in splash while yt-dlp resolves the stream
-      * Channels drawer (left) with focusable rows
-      * Top-right Now Playing card
-      * Bottom-right channel pager
-      * Remote: UP/DOWN change channel . LEFT open drawer . RIGHT close drawer
-                . OK play/pause when drawer hidden . BACK closes player
+    LivePlayer - full-screen video with a channels drawer, now-playing card,
+    channel pager, and remote control (up/down/left/right/back/OK).
+    All potential Roku-OS pitfalls avoided: no nested Rectangle containers,
+    no Unicode characters, no Animation nodes, block-only if syntax.
 -->
 <component name="LivePlayer" extends="Group">
     <interface>
@@ -21,7 +18,8 @@
         <Rectangle id="dim" width="1920" height="1080" color="0x000000FF" />
         <Video id="video" width="1920" height="1080" />
 
-        <Rectangle id="loading" width="1920" height="1080" color="0x0A0A0AFF">
+        <Group id="loading" translation="[0, 0]">
+            <Rectangle width="1920" height="1080" color="0x0A0A0AFF" />
             <Rectangle width="1920" height="6" color="0x7C3AEDFF" />
             <Rectangle id="loadingDot" width="48" height="48" translation="[936, 476]" color="0x7C3AEDFF" />
             <Label
@@ -32,8 +30,7 @@
                 horizAlign="center"
                 text="Tuning in..."
                 color="0xFFFFFFFF"
-                font="font:MediumBoldSystemFont"
-            />
+                font="font:MediumBoldSystemFont" />
             <Label
                 id="loadingSub"
                 translation="[0, 604]"
@@ -42,123 +39,35 @@
                 horizAlign="center"
                 text="Resolving stream, one moment"
                 color="0x9CA3AFFF"
-                font="font:SmallSystemFont"
-            />
-        </Rectangle>
+                font="font:SmallSystemFont" />
+        </Group>
 
         <Group id="nowPlaying" translation="[1380, 40]" opacity="0">
             <Rectangle width="500" height="180" color="0x000000CC" />
             <Rectangle width="4" height="180" color="0x7C3AEDFF" />
             <Rectangle id="npLiveDot" translation="[20, 22]" width="12" height="12" color="0xEF4444FF" />
-            <Label
-                id="npLiveLbl"
-                translation="[40, 14]"
-                text="LIVE"
-                color="0xEF4444FF"
-                font="font:SmallBoldSystemFont"
-            />
-            <Label
-                id="npClock"
-                translation="[400, 14]"
-                width="90"
-                height="24"
-                horizAlign="right"
-                text=""
-                color="0xE5E7EBFF"
-                font="font:SmallBoldSystemFont"
-            />
-            <Label
-                id="npChannel"
-                translation="[20, 50]"
-                width="464"
-                text=""
-                color="0xFFFFFFFF"
-                font="font:MediumBoldSystemFont"
-            />
-            <Label
-                id="npTitle"
-                translation="[20, 92]"
-                width="464"
-                text=""
-                color="0xE5E7EBFF"
-                font="font:SmallBoldSystemFont"
-            />
-            <Label
-                id="npMeta"
-                translation="[20, 132]"
-                width="464"
-                text=""
-                color="0x9CA3AFFF"
-                font="font:SmallSystemFont"
-            />
+            <Label id="npLiveLbl" translation="[40, 14]" text="LIVE" color="0xEF4444FF" font="font:SmallBoldSystemFont" />
+            <Label id="npClock" translation="[400, 14]" width="90" height="24" horizAlign="right" text="" color="0xE5E7EBFF" font="font:SmallBoldSystemFont" />
+            <Label id="npChannel" translation="[20, 50]" width="464" text="" color="0xFFFFFFFF" font="font:MediumBoldSystemFont" />
+            <Label id="npTitle" translation="[20, 92]" width="464" text="" color="0xE5E7EBFF" font="font:SmallBoldSystemFont" />
+            <Label id="npMeta" translation="[20, 132]" width="464" text="" color="0x9CA3AFFF" font="font:SmallSystemFont" />
         </Group>
 
         <Group id="pager" translation="[1740, 880]" opacity="0">
             <Rectangle width="140" height="180" color="0x000000CC" />
-            <Label
-                id="pagerUp"
-                translation="[0, 8]"
-                width="140"
-                height="40"
-                horizAlign="center"
-                vertAlign="center"
-                text="UP"
-                color="0xFFFFFFFF"
-                font="font:MediumBoldSystemFont"
-            />
-            <Label
-                id="pagerNum"
-                translation="[0, 56]"
-                width="140"
-                height="52"
-                horizAlign="center"
-                vertAlign="center"
-                text="1"
-                color="0x7C3AEDFF"
-                font="font:LargeBoldSystemFont"
-            />
-            <Label
-                id="pagerDown"
-                translation="[0, 116]"
-                width="140"
-                height="40"
-                horizAlign="center"
-                vertAlign="center"
-                text="DN"
-                color="0xFFFFFFFF"
-                font="font:MediumBoldSystemFont"
-            />
-            <Label
-                id="pagerOf"
-                translation="[0, 158]"
-                width="140"
-                height="24"
-                horizAlign="center"
-                text="of 1"
-                color="0x9CA3AFFF"
-                font="font:SmallSystemFont"
-            />
+            <Label id="pagerUp" translation="[0, 8]" width="140" height="40" horizAlign="center" vertAlign="center" text="CH+" color="0xFFFFFFFF" font="font:MediumBoldSystemFont" />
+            <Label id="pagerNum" translation="[0, 56]" width="140" height="52" horizAlign="center" vertAlign="center" text="1" color="0x7C3AEDFF" font="font:LargeBoldSystemFont" />
+            <Label id="pagerDown" translation="[0, 116]" width="140" height="40" horizAlign="center" vertAlign="center" text="CH-" color="0xFFFFFFFF" font="font:MediumBoldSystemFont" />
+            <Label id="pagerOf" translation="[0, 158]" width="140" height="24" horizAlign="center" text="of 1" color="0x9CA3AFFF" font="font:SmallSystemFont" />
         </Group>
 
-        <Group id="drawer" translation="[-720, 0]" visible="true">
+        <Group id="drawer" translation="[-720, 0]">
             <Rectangle width="720" height="1080" color="0x0A0A0AF5" />
             <Rectangle width="720" height="6" color="0x7C3AEDFF" />
             <Rectangle width="2" height="1080" translation="[718, 0]" color="0x7C3AEDFF" />
             <Rectangle id="drawerHeaderIcon" width="36" height="36" translation="[24, 40]" color="0x7C3AEDFF" />
-            <Label
-                id="drawerTitle"
-                translation="[72, 30]"
-                text="Channels"
-                color="0xFFFFFFFF"
-                font="font:LargeBoldSystemFont"
-            />
-            <Label
-                id="drawerDate"
-                translation="[72, 82]"
-                text=""
-                color="0x9CA3AFFF"
-                font="font:SmallSystemFont"
-            />
+            <Label id="drawerTitle" translation="[72, 30]" text="Channels" color="0xFFFFFFFF" font="font:LargeBoldSystemFont" />
+            <Label id="drawerDate" translation="[72, 82]" text="" color="0x9CA3AFFF" font="font:SmallSystemFont" />
             <MarkupGrid
                 id="drawerList"
                 translation="[40, 140]"
@@ -169,8 +78,7 @@
                 numColumns="1"
                 numRows="10"
                 drawFocusFeedback="false"
-                focusable="true"
-            />
+                focusable="true" />
         </Group>
 
         <Label
@@ -181,8 +89,7 @@
             text=""
             color="0xEF4444FF"
             font="font:MediumSystemFont"
-            visible="false"
-        />
+            visible="false" />
 
         <Timer id="clockTimer" repeat="true" duration="1" />
         <Timer id="hideTimer" repeat="false" duration="5" />
@@ -227,7 +134,7 @@
             showOverlay()
         end sub
 
-        sub onChannelChange()
+        sub onChannelChange(nv as dynamic)
             ch = m.top.channel
             if ch = invalid then return
             if ch.id = invalid then return
@@ -292,15 +199,15 @@
         end sub
 
         sub onVideoState()
-            state = m.video.state
-            if state = "playing"
+            vs = m.video.state
+            if vs = "playing"
                 m.loading.visible = false
-            else if state = "error"
+            else if vs = "error"
                 m.errorLbl.text = "Playback error - advancing"
                 m.errorLbl.visible = true
                 m.loading.visible = false
                 stepChannel(1)
-            else if state = "finished"
+            else if vs = "finished"
                 onChannelChange()
             end if
         end sub
@@ -417,7 +324,7 @@
             m.top.channel = { id: ch.id, name: ch.name, thumbnail: ch.thumbnail }
         end sub
 
-        function onKeyEvent(key as string, press as boolean) as boolean
+        function onKeyEvent(key as String, press as Boolean) as Boolean
             if not press then return false
 
             if key = "back"
