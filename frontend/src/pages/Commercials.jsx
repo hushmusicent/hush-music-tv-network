@@ -121,6 +121,30 @@ const Commercials = () => {
     }
   };
 
+  const handleAddVimeoCommercial = async () => {
+    if (!newVimeoUrl.trim()) return;
+    if (!isGlobal && selectedChannelIds.length === 0) {
+      toast.error('Please select at least one channel or choose "All Channels"');
+      return;
+    }
+    setAddingVimeo(true);
+    try {
+      const resp = await api.post('/commercials/vimeo', {
+        url: newVimeoUrl.trim(),
+        channel_ids: isGlobal ? [] : selectedChannelIds,
+        is_global: isGlobal,
+      });
+      setCommercials(prev => [resp.data, ...prev]);
+      setNewVimeoUrl('');
+      toast.success('Vimeo commercial added!');
+    } catch (error) {
+      console.error('Vimeo commercial failed:', error);
+      toast.error(error.response?.data?.detail || 'Failed to add Vimeo commercial');
+    } finally {
+      setAddingVimeo(false);
+    }
+  };
+
   const handleDelete = async (commercialId) => {
     if (!confirm('Are you sure you want to delete this commercial?')) return;
 

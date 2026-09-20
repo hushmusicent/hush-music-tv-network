@@ -483,20 +483,22 @@ async def roku_resolve_stream(channel_id: str):
     for the channel's currently-airing slot. `position` is the number of
     seconds already elapsed into that slot so the Roku client can seek in and
     stay synchronized with every other viewer (live-TV behaviour).
-    If the current slot is unplayable on Roku (e.g. a Vimeo video whose
-    /config endpoint is 403 without an OAuth token), we transparently
-    advance to the next playable slot so channels never hard-fail.
+
+    Roku's Video node can only play direct MP4/HLS/DASH URLs, and YouTube's
+    ToS forbids re-streaming its signed googlevideo URLs (they also expire
+    every ~6 hours). To stay compliant, this endpoint SKIPS every YouTube
+    slot on Roku and looks ahead through the 24-hour schedule for the next
+    playable Vimeo or R2/uploaded slot. Web + Fire TV continue to use
+    YouTube's own player, unaffected.
     """
     channel = await db.channels.find_one({"id": channel_id, "is_public": True}, {"_id": 0})
     if not channel:
         raise HTTPException(status_code=404, detail="Channel not found")
 
+    # Live YouTube streams can't be played on Roku (see docstring). Surface a
+    # clean message the Roku client can render instead of a 502.
     if channel.get("is_live_stream") and channel.get("live_stream_youtube_id"):
-        yt_id = channel["live_stream_youtube_id"]
-        stream = await _resolve_youtube_stream(yt_id)
-        if not stream:
-            raise HTTPException(status_code=502, detail="Could not resolve live stream")
-        return {"stream_url": stream["url"], "format": stream["format"], "title": channel.get("name", ""), "duration": 0, "position": 0}
+        raise HTTPException(status_code=451, detail="This channel is a YouTube live stream, which isn't available on Roku. Try it on the web app or Fire TV.")
 
     today = get_eastern_date()
     schedule = await get_or_create_schedule(channel, today)
@@ -514,11 +516,12 @@ async def roku_resolve_stream(channel_id: str):
             current_idx = i
             break
 
-    # Try current slot; on unresolvable Vimeo/YouTube, look ahead up to 12
-    # slots so a single blocked video doesn't kill the channel.
+    # Try current slot; on unresolvable / YouTube slots, look ahead through
+    # the full 24h schedule so YouTube-heavy channels still surface their
+    # Vimeo / uploaded content.
     n = len(slots)
     tried_reasons = []
-    for offset in range(min(12, n)):
+    for offset in range(n):
         idx = (current_idx + offset) % n
         slot = slots[idx]
         start = _hhmmss_to_seconds(slot.get("start_time"))
@@ -528,9 +531,11 @@ async def roku_resolve_stream(channel_id: str):
         if duration and position >= duration - 1:
             position = 0
 
+        # R2 / direct upload — always playable on Roku
         if slot.get("video_url"):
             return {"stream_url": slot["video_url"], "format": "mp4", "title": title, "duration": duration, "position": position}
 
+        # Vimeo — try oEmbed / API token; auto-skip if 403
         if slot.get("vimeo_id"):
             vimeo = await _resolve_vimeo_stream(slot["vimeo_id"])
             if vimeo:
@@ -538,17 +543,42 @@ async def roku_resolve_stream(channel_id: str):
             tried_reasons.append(f"vimeo:{slot['vimeo_id']}")
             continue
 
+        # YouTube — intentionally skipped on Roku (ToS + expiring URLs).
         if slot.get("youtube_id"):
-            stream = await _resolve_youtube_stream(slot["youtube_id"])
-            if stream:
-                return {"stream_url": stream["url"], "format": stream["format"], "title": title, "duration": duration, "position": position}
-            tried_reasons.append(f"yt:{slot['youtube_id']}")
+            tried_reasons.append(f"yt:{slot['youtube_id']} (skipped)")
             continue
 
         tried_reasons.append("noSource")
 
-    logger.warning(f"[roku] channel {channel_id} all slots unresolvable: {tried_reasons[:6]}")
-    raise HTTPException(status_code=502, detail="No playable slot in this channel right now")
+    logger.warning(f"[roku] channel {channel_id} all slots unplayable: {tried_reasons[:6]}")
+    raise HTTPException(status_code=451, detail="This channel is all YouTube content today, which isn't available on Roku. Please pick another channel.")
+
+
+@api_router.get("/roku/channels")
+async def roku_list_channels():
+    """Roku-only channel list. Hides channels that would 451 on `/roku/resolve`
+    (100 % YouTube or 100 % blocked-Vimeo) so users never tap a channel that
+    can't play. Returns the same shape as `/api/channels` minus YouTube-only
+    slots inside each channel.
+    """
+    docs = await db.channels.find({"is_public": True}, {"_id": 0}).to_list(length=None)
+    # Preserve the user-defined ordering just like /api/channels does.
+    docs.sort(key=lambda c: c.get("order", 0))
+
+    playable = []
+    for ch in docs:
+        # A YouTube-live channel can't play at all on Roku.
+        if ch.get("is_live_stream") and ch.get("live_stream_youtube_id"):
+            continue
+        vids = ch.get("videos") or []
+        # Keep only slots Roku can actually stream (R2 uploads + Vimeo).
+        roku_vids = [v for v in vids if v.get("video_url") or v.get("vimeo_id")]
+        if not roku_vids:
+            continue
+        ch2 = dict(ch)
+        ch2["videos"] = roku_vids
+        playable.append(ch2)
+    return playable
 
 
 def _hhmmss_to_seconds(s):
