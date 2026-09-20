@@ -3,8 +3,6 @@
     <interface>
         <field id="apiBase" type="string" />
         <field id="channel" type="assocarray" onChange="onChannelChange" />
-        <field id="channelList" type="array" />
-        <field id="currentIndex" type="integer" value="0" />
         <field id="closed" type="boolean" alwaysNotify="true" />
     </interface>
 
@@ -20,7 +18,8 @@
                 horizAlign="center"
                 text="Tuning in..."
                 color="0xFFFFFFFF"
-                font="font:MediumBoldSystemFont" />
+                font="font:MediumBoldSystemFont"
+            />
             <Label
                 id="loadingSub"
                 translation="[0, 570]"
@@ -29,35 +28,9 @@
                 horizAlign="center"
                 text="Resolving stream, one moment"
                 color="0x9CA3AFFF"
-                font="font:SmallSystemFont" />
+                font="font:SmallSystemFont"
+            />
         </Rectangle>
-        <Label
-            id="npBadge"
-            translation="[1420, 40]"
-            width="460"
-            height="40"
-            horizAlign="right"
-            text=""
-            color="0xEF4444FF"
-            font="font:SmallBoldSystemFont" />
-        <Label
-            id="npChannel"
-            translation="[1420, 80]"
-            width="460"
-            height="36"
-            horizAlign="right"
-            text=""
-            color="0xFFFFFFFF"
-            font="font:MediumBoldSystemFont" />
-        <Label
-            id="npTitle"
-            translation="[1420, 118]"
-            width="460"
-            height="32"
-            horizAlign="right"
-            text=""
-            color="0xE5E7EBFF"
-            font="font:SmallBoldSystemFont" />
         <Label
             id="errorLbl"
             translation="[80, 940]"
@@ -66,7 +39,8 @@
             text=""
             color="0xEF4444FF"
             font="font:MediumSystemFont"
-            visible="false" />
+            visible="false"
+        />
     </children>
 
     <script type="text/brightscript"><![CDATA[
@@ -75,9 +49,6 @@
             m.loading    = m.top.findNode("loading")
             m.loadingLbl = m.top.findNode("loadingLbl")
             m.errorLbl   = m.top.findNode("errorLbl")
-            m.npBadge    = m.top.findNode("npBadge")
-            m.npChannel  = m.top.findNode("npChannel")
-            m.npTitle    = m.top.findNode("npTitle")
             m.video.observeField("state", "onVideoState")
         end sub
 
@@ -87,9 +58,6 @@
             m.errorLbl.visible = false
             m.loadingLbl.text  = "Tuning in to " + ch.name + "..."
             m.loading.visible  = true
-            m.npBadge.text = "LIVE"
-            m.npChannel.text = ch.name
-            m.npTitle.text = ""
 
             m.resolver = CreateObject("roSGNode", "StreamResolver")
             m.resolver.apiBase   = m.top.apiBase
@@ -102,7 +70,6 @@
         sub onStreamResolved()
             r = m.resolver.result
             if r = invalid or r.stream_url = invalid then return
-            m.npTitle.text = r.title
 
             ci = CreateObject("roSGNode", "ContentNode")
             ci.url          = r.stream_url
@@ -127,7 +94,6 @@
             m.loading.visible  = false
             m.errorLbl.text    = m.resolver.error
             m.errorLbl.visible = true
-            stepChannel(1)
         end sub
 
         sub onVideoState()
@@ -135,25 +101,12 @@
             if state = "playing"
                 m.loading.visible = false
             else if state = "error"
-                m.errorLbl.text    = "Playback error - advancing"
+                m.errorLbl.text    = "Playback error"
                 m.errorLbl.visible = true
                 m.loading.visible  = false
-                stepChannel(1)
             else if state = "finished"
                 onChannelChange()
             end if
-        end sub
-
-        sub stepChannel(delta as integer)
-            list = m.top.channelList
-            if list = invalid or list.Count() = 0 then return
-            n = list.Count()
-            idx = m.top.currentIndex + delta
-            if idx < 0 then idx = n - 1
-            if idx >= n then idx = 0
-            m.top.currentIndex = idx
-            ch = list[idx]
-            m.top.channel = { id: ch.id, name: ch.name, thumbnail: ch.thumbnail }
         end sub
 
         function onKeyEvent(key as String, press as Boolean) as Boolean
@@ -161,22 +114,6 @@
             if key = "back"
                 m.video.control = "stop"
                 m.top.closed = true
-                return true
-            end if
-            if key = "up"
-                stepChannel(-1)
-                return true
-            end if
-            if key = "down"
-                stepChannel(1)
-                return true
-            end if
-            if key = "OK" or key = "play"
-                if m.video.state = "playing"
-                    m.video.control = "pause"
-                else
-                    m.video.control = "resume"
-                end if
                 return true
             end if
             return false

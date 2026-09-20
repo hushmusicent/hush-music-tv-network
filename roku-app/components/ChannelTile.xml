@@ -1,9 +1,4 @@
 <?xml version="1.0" encoding="utf-8" ?>
-<!--
-    ChannelTile - card that mirrors the web app's featured-channel card:
-      - 16:9 thumbnail, focus-scaled purple ring
-      - Bottom band with title on line 1, "N videos" on line 2
--->
 <component name="ChannelTile" extends="Group">
     <interface>
         <field id="itemContent" type="node" onChange="onContentChange" />
@@ -11,63 +6,44 @@
     </interface>
 
     <children>
-        <Rectangle id="bg" width="280" height="200" color="0x111111FF" />
+        <Rectangle id="bg" width="300" height="200" color="0x111111FF" />
         <Poster
             id="poster"
-            width="280"
-            height="158"
+            width="300"
+            height="170"
             loadDisplayMode="scaleToFill"
             failedBitmapUri="pkg:/images/icon_side_hd.png"
         />
-        <Rectangle id="titleBar" width="280" height="60" translation="[0, 152]" color="0x000000E6" />
         <Label
             id="title"
-            width="264"
-            height="22"
-            translation="[8, 154]"
+            width="300"
+            height="26"
+            translation="[0, 172]"
+            horizAlign="center"
             vertAlign="center"
             color="0xFFFFFFFF"
             font="font:SmallBoldSystemFont"
         />
-        <Label
-            id="meta"
-            width="264"
-            height="18"
-            translation="[8, 178]"
-            vertAlign="center"
-            color="0x9CA3AFFF"
-            font="font:SmallSystemFont"
-        />
-        <!-- Purple focus ring - hsl(263 70% 58%) primary from the web -->
-        <Rectangle id="focusTop"    width="280" height="4"   translation="[0, 0]"    color="0x7C3AEDFF" opacity="0" />
-        <Rectangle id="focusBottom" width="280" height="4"   translation="[0, 196]"  color="0x7C3AEDFF" opacity="0" />
-        <Rectangle id="focusLeft"   width="4"   height="200" translation="[0, 0]"    color="0x7C3AEDFF" opacity="0" />
-        <Rectangle id="focusRight"  width="4"   height="200" translation="[276, 0]"  color="0x7C3AEDFF" opacity="0" />
+        <Rectangle id="focusRing" width="300" height="200" color="0x8B5CF6FF" opacity="0" />
     </children>
 
     <script type="text/brightscript"><![CDATA[
         sub init()
-            m.poster = m.top.findNode("poster")
-            m.titleLbl = m.top.findNode("title")
-            m.metaLbl = m.top.findNode("meta")
-            m.rings = [m.top.findNode("focusTop"), m.top.findNode("focusBottom"),
-                       m.top.findNode("focusLeft"), m.top.findNode("focusRight")]
+            m.poster    = m.top.findNode("poster")
+            m.titleLbl  = m.top.findNode("title")
+            m.focusRing = m.top.findNode("focusRing")
         end sub
 
-        sub onContentChange(nv as dynamic)
+        sub onContentChange()
             item = m.top.itemContent
             if item <> invalid
-                m.poster.uri = item.HDGRIDPOSTERURL
+                m.poster.uri    = item.HDGRIDPOSTERURL
                 m.titleLbl.text = item.title
-                m.metaLbl.text = item.description
             end if
         end sub
 
-        sub onFocusChange(nv as dynamic)
-            p = m.top.focusPercent
-            for each r in m.rings
-                r.opacity = p
-            end for
+        sub onFocusChange()
+            m.focusRing.opacity = m.top.focusPercent
         end sub
     ]]></script>
 </component>
