@@ -20,7 +20,8 @@ import {
   X,
   Calendar,
   Play,
-  Pause
+  Pause,
+  Loader2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
@@ -1429,10 +1430,9 @@ const LiveTV = () => {
   };
 
   if (loading) {
-    // Interactive first-frame shell for Fire TV / Amazon Appstore compliance.
-    // We deliberately do NOT gate the whole app on a data fetch — the sidebar
-    // toggle, Home link, and Retry button must all be usable while the
-    // schedule loads (or fails to load).
+    // Non-blocking shell: header + Home button + Retry are always usable while
+    // /api/schedule/live is in flight. If the fetch fails, `loadError` renders
+    // the error state below instead of hard-crashing the page.
     return (
       <div className="min-h-screen bg-black text-white flex flex-col" data-testid="live-tv-loading">
         <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
@@ -1451,10 +1451,10 @@ const LiveTV = () => {
         </div>
         <div className="flex-1 flex items-center justify-center px-6">
           <div className="text-center max-w-md">
-            <Radio size={48} className="mx-auto mb-4 text-primary animate-pulse" />
-            <p className="text-white text-lg font-medium mb-2">Tuning in…</p>
+            <Loader2 size={48} className="mx-auto mb-4 text-primary animate-spin" />
+            <p className="text-white text-lg font-medium mb-2">Loading channels…</p>
             <p className="text-gray-400 text-sm mb-6">
-              Loading channels from the network.
+              Fetching the 24-hour schedule from the network. This usually takes a few seconds.
             </p>
             <Button
               onClick={() => {

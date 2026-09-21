@@ -106,8 +106,8 @@ mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(
     mongo_url,
     serverSelectionTimeoutMS=30000,
-    connectTimeoutMS=20000,
-    socketTimeoutMS=20000,
+    connectTimeoutMS=30000,
+    socketTimeoutMS=30000,
     retryReads=True,
 )
 db = client[os.environ['DB_NAME']]

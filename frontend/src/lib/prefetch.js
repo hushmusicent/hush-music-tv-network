@@ -15,7 +15,7 @@ import axios from 'axios';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const TTL_MS = 60 * 1000;
-const FETCH_TIMEOUT_MS = 8 * 1000; // Fail fast so UI can render an interactive retry state
+const FETCH_TIMEOUT_MS = 30 * 1000; // 30 s — matches backend Mongo/serverSelection timeouts and survives cold-start warmups
 
 let _promise = null;
 let _resolvedAt = 0;
