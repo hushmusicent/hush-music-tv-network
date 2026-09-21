@@ -2,7 +2,7 @@ title=Hush Music TV
 subtitle=24/7 live TV network
 major_version=1
 minor_version=0
-build_version=00001
+build_version=00002
 
 mm_icon_focus_hd=pkg:/images/icon_focus_hd.png
 mm_icon_focus_sd=pkg:/images/icon_focus_sd.png

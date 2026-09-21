@@ -2,117 +2,27 @@
 <component name="LivePlayer" extends="Group">
     <interface>
         <field id="apiBase" type="string" />
-        <field id="channel" type="assocarray" onChange="onChannelChange" />
+        <field id="channel" type="assocarray" />
         <field id="closed" type="boolean" alwaysNotify="true" />
     </interface>
-
     <children>
-        <Rectangle id="dim" width="1920" height="1080" color="0x000000FF" />
-        <Video id="video" width="1920" height="1080" />
-        <Rectangle id="loading" width="1920" height="1080" color="0x0A0A0AFF">
-            <Label
-                id="loadingLbl"
-                translation="[0, 500]"
-                width="1920"
-                height="60"
-                horizAlign="center"
-                text="Tuning in..."
-                color="0xFFFFFFFF"
-                font="font:MediumBoldSystemFont"
-            />
-            <Label
-                id="loadingSub"
-                translation="[0, 570]"
-                width="1920"
-                height="40"
-                horizAlign="center"
-                text="Resolving stream, one moment"
-                color="0x9CA3AFFF"
-                font="font:SmallSystemFont"
-            />
-        </Rectangle>
+        <Rectangle width="1920" height="1080" color="0x000000FF" />
         <Label
-            id="errorLbl"
-            translation="[80, 940]"
-            width="1760"
-            height="40"
-            text=""
-            color="0xEF4444FF"
-            font="font:MediumSystemFont"
-            visible="false"
-        />
+            translation="[0, 500]"
+            width="1920"
+            height="60"
+            horizAlign="center"
+            text="LivePlayer OK"
+            color="0xFFFFFFFF"
+            font="font:MediumBoldSystemFont" />
     </children>
-
     <script type="text/brightscript"><![CDATA[
         sub init()
-            m.video      = m.top.findNode("video")
-            m.loading    = m.top.findNode("loading")
-            m.loadingLbl = m.top.findNode("loadingLbl")
-            m.errorLbl   = m.top.findNode("errorLbl")
-            m.video.observeField("state", "onVideoState")
-        end sub
-
-        sub onChannelChange()
-            ch = m.top.channel
-            if ch = invalid or ch.id = invalid then return
-            m.errorLbl.visible = false
-            m.loadingLbl.text  = "Tuning in to " + ch.name + "..."
-            m.loading.visible  = true
-
-            m.resolver = CreateObject("roSGNode", "StreamResolver")
-            m.resolver.apiBase   = m.top.apiBase
-            m.resolver.channelId = ch.id
-            m.resolver.observeField("result", "onStreamResolved")
-            m.resolver.observeField("error",  "onStreamError")
-            m.resolver.control   = "RUN"
-        end sub
-
-        sub onStreamResolved()
-            r = m.resolver.result
-            if r = invalid or r.stream_url = invalid then return
-
-            ci = CreateObject("roSGNode", "ContentNode")
-            ci.url          = r.stream_url
-            ci.streamFormat = pickFormat(r.format)
-            ci.title        = r.title
-            pos = 0
-            if r.position <> invalid then pos = r.position
-            if pos > 0 then ci.playStart = pos
-            m.video.content = ci
-            m.video.control = "play"
-        end sub
-
-        function pickFormat(fmt as dynamic) as string
-            if fmt = invalid then return "mp4"
-            f = LCase(fmt)
-            if f = "hls"  then return "hls"
-            if f = "dash" then return "dash"
-            return "mp4"
-        end function
-
-        sub onStreamError()
-            m.loading.visible  = false
-            m.errorLbl.text    = m.resolver.error
-            m.errorLbl.visible = true
-        end sub
-
-        sub onVideoState()
-            state = m.video.state
-            if state = "playing"
-                m.loading.visible = false
-            else if state = "error"
-                m.errorLbl.text    = "Playback error"
-                m.errorLbl.visible = true
-                m.loading.visible  = false
-            else if state = "finished"
-                onChannelChange()
-            end if
         end sub
 
         function onKeyEvent(key as String, press as Boolean) as Boolean
             if not press then return false
             if key = "back"
-                m.video.control = "stop"
                 m.top.closed = true
                 return true
             end if
