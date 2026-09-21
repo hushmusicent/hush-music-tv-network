@@ -217,6 +217,7 @@ const LiveTV = () => {
   const [currentCommercialIndex, setCurrentCommercialIndex] = useState(0);
   const [commercialBreakVideos, setCommercialBreakVideos] = useState([]); // 3 random commercials
   const [pendingNextVideo, setPendingNextVideo] = useState(null); // Video to play after commercials
+  const [vimeoLoading, setVimeoLoading] = useState(false); // Vimeo iframe warmup / seek-to-offset state
   const commercialVideoRef = useRef(null);
   const COMMERCIALS_PER_BREAK = 3;
   
@@ -710,10 +711,14 @@ const LiveTV = () => {
   // the YouTube IFrame API integration above. Placed AFTER isVimeoVideo is
   // defined so React's TDZ doesn't crash on the deps array.
   useEffect(() => {
-    if (!isVimeoVideo || !currentVideo?.vimeo_id) return;
+    if (!isVimeoVideo || !currentVideo?.vimeo_id) {
+      setVimeoLoading(false);
+      return;
+    }
 
     let cancelled = false;
     let handle;
+    setVimeoLoading(true);
 
     const attach = () => {
       if (cancelled) return;
@@ -743,6 +748,30 @@ const LiveTV = () => {
           portrait: false,
         });
         vimeoPlayerRef.current = player;
+
+        // Seek to the schedule offset so tuning in mid-show stays LIVE-synced
+        // (matches the YouTube `start:` param and uploaded-video seek).
+        // Vimeo needs the player ready + duration fetched before setCurrentTime.
+        player.ready()
+          .then(() => player.getDuration())
+          .then((duration) => {
+            if (cancelled) return;
+            const wanted = Math.max(0, Math.floor(seekTimeRef.current || 0));
+            // Guard: never seek to (or past) the end — Vimeo will 400 and freeze.
+            if (wanted > 0 && duration && wanted < duration - 2) {
+              return player.setCurrentTime(wanted);
+            }
+          })
+          .catch((e) => { /* silent — playback continues from 0 */ });
+
+        // Kill the loading skeleton the moment playback actually begins.
+        player.on('playing', () => {
+          if (!cancelled) setVimeoLoading(false);
+        });
+        player.on('bufferend', () => {
+          if (!cancelled) setVimeoLoading(false);
+        });
+
         player.on('ended', () => {
           if (cancelled) return;
           console.log('Vimeo video ended');
@@ -750,10 +779,14 @@ const LiveTV = () => {
         });
         player.on('error', (err) => {
           console.error('Vimeo error:', err);
-          if (!cancelled) skipToNextVideoRef.current?.();
+          if (!cancelled) {
+            setVimeoLoading(false);
+            skipToNextVideoRef.current?.();
+          }
         });
       } catch (e) {
         console.error('Failed to init Vimeo player:', e);
+        if (!cancelled) setVimeoLoading(false);
       }
     };
 
@@ -1732,6 +1765,17 @@ const LiveTV = () => {
                 className="w-full h-full [&_iframe]:w-full [&_iframe]:h-full [&_iframe]:absolute [&_iframe]:inset-0"
                 data-testid="vimeo-player-container"
               />
+              {vimeoLoading && (
+                <div
+                  className="absolute inset-0 z-20 flex items-center justify-center bg-black pointer-events-none"
+                  data-testid="vimeo-loading-overlay"
+                >
+                  <div className="flex flex-col items-center gap-3 text-white">
+                    <Loader2 size={40} className="animate-spin text-primary" />
+                    <span className="text-sm text-gray-300">Loading Vimeo…</span>
+                  </div>
+                </div>
+              )}
               <div
                 className="absolute inset-0 z-10 cursor-pointer"
                 onClick={(e) => {
