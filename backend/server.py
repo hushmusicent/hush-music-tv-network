@@ -1732,19 +1732,24 @@ async def upload_video(
     )
 
 @api_router.get("/upload/videos")
-async def list_uploaded_videos(user: dict = Depends(require_user)):
-    """List all uploaded videos (admin only)"""
+async def list_uploaded_videos(user: dict = Depends(require_user), limit: int = 100):
+    """List all uploaded videos (admin only). `limit=0` returns everything —
+    used by migration tools; UI callers keep the 100 default for speed."""
     if not user.get("is_admin", False):
         raise HTTPException(status_code=403, detail="Admin access required")
-    
-    videos = await db.uploaded_videos.find({}, {"_id": 0}).sort("created_at", -1).to_list(100)
-    
+
+    cursor = db.uploaded_videos.find({}, {"_id": 0}).sort("created_at", -1)
+    if limit and limit > 0:
+        videos = await cursor.to_list(limit)
+    else:
+        videos = await cursor.to_list(length=None)
+
     # URLs are now stored directly in the database
     # For backwards compatibility, add URL if not present
     for video in videos:
         if "url" not in video:
             video["url"] = f"/api/videos/{video['filename']}"
-    
+
     return videos
 
 @api_router.delete("/upload/video/{video_id}")

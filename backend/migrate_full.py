@@ -42,11 +42,11 @@ async def main():
         print(f"  {len(channels)} channels")
 
         print("Fetching uploaded videos (admin)...")
-        uploaded_videos = (await http.get(f"{PRODUCTION_URL}/upload/videos", headers=auth)).json()
+        uploaded_videos = (await http.get(f"{PRODUCTION_URL}/upload/videos?limit=0", headers=auth)).json()
         if not isinstance(uploaded_videos, list):
             print(f"  WARN: unexpected response: {uploaded_videos}")
             uploaded_videos = []
-        print(f"  {len(uploaded_videos)} uploaded videos (server-side limit applies)")
+        print(f"  {len(uploaded_videos)} uploaded videos")
 
         print("Fetching commercials...")
         commercials = (await http.get(f"{PRODUCTION_URL}/commercials", headers=auth)).json()
