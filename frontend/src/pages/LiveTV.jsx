@@ -873,6 +873,82 @@ const LiveTV = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isCommercialBreak, currentCommercialIndex, commercialBreakVideos]);
 
+
+  // Mount + auto-play a YouTube commercial via the IFrame API. Mirrors the
+  // Vimeo commercial player above but scoped to the yt-embed div. Skips are
+  // blocked by the transparent overlay in the JSX; when the video ends we
+  // hand off to handleCommercialEnded so the next commercial (or the pending
+  // program video) plays automatically.
+  const commercialYtRef = useRef(null);
+  useEffect(() => {
+    if (!isCommercialBreak) return;
+    const cc = commercialBreakVideos[currentCommercialIndex];
+    if (!cc || !cc.youtube_id) return;
+
+    let cancelled = false;
+    let handle;
+
+    const attach = () => {
+      if (cancelled) return;
+      if (!window.YT || !window.YT.Player) {
+        handle = setTimeout(attach, 200);
+        return;
+      }
+      const container = document.getElementById('commercial-youtube-player');
+      if (!container) {
+        handle = setTimeout(attach, 200);
+        return;
+      }
+      if (commercialYtRef.current) {
+        try { commercialYtRef.current.destroy(); } catch (e) {}
+        commercialYtRef.current = null;
+      }
+      try {
+        commercialYtRef.current = new window.YT.Player(container, {
+          videoId: cc.youtube_id,
+          playerVars: {
+            autoplay: 1,
+            controls: 0,
+            disablekb: 1,
+            fs: 0,
+            modestbranding: 1,
+            rel: 0,
+            playsinline: 1,
+            iv_load_policy: 3,
+          },
+          events: {
+            onReady: (ev) => {
+              try {
+                if (isMuted) ev.target.mute(); else ev.target.unMute();
+                ev.target.setVolume(60);
+                ev.target.playVideo();
+              } catch (_) {}
+            },
+            onStateChange: (ev) => {
+              // YT.PlayerState.ENDED === 0
+              if (ev.data === 0 && !cancelled) handleCommercialEnded();
+            },
+            onError: () => { if (!cancelled) handleCommercialEnded(); },
+          },
+        });
+      } catch (e) {
+        console.error('Failed to init YouTube commercial player:', e);
+        if (!cancelled) handleCommercialEnded();
+      }
+    };
+    attach();
+
+    return () => {
+      cancelled = true;
+      if (handle) clearTimeout(handle);
+      if (commercialYtRef.current) {
+        try { commercialYtRef.current.destroy(); } catch (e) {}
+        commercialYtRef.current = null;
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isCommercialBreak, currentCommercialIndex, commercialBreakVideos]);
+
   
   // Check if current channel is using synchronized schedule mode (via use_schedule flag)
   const isCurrentChannelScheduled = currentChannel?.use_schedule === true;
@@ -1689,7 +1765,7 @@ const LiveTV = () => {
               {(() => {
                 const cc = commercialBreakVideos[currentCommercialIndex];
                 if (cc?.vimeo_id) {
-                  // Vimeo-hosted commercial — SDK-driven iframe
+                  // Vimeo-hosted commercial - SDK-driven iframe
                   return (
                     <div
                       id="commercial-vimeo-player"
@@ -1698,7 +1774,17 @@ const LiveTV = () => {
                     />
                   );
                 }
-                // MP4-hosted commercial — quieter than program audio
+                if (cc?.youtube_id) {
+                  // YouTube-hosted commercial - IFrame API player
+                  return (
+                    <div
+                      id="commercial-youtube-player"
+                      className="w-full h-full [&_iframe]:w-full [&_iframe]:h-full [&_iframe]:absolute [&_iframe]:inset-0"
+                      data-testid="commercial-youtube-player"
+                    />
+                  );
+                }
+                // MP4-hosted commercial - quieter than program audio
                 return (
                   <video
                     ref={commercialVideoRef}
@@ -1713,6 +1799,14 @@ const LiveTV = () => {
                   />
                 );
               })()}
+
+              {/* Skip-blocker overlay - viewers cannot skip commercials */}
+              <div
+                className="absolute inset-0 z-30"
+                data-testid="commercial-skip-blocker"
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                onDoubleClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+              />
               
               {/* Commercial overlay info */}
               <div className="absolute top-4 right-4 bg-black/70 backdrop-blur-sm rounded-lg px-3 py-2 z-10">

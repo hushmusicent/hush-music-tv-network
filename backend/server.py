@@ -229,6 +229,28 @@ def extract_vimeo_id(url: str) -> Optional[str]:
     return None
 
 
+YOUTUBE_ID_PATTERNS = [
+    re.compile(r"youtube\.com/watch\?[^#]*[?&]?v=([A-Za-z0-9_-]{11})"),
+    re.compile(r"youtu\.be/([A-Za-z0-9_-]{11})"),
+    re.compile(r"youtube\.com/embed/([A-Za-z0-9_-]{11})"),
+    re.compile(r"youtube\.com/shorts/([A-Za-z0-9_-]{11})"),
+    re.compile(r"youtube\.com/live/([A-Za-z0-9_-]{11})"),
+    re.compile(r"^([A-Za-z0-9_-]{11})$"),
+]
+
+
+def extract_youtube_id(url: str) -> Optional[str]:
+    """Extract an 11-char YouTube video ID from any URL or bare ID."""
+    if not url:
+        return None
+    url = url.strip()
+    for pat in YOUTUBE_ID_PATTERNS:
+        m = pat.search(url)
+        if m:
+            return m.group(1)
+    return None
+
+
 class ChannelBase(BaseModel):
     name: str
     description: Optional[str] = None
@@ -1040,7 +1062,8 @@ class CommercialResponse(BaseModel):
     thumbnail: Optional[str] = None
     created_at: str
     vimeo_id: Optional[str] = None
-    type: str = "uploaded"  # "uploaded" or "vimeo"
+    youtube_id: Optional[str] = None
+    type: str = "uploaded"  # "uploaded" | "vimeo" | "youtube"
     channel_ids: List[str] = []  # Empty list means ALL channels, otherwise specific channel IDs
     is_global: bool = False  # True = plays on all channels
 
@@ -1923,6 +1946,83 @@ class VimeoCommercialCreate(BaseModel):
     url: str  # Vimeo URL, embed link, or numeric ID
     channel_ids: List[str] = []
     is_global: bool = False
+
+
+class YouTubeCommercialCreate(BaseModel):
+    url: str  # YouTube URL, youtu.be link, embed, shorts, or bare 11-char ID
+    channel_ids: List[str] = []
+    is_global: bool = False
+
+
+@api_router.post("/commercials/youtube")
+async def create_youtube_commercial(
+    data: YouTubeCommercialCreate,
+    user: dict = Depends(require_user),
+):
+    """Register a YouTube video as a commercial. Broadcasters paste a URL
+    (watch, share, embed, shorts, or bare ID); the app extracts the 11-char
+    ID and plays it inline via the YouTube IFrame API on LiveTV.
+    """
+    if not user.get("is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    youtube_id = extract_youtube_id(data.url)
+    if not youtube_id:
+        raise HTTPException(status_code=400, detail="Invalid YouTube URL or ID")
+
+    # Fetch title/duration/thumbnail via public oEmbed (no API key required).
+    # oEmbed doesn't include duration — default to 30 s so break scheduling
+    # has a sensible fallback until the video finishes naturally.
+    title = f"YouTube commercial {youtube_id}"
+    duration = 30
+    thumbnail = f"https://i.ytimg.com/vi/{youtube_id}/hqdefault.jpg"
+    try:
+        async with httpx.AsyncClient(timeout=6.0, follow_redirects=True) as http:
+            r = await http.get(
+                "https://www.youtube.com/oembed",
+                params={
+                    "url": f"https://www.youtube.com/watch?v={youtube_id}",
+                    "format": "json",
+                },
+            )
+            if r.status_code == 200:
+                m = r.json()
+                title = m.get("title") or title
+                thumbnail = m.get("thumbnail_url") or thumbnail
+    except Exception as e:
+        logger.warning(f"YouTube commercial oEmbed lookup failed for {youtube_id}: {e}")
+
+    is_global = data.is_global or len(data.channel_ids) == 0
+
+    valid_channel_ids: List[str] = []
+    if not is_global and data.channel_ids:
+        existing = await db.channels.find(
+            {"id": {"$in": data.channel_ids}}, {"_id": 0, "id": 1}
+        ).to_list(length=len(data.channel_ids))
+        existing_ids = {c["id"] for c in existing}
+        valid_channel_ids = [cid for cid in data.channel_ids if cid in existing_ids]
+        if not valid_channel_ids:
+            is_global = True
+
+    commercial_id = str(uuid.uuid4())
+    commercial_doc = {
+        "id": commercial_id,
+        "filename": f"youtube-{youtube_id}",
+        "original_name": title,
+        "url": f"https://www.youtube.com/watch?v={youtube_id}",
+        "youtube_id": youtube_id,
+        "type": "youtube",
+        "size": 0,
+        "duration": duration,
+        "thumbnail": thumbnail,
+        "channel_ids": [] if is_global else valid_channel_ids,
+        "is_global": is_global,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    response_doc = dict(commercial_doc)
+    await db.commercials.insert_one(commercial_doc)
+    return response_doc
 
 
 @api_router.post("/commercials/vimeo")

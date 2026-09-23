@@ -29,6 +29,8 @@ const Commercials = () => {
   const [selectedChannelIds, setSelectedChannelIds] = useState([]); // For specific channel selection
   const [newVimeoUrl, setNewVimeoUrl] = useState('');
   const [addingVimeo, setAddingVimeo] = useState(false);
+  const [newYoutubeUrl, setNewYoutubeUrl] = useState('');
+  const [addingYoutube, setAddingYoutube] = useState(false);
   
   // Edit modal state
   const [editingCommercial, setEditingCommercial] = useState(null);
@@ -142,6 +144,30 @@ const Commercials = () => {
       toast.error(error.response?.data?.detail || 'Failed to add Vimeo commercial');
     } finally {
       setAddingVimeo(false);
+    }
+  };
+
+  const handleAddYoutubeCommercial = async () => {
+    if (!newYoutubeUrl.trim()) return;
+    if (!isGlobal && selectedChannelIds.length === 0) {
+      toast.error('Please select at least one channel or choose "All Channels"');
+      return;
+    }
+    setAddingYoutube(true);
+    try {
+      const resp = await api.post('/commercials/youtube', {
+        url: newYoutubeUrl.trim(),
+        channel_ids: isGlobal ? [] : selectedChannelIds,
+        is_global: isGlobal,
+      });
+      setCommercials(prev => [resp.data, ...prev]);
+      setNewYoutubeUrl('');
+      toast.success('YouTube commercial added!');
+    } catch (error) {
+      console.error('YouTube commercial failed:', error);
+      toast.error(error.response?.data?.detail || 'Failed to add YouTube commercial');
+    } finally {
+      setAddingYoutube(false);
     }
   };
 
@@ -438,6 +464,44 @@ const Commercials = () => {
             </div>
             <p className="text-xs text-gray-500 mt-1">
               Public Vimeo videos only. Uses the same channel selection above.
+            </p>
+          </div>
+
+          {/* YouTube URL commercial */}
+          <div className="mt-4 pt-4 border-t border-white/10">
+            <label className="text-sm text-gray-300 font-medium block mb-2">Or add a YouTube commercial</label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newYoutubeUrl}
+                onChange={(e) => setNewYoutubeUrl(e.target.value)}
+                placeholder="Paste YouTube URL, youtu.be link, shorts, or 11-char ID..."
+                className="flex-1 h-10 px-3 rounded-md bg-black/50 border border-white/10 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-red-500/50"
+                disabled={addingYoutube}
+                data-testid="youtube-commercial-input"
+              />
+              <Button
+                type="button"
+                onClick={handleAddYoutubeCommercial}
+                disabled={!newYoutubeUrl.trim() || addingYoutube || (!isGlobal && selectedChannelIds.length === 0)}
+                className="bg-red-600 hover:bg-red-700"
+                data-testid="add-youtube-commercial-btn"
+              >
+                {addingYoutube ? (
+                  <>
+                    <Loader2 size={16} className="mr-2 animate-spin" />
+                    Adding...
+                  </>
+                ) : (
+                  <>
+                    <Film size={16} className="mr-2" />
+                    Add YouTube
+                  </>
+                )}
+              </Button>
+            </div>
+            <p className="text-xs text-gray-500 mt-1">
+              Plays inline in the LiveTV player via the YouTube embed. Skips are disabled during commercial breaks.
             </p>
           </div>
           
