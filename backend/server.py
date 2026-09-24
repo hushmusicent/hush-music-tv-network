@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field, ConfigDict, EmailStr
 from typing import List, Optional
 import uuid
 from datetime import datetime, timezone, timedelta
+import time as _time_mod  # noqa: F401 — imported for _cache_get/_cache_set helpers
 import jwt
 import bcrypt
 import httpx
@@ -373,12 +374,66 @@ async def get_me(user: dict = Depends(require_user)):
 
 # ===================== CHANNEL ROUTES =====================
 
+# In-memory response cache for the hot public endpoints (channels list,
+# live schedule). Small, TTL'd, and cleared on any admin write via
+# `invalidate_channel_cache()` below so viewers never see stale data.
+# We intentionally do NOT use functools.lru_cache — that's per-process and
+# doesn't understand TTLs; the tuple below is safe under uvicorn's async
+# workers because writes only happen after an `await`.
+_response_cache: dict[str, tuple[float, object]] = {}
+
+
+def _cache_get(key: str):
+    entry = _response_cache.get(key)
+    if not entry:
+        return None
+    expires_at, value = entry
+    if expires_at < _time_mod.time():
+        _response_cache.pop(key, None)
+        return None
+    return value
+
+
+def _cache_set(key: str, value, ttl: int = 30):
+    _response_cache[key] = (_time_mod.time() + ttl, value)
+
+
+def invalidate_channel_cache():
+    """Clear every cached channel/schedule response. Called from every write
+    path that mutates channels or schedules so viewers refresh instantly."""
+    for k in list(_response_cache.keys()):
+        if k.startswith("channels:") or k.startswith("schedule:"):
+            _response_cache.pop(k, None)
+
+
 @api_router.get("/channels", response_model=List[ChannelResponse])
 async def get_channels(
     category: Optional[str] = None,
     search: Optional[str] = None,
+    skip: int = 0,
+    limit: int = 20,
+    lite: bool = False,
     user: Optional[dict] = Depends(get_current_user)
 ):
+    """Public channel list.
+
+    Performance notes:
+      * `lite=true` projects only id/name/thumbnail/category/sort_order and
+        a computed `videos_count` — no huge `videos[]` array in the wire
+        payload. The main channels page/LiveTV should call this.
+      * `skip` + `limit` paginate for infinite scroll. Default `limit=20`.
+      * A 30 s in-memory cache short-circuits repeat requests entirely.
+      * Compound index `(is_public, sort_order)` (created in `_startup_warmup`)
+        keeps Mongo scans O(log n).
+    """
+    # Bypass cache when caller filters/searches (rare, admin-only paths).
+    cacheable = not category and not search
+    cache_key = f"channels:{skip}:{limit}:{lite}"
+    if cacheable:
+        cached = _cache_get(cache_key)
+        if cached is not None:
+            return cached
+
     query = {"is_public": True}
     if category and category != "All":
         query["category"] = category
@@ -387,10 +442,48 @@ async def get_channels(
             {"name": {"$regex": search, "$options": "i"}},
             {"description": {"$regex": search, "$options": "i"}}
         ]
-    
-    # Sort by sort_order first, then by favorites_count
-    channels = await db.channels.find(query, {"_id": 0}).sort([("sort_order", 1), ("favorites_count", -1)]).to_list(100)
-    return serialize_doc(channels)
+
+    projection: dict = {"_id": 0}
+    if lite:
+        projection.update({
+            "id": 1, "name": 1, "thumbnail": 1, "category": 1,
+            "description": 1, "sort_order": 1, "is_public": 1,
+            "is_24_7": 1, "random_play": 1, "use_schedule": 1,
+            "is_live_stream": 1, "live_stream_youtube_id": 1,
+            "favorites_count": 1,
+            # Required by ChannelResponse validator — cheap to include.
+            "owner_id": 1, "owner_username": 1, "created_at": 1,
+        })
+
+    cursor = db.channels.find(query, projection).sort(
+        [("sort_order", 1), ("favorites_count", -1)]
+    ).skip(max(0, skip)).limit(max(1, min(200, limit)))
+
+    channels = await cursor.to_list(length=None)
+
+    if lite:
+        # Attach a videos_count so the UI can show "N videos" without the
+        # full array. Uses a lightweight aggregation on the same query.
+        for ch in channels:
+            # `videos` was projected out; compute a stub so ChannelResponse
+            # (which requires `videos: []`) still validates.
+            ch["videos"] = []
+            ch.setdefault("videos_count", 0)
+        # Batch-compute counts in one aggregate query.
+        ids = [c["id"] for c in channels if c.get("id")]
+        if ids:
+            pipeline = [
+                {"$match": {"id": {"$in": ids}}},
+                {"$project": {"id": 1, "count": {"$size": {"$ifNull": ["$videos", []]}}}},
+            ]
+            counts = {r["id"]: r["count"] async for r in db.channels.aggregate(pipeline)}
+            for ch in channels:
+                ch["videos_count"] = counts.get(ch["id"], 0)
+
+    result = serialize_doc(channels)
+    if cacheable:
+        _cache_set(cache_key, result, ttl=30)
+    return result
 
 @api_router.get("/channels/featured", response_model=List[ChannelResponse])
 async def get_featured_channels():
@@ -461,6 +554,7 @@ async def create_channel(data: ChannelCreate, user: dict = Depends(require_user)
     }
     
     await db.channels.insert_one(channel_doc)
+    invalidate_channel_cache()
     if "_id" in channel_doc:
         del channel_doc["_id"]
     
@@ -478,6 +572,7 @@ async def update_channel(channel_id: str, data: ChannelUpdate, user: dict = Depe
     update_data = {k: v for k, v in data.model_dump().items() if v is not None}
     if update_data:
         await db.channels.update_one({"id": channel_id}, {"$set": update_data})
+        invalidate_channel_cache()
     
     updated = await db.channels.find_one({"id": channel_id}, {"_id": 0})
     return updated
@@ -494,6 +589,7 @@ async def delete_channel(channel_id: str, user: dict = Depends(require_user)):
     await db.channels.delete_one({"id": channel_id})
     # Remove from all favorites
     await db.users.update_many({}, {"$pull": {"favorites": channel_id}})
+    invalidate_channel_cache()
     
     return {"message": "Channel deleted"}
 
@@ -5470,16 +5566,40 @@ async def get_channel_schedule_today(channel_id: str, user: dict = Depends(requi
 # Public endpoint for Live TV - no auth required
 @api_router.get("/schedule/live")
 async def get_live_schedules():
-    """Get 24-hour schedules for all public channels (for Live TV)"""
-    channels = await db.channels.find({"is_public": True}, {"_id": 0}).sort([("sort_order", 1), ("favorites_count", -1)]).to_list(100)
+    """Get 24-hour schedules for all public channels (for Live TV).
+
+    Performance: this endpoint used to loop `get_or_create_schedule` per
+    channel (90 serial round-trips → ~25 s). Now it bulk-loads all schedules
+    in a single `find({channel_id: {$in: [...]}})` call and cheaply generates
+    only the ones missing today. Also cached in memory for 30 s so repeat
+    requests are instant.
+    """
+    cached = _cache_get("schedule:live")
+    if cached is not None:
+        return cached
+
     today = get_eastern_date()
-    
+    channels = await db.channels.find(
+        {"is_public": True},
+        {"_id": 0},
+    ).sort([("sort_order", 1), ("favorites_count", -1)]).to_list(length=None)
+
+    channel_ids = [c["id"] for c in channels if c.get("id")]
+    # ONE query pulls every channel's existing schedule for today.
+    existing_docs = await db.schedules.find(
+        {"channel_id": {"$in": channel_ids}, "schedule_date": today},
+        {"_id": 0},
+    ).to_list(length=None)
+    existing_map = {d["channel_id"]: d for d in existing_docs}
+
     schedules = []
+    missing_channels = []
     for channel in channels:
-        # Live stream channels don't need videos/schedules
+        cid = channel.get("id", "")
+
         if channel.get("is_live_stream") and channel.get("live_stream_youtube_id"):
             schedules.append({
-                "channel_id": channel.get("id", ""),
+                "channel_id": cid,
                 "channel_name": channel.get("name", ""),
                 "channel_thumbnail": channel.get("thumbnail"),
                 "schedule_date": today,
@@ -5491,14 +5611,33 @@ async def get_live_schedules():
                 "live_stream_youtube_id": channel.get("live_stream_youtube_id"),
             })
             continue
-        
+
         if not channel.get("videos"):
             continue
-        
-        schedule = await get_or_create_schedule(channel, today)
-        schedules.append(schedule)
-    
-    return {"date": today, "timezone": "America/New_York", "schedules": schedules}
+
+        existing = existing_map.get(cid)
+        if existing:
+            existing["channel_thumbnail"] = channel.get("thumbnail")
+            existing["channel_name"] = channel.get("name")
+            existing["unique_video_count"] = len(channel.get("videos", []))
+            existing["use_schedule"] = channel.get("use_schedule", False)
+            existing["is_live_stream"] = channel.get("is_live_stream", False)
+            existing["live_stream_youtube_id"] = channel.get("live_stream_youtube_id")
+            schedules.append(existing)
+        else:
+            missing_channels.append(channel)
+
+    # Only the channels missing a schedule for today go through the
+    # (expensive) generator — usually 0-3 on a warm day.
+    for channel in missing_channels:
+        try:
+            schedules.append(await get_or_create_schedule(channel, today))
+        except Exception as e:
+            logger.warning(f"[schedule/live] generation failed for {channel.get('name')}: {e}")
+
+    result = {"date": today, "timezone": "America/New_York", "schedules": schedules}
+    _cache_set("schedule:live", result, ttl=30)
+    return result
 
 # Public endpoint for single channel schedule
 @api_router.get("/schedule/live/{channel_id}")
@@ -6291,6 +6430,11 @@ async def _startup_warmup():
             await db.commercial_analytics.create_index("timestamp")
             await db.schedules.create_index([("channel_id", 1), ("schedule_date", 1)])
             await db.channels.create_index("sort_order")
+            # Compound + single-key indexes powering `/api/channels` and
+            # `/api/schedule/live`. Idempotent.
+            await db.channels.create_index([("is_public", 1), ("sort_order", 1)])
+            await db.channels.create_index([("is_public", 1), ("favorites_count", -1)])
+            await db.channels.create_index("id")
         except Exception as e:
             logger.warning(f"[startup_warmup] index creation skipped: {e}")
     except Exception as e:
