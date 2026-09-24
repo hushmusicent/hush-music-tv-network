@@ -411,7 +411,8 @@ async def get_channels(
     category: Optional[str] = None,
     search: Optional[str] = None,
     skip: int = 0,
-    limit: int = 20,
+    limit: int = 0,  # 0 = no cap (default) so existing callers keep working;
+                     # LiveTV / infinite-scroll pass explicit limit=20 etc.
     lite: bool = False,
     user: Optional[dict] = Depends(get_current_user)
 ):
@@ -420,8 +421,9 @@ async def get_channels(
     Performance notes:
       * `lite=true` projects only id/name/thumbnail/category/sort_order and
         a computed `videos_count` — no huge `videos[]` array in the wire
-        payload. The main channels page/LiveTV should call this.
-      * `skip` + `limit` paginate for infinite scroll. Default `limit=20`.
+        payload. LiveTV's channel sidebar should call this.
+      * `skip` + `limit` paginate for infinite scroll. `limit=0` returns
+        everything (backwards-compatible default). Cap enforced at 500.
       * A 30 s in-memory cache short-circuits repeat requests entirely.
       * Compound index `(is_public, sort_order)` (created in `_startup_warmup`)
         keeps Mongo scans O(log n).
@@ -451,14 +453,14 @@ async def get_channels(
             "is_24_7": 1, "random_play": 1, "use_schedule": 1,
             "is_live_stream": 1, "live_stream_youtube_id": 1,
             "favorites_count": 1,
-            # Required by ChannelResponse validator — cheap to include.
             "owner_id": 1, "owner_username": 1, "created_at": 1,
         })
 
     cursor = db.channels.find(query, projection).sort(
         [("sort_order", 1), ("favorites_count", -1)]
-    ).skip(max(0, skip)).limit(max(1, min(200, limit)))
-
+    ).skip(max(0, skip))
+    if limit and limit > 0:
+        cursor = cursor.limit(min(500, limit))
     channels = await cursor.to_list(length=None)
 
     if lite:
