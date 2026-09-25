@@ -1,0 +1,71 @@
+{
+  "packageId": "com.hushmusictv.app",
+  "host": "broadcaster.emergent.host",
+  "name": "Hush Music TV Network",
+  "launcherName": "Hush Music TV",
+
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "themeColor": "#7C3AED",
+  "themeColorDark": "#0A0A0A",
+  "navigationColor": "#0A0A0A",
+  "navigationColorDark": "#0A0A0A",
+  "navigationDividerColor": "#0A0A0A",
+  "navigationDividerColorDark": "#0A0A0A",
+  "backgroundColor": "#0A0A0A",
+
+  "startUrl": "/live",
+  "enableNotifications": false,
+  "iconUrl": "https://broadcaster.emergent.host/icons/icon-512x512.png",
+  "maskableIconUrl": "https://broadcaster.emergent.host/icons/icon-512x512.png",
+  "monochromeIconUrl": "https://broadcaster.emergent.host/icons/icon-512x512.png",
+  "splashScreenFadeOutDuration": 300,
+
+  "shortcuts": [
+    {
+      "name": "Live TV",
+      "shortName": "Live",
+      "url": "/live",
+      "iconUrl": "https://broadcaster.emergent.host/icons/icon-96x96.png"
+    },
+    {
+      "name": "Browse Channels",
+      "shortName": "Browse",
+      "url": "/browse",
+      "iconUrl": "https://broadcaster.emergent.host/icons/icon-96x96.png"
+    },
+    {
+      "name": "TV Guide",
+      "shortName": "Guide",
+      "url": "/guide",
+      "iconUrl": "https://broadcaster.emergent.host/icons/icon-96x96.png"
+    }
+  ],
+
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "https://broadcaster.emergent.host/manifest.json",
+  "fallbackType": "customtabs",
+  "features": {
+    "playBilling": { "enabled": false },
+    "locationDelegation": { "enabled": false }
+  },
+  "alphaDependencies": { "enabled": false },
+  "enableSiteSettingsShortcut": false,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "fingerprints": [],
+  "additionalTrustedOrigins": [
+    "pub-49c62121e99b4925aa056a6df47d707e.r2.dev",
+    "www.youtube.com",
+    "player.vimeo.com"
+  ],
+  "retainedBundles": [],
+
+  "appVersionName": "1.1.0",
+  "appVersion": 2,
+
+  "minSdkVersion": 21,
+  "targetSdkVersion": 34,
+  "compileSdkVersion": 34,
+  "buildToolsVersion": "34.0.0"
+}

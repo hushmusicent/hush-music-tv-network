@@ -1,0 +1,39 @@
+// build.gradle.override
+// ======================
+// After `bubblewrap init`, merge these blocks into `app/build.gradle`
+// (they replace the generic Play Store defaults with the Fire TV /
+// Android 14 target the manifest requires).
+
+android {
+    // Bubblewrap defaults to whatever `targetSdkVersion` from twa-manifest.json.
+    // We hard-set here so a stale Gradle cache can't downgrade.
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.hushmusictv.app"
+        minSdk 21
+        targetSdk 34
+
+        // Fire TV certification requires a stable versionCode bump per release.
+        versionCode 2
+        versionName "1.1.0"
+
+        // Bubblewrap sometimes forgets to embed the SDK build tools version;
+        // Fire TV rejects APKs built with unknown build tools.
+        buildToolsVersion = "34.0.0"
+    }
+
+    // Landscape-only. Fire TV never rotates.
+    buildFeatures {
+        buildConfig true
+    }
+
+    // Fire TV has no touchscreen — the app must be D-pad complete.
+    // The Chrome Custom Tabs runtime already forwards D-pad key events
+    // to the loaded web page, so LiveTV.jsx keyboard handlers work.
+    packagingOptions {
+        resources {
+            excludes += ['META-INF/DEPENDENCIES', 'META-INF/*.kotlin_module']
+        }
+    }
+}

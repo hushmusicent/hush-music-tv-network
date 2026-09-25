@@ -1,0 +1,55 @@
+<!--
+    AndroidManifest.override.xml
+    ============================
+
+    Bubblewrap does not natively emit Fire TV / Leanback launcher metadata.
+    After the first `bubblewrap build`, merge the fragments below into the
+    generated app/src/main/AndroidManifest.xml BEFORE building the release
+    APK/AAB. All Fire TV certification checks depend on this file.
+
+    Reference:
+      https://developer.amazon.com/docs/fire-tv/gcm-getting-started.html
+      https://developer.android.com/training/tv/start/start
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- ==================== FIRE TV / LEANBACK REQUIREMENTS ==================== -->
+    <!-- Touchscreen is optional on Fire TV; Leanback is preferred but not required. -->
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+    <uses-feature android:name="android.software.leanback" android:required="false" />
+
+    <!-- Fire TV media / network permissions -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <application
+        android:banner="@drawable/tv_banner"
+        android:isGame="false"
+        android:supportsRtl="true">
+
+        <!--
+            Main launcher activity. Replace the class name with the one
+            Bubblewrap generated (usually `LauncherActivity`). Add BOTH
+            categories so the app appears on:
+              - the Fire TV home row (LEANBACK_LAUNCHER)
+              - Fire tablets and phones (LAUNCHER)
+        -->
+        <activity
+            android:name=".LauncherActivity"
+            android:exported="true"
+            android:screenOrientation="landscape"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|uiMode|screenLayout|smallestScreenSize|density"
+            android:launchMode="singleTask"
+            android:theme="@style/Theme.LauncherActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <!-- Fire TV / Android TV home-row launcher -->
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+                <!-- Phones + tablets launcher (Amazon supports one APK for all form factors) -->
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+    </application>
+</manifest>
