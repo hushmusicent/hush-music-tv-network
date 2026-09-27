@@ -33,24 +33,33 @@ ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
 def serialize_doc(doc):
-    """Convert datetime fields to ISO strings for JSON serialization"""
+    """Recursively serialize MongoDB documents, patching a couple of legacy
+    channel fields so Pydantic validation never fails on old rows. Also
+    coerces datetime objects to ISO strings for JSON output."""
     if doc is None:
         return None
     if isinstance(doc, list):
-        return [serialize_doc(d) for d in doc]
+        return [serialize_doc(item) for item in doc]
     if isinstance(doc, dict):
-        result = {}
+        d = {}
         for k, v in doc.items():
+            if k == "_id":
+                continue
             if isinstance(v, datetime):
-                result[k] = v.isoformat()
-            elif isinstance(v, dict):
-                result[k] = serialize_doc(v)
-            elif isinstance(v, list):
-                result[k] = serialize_doc(v)
+                d[k] = v.isoformat()
+            elif isinstance(v, (dict, list)):
+                d[k] = serialize_doc(v)
             else:
-                result[k] = v
-        return result
+                d[k] = v
+        # Defensive defaults for legacy channel docs — cheap, idempotent, and
+        # covers any doc that slipped through startup backfill.
+        if "name" in d and ("thumbnail" in d or "videos" in d):
+            d.setdefault("owner_id", "system")
+            d.setdefault("owner_username", "Hush Music TV")
+            d.setdefault("created_at", datetime.now(timezone.utc).isoformat())
+        return d
     return doc
+
 
 # Create uploads directories
 UPLOADS_DIR = ROOT_DIR / "uploads" / "videos"
@@ -3758,50 +3767,74 @@ async def update_video_durations(user: dict = Depends(require_user), limit: int 
 async def update_video_duration_by_youtube_id(
     channel_id: str,
     youtube_id: str,
-    duration: int
+    duration: int,
+    background_tasks: BackgroundTasks,
 ):
-    """Update duration for a single video (called from frontend when video plays)"""
+    """Update duration for a single video (called from frontend when video plays).
+
+    Fast path: uses `arrayFilters` so Mongo rewrites ONE array element in place
+    (previous impl re-wrote the entire `videos[]` array on every video start —
+    the source of the periodic backend timeouts on the Live TV page).
+    Schedule regeneration, when required, now runs as a background task so it
+    never blocks the response.
+    """
     if duration <= 0:
         return {"updated": False, "reason": "invalid_duration"}
-    
-    # Find the channel and update the video's duration
-    channel = await db.channels.find_one({"id": channel_id})
-    if not channel:
-        return {"updated": False, "reason": "channel_not_found"}
-    
-    videos = channel.get("videos", [])
-    updated = False
-    old_duration = 0
-    
-    for i, video in enumerate(videos):
-        if video.get("youtube_id") == youtube_id:
-            old_duration = video.get("duration", 300)
-            # Only update if current duration is a default value OR significantly different
-            if old_duration in [300, 180, 0] or abs(old_duration - duration) > 30:
-                videos[i]["duration"] = duration
-                updated = True
-                break
-    
-    if updated:
-        await db.channels.update_one(
-            {"id": channel_id},
-            {"$set": {"videos": videos}}
-        )
-        
-        # If duration changed significantly (more than 60 seconds difference), regenerate schedule
-        if abs(old_duration - duration) > 60:
-            today = get_eastern_date()
-            # Delete existing schedule for this channel
-            await db.schedules.delete_one({"channel_id": channel_id, "schedule_date": today})
-            # Generate new schedule
-            updated_channel = await db.channels.find_one({"id": channel_id}, {"_id": 0})
-            if updated_channel:
-                schedule = await generate_24h_schedule(updated_channel, today, force_random=True)
-                await db.schedules.insert_one(schedule)
-        
-        return {"updated": True, "new_duration": duration, "schedule_regenerated": abs(old_duration - duration) > 60}
-    
-    return {"updated": False, "reason": "video_not_found_or_already_set"}
+
+    # Grab just the current duration to decide if the change is significant
+    # enough to persist. `$elemMatch` projection keeps this a single-doc,
+    # single-array-slice read — no full-document scan.
+    channel = await db.channels.find_one(
+        {"id": channel_id, "videos.youtube_id": youtube_id},
+        {"_id": 0, "videos.$": 1},
+    )
+    if not channel or not channel.get("videos"):
+        return {"updated": False, "reason": "video_not_found"}
+
+    current = channel["videos"][0]
+    old_duration = current.get("duration", 300)
+
+    # Only accept defaults (0/180/300) or a real >30 s correction.
+    if old_duration not in (0, 180, 300) and abs(old_duration - duration) <= 30:
+        return {"updated": False, "reason": "already_set"}
+
+    # Targeted single-element update — O(1) write, no array rewrite.
+    result = await db.channels.update_one(
+        {"id": channel_id},
+        {"$set": {"videos.$[v].duration": duration}},
+        array_filters=[{"v.youtube_id": youtube_id}],
+    )
+
+    if result.modified_count == 0:
+        return {"updated": False, "reason": "no_change"}
+
+    significant = abs(old_duration - duration) > 60
+    if significant:
+        # Schedule regen touches ~1 000 slots for large channels — never do it
+        # on the request path. Fire-and-forget in FastAPI's BackgroundTasks
+        # queue so the response returns immediately.
+        background_tasks.add_task(_regenerate_channel_schedule, channel_id)
+
+    return {
+        "updated": True,
+        "new_duration": duration,
+        "schedule_regenerated": significant,
+    }
+
+
+async def _regenerate_channel_schedule(channel_id: str):
+    """Rebuild today's 24-h schedule for a single channel. Runs in the
+    background so `update-duration` responses stay sub-50 ms."""
+    try:
+        today = get_eastern_date()
+        await db.schedules.delete_one({"channel_id": channel_id, "schedule_date": today})
+        updated_channel = await db.channels.find_one({"id": channel_id}, {"_id": 0})
+        if updated_channel:
+            schedule = await generate_24h_schedule(updated_channel, today, force_random=True)
+            await db.schedules.insert_one(schedule)
+            invalidate_channel_cache()  # so /api/schedule/live serves the new one
+    except Exception as e:
+        logger.warning(f"[bg-schedule-regen] channel={channel_id}: {e}")
 
 # ===================== IMAGE UPLOAD ROUTES =====================
 
@@ -4899,28 +4932,19 @@ class CommercialEvent(BaseModel):
 @api_router.post("/analytics/view")
 @api_router.post("/track/view")
 @api_router.post("/t/v")
-async def record_view(event: ViewEvent, request: Request):
-    """Record a channel view/skip/complete event with auto-detected demographics"""
+async def record_view(event: ViewEvent, request: Request, background_tasks: BackgroundTasks):
+    """Record a channel view/skip/complete event.
+
+    Returns instantly. Geographic enrichment (which calls the external
+    ip-api.com service and used to spend up to 8 s on the request path) is
+    now deferred to a background task and patched onto the view document
+    after the response has already been sent.
+    """
     now = datetime.now(timezone.utc)
-    
-    # Auto-detect geographic info from IP if not provided
-    country = event.country
-    region = event.region
-    city = event.city
-    
-    if not country or not region or not city:
-        client_ip = get_client_ip(request)
-        if client_ip:
-            geo_info = await get_geo_from_ip(client_ip)
-            if not country:
-                country = geo_info.get("country")
-            if not region:
-                region = geo_info.get("region")
-            if not city:
-                city = geo_info.get("city")
-    
+    view_id = str(uuid.uuid4())
+
     view_doc = {
-        "id": str(uuid.uuid4()),
+        "id": view_id,
         "channel_id": event.channel_id,
         "viewer_id": event.viewer_id,
         "video_id": event.video_id,
@@ -4928,46 +4952,54 @@ async def record_view(event: ViewEvent, request: Request):
         "event_type": event.event_type,
         "timestamp": now.isoformat(),
         "hour": now.hour,
-        "day_of_week": now.weekday(),  # 0=Monday, 6=Sunday
+        "day_of_week": now.weekday(),
         "day": now.day,
         "month": now.month,
         "year": now.year,
         "week": now.isocalendar()[1],
-        # Demographics
         "age_group": event.age_group,
         "gender": event.gender,
-        "country": country,
-        "region": region,
-        "city": city,
+        "country": event.country,
+        "region": event.region,
+        "city": event.city,
     }
     await db.views.insert_one(view_doc)
+
+    # Off-thread geo enrichment if the client didn't send one.
+    if not (event.country and event.region and event.city):
+        client_ip = get_client_ip(request)
+        if client_ip:
+            background_tasks.add_task(_enrich_view_geo, view_id, client_ip)
+
     return {"status": "recorded"}
+
+
+async def _enrich_view_geo(view_id: str, ip_address: str):
+    """Fetch geo from ip-api.com and patch the just-written view row."""
+    try:
+        geo = await get_geo_from_ip(ip_address)
+        patch = {}
+        for k in ("country", "region", "city"):
+            v = geo.get(k)
+            if v:
+                patch[k] = v
+        if patch:
+            await db.views.update_one({"id": view_id}, {"$set": patch})
+    except Exception as e:
+        logger.warning(f"[bg-view-geo] view={view_id}: {e}")
+
 
 @api_router.post("/analytics/commercial")
 @api_router.post("/track/commercial")
 @api_router.post("/t/c")
-async def record_commercial_event(event: CommercialEvent, request: Request):
-    """Record a commercial play/complete/skip event with auto-detected demographics"""
+async def record_commercial_event(event: CommercialEvent, request: Request, background_tasks: BackgroundTasks):
+    """Record a commercial play/complete/skip event. Same fast-return
+    pattern as `/t/v` — geo runs in the background."""
     now = datetime.now(timezone.utc)
-    
-    # Auto-detect geographic info from IP if not provided
-    country = event.country
-    region = event.region
-    city = event.city
-    
-    if not country or not region or not city:
-        client_ip = get_client_ip(request)
-        if client_ip:
-            geo_info = await get_geo_from_ip(client_ip)
-            if not country:
-                country = geo_info.get("country")
-            if not region:
-                region = geo_info.get("region")
-            if not city:
-                city = geo_info.get("city")
-    
+    commercial_row_id = str(uuid.uuid4())
+
     commercial_doc = {
-        "id": str(uuid.uuid4()),
+        "id": commercial_row_id,
         "commercial_id": event.commercial_id,
         "channel_id": event.channel_id,
         "viewer_id": event.viewer_id,
@@ -4979,15 +5011,34 @@ async def record_commercial_event(event: CommercialEvent, request: Request):
         "month": now.month,
         "year": now.year,
         "week": now.isocalendar()[1],
-        # Demographics
         "age_group": event.age_group,
         "gender": event.gender,
-        "country": country,
-        "region": region,
-        "city": city,
+        "country": event.country,
+        "region": event.region,
+        "city": event.city,
     }
     await db.commercial_analytics.insert_one(commercial_doc)
+
+    if not (event.country and event.region and event.city):
+        client_ip = get_client_ip(request)
+        if client_ip:
+            background_tasks.add_task(_enrich_commercial_geo, commercial_row_id, client_ip)
+
     return {"status": "recorded"}
+
+
+async def _enrich_commercial_geo(row_id: str, ip_address: str):
+    try:
+        geo = await get_geo_from_ip(ip_address)
+        patch = {}
+        for k in ("country", "region", "city"):
+            v = geo.get(k)
+            if v:
+                patch[k] = v
+        if patch:
+            await db.commercial_analytics.update_one({"id": row_id}, {"$set": patch})
+    except Exception as e:
+        logger.warning(f"[bg-commercial-geo] row={row_id}: {e}")
 
 @api_router.get("/analytics/stats")
 async def get_analytics(user: dict = Depends(require_user)):
@@ -6432,13 +6483,35 @@ async def _startup_warmup():
             await db.commercial_analytics.create_index("timestamp")
             await db.schedules.create_index([("channel_id", 1), ("schedule_date", 1)])
             await db.channels.create_index("sort_order")
-            # Compound + single-key indexes powering `/api/channels` and
-            # `/api/schedule/live`. Idempotent.
             await db.channels.create_index([("is_public", 1), ("sort_order", 1)])
             await db.channels.create_index([("is_public", 1), ("favorites_count", -1)])
             await db.channels.create_index("id")
         except Exception as e:
             logger.warning(f"[startup_warmup] index creation skipped: {e}")
+
+        # Backfill missing owner/created_at fields on channel docs so the
+        # public /api/channels endpoint never trips Pydantic validation.
+        # Idempotent — only touches docs that are missing the field.
+        try:
+            now_iso = datetime.now(timezone.utc).isoformat()
+            r1 = await db.channels.update_many(
+                {"owner_id": {"$exists": False}},
+                {"$set": {"owner_id": "system"}},
+            )
+            r2 = await db.channels.update_many(
+                {"owner_username": {"$exists": False}},
+                {"$set": {"owner_username": "Hush Music TV"}},
+            )
+            r3 = await db.channels.update_many(
+                {"created_at": {"$exists": False}},
+                {"$set": {"created_at": now_iso}},
+            )
+            fixed = r1.modified_count + r2.modified_count + r3.modified_count
+            if fixed:
+                logger.info(f"[startup_warmup] backfilled {fixed} missing channel fields")
+                invalidate_channel_cache()
+        except Exception as e:
+            logger.warning(f"[startup_warmup] channel backfill skipped: {e}")
     except Exception as e:
         logger.warning(f"[startup_warmup] task error (non-fatal): {e}")
 

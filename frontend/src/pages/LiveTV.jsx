@@ -219,6 +219,10 @@ const LiveTV = () => {
   const [pendingNextVideo, setPendingNextVideo] = useState(null); // Video to play after commercials
   const [vimeoLoading, setVimeoLoading] = useState(false); // Vimeo iframe warmup / seek-to-offset state
   const commercialVideoRef = useRef(null);
+  // Set of `channel:youtube:duration` keys already reported to
+  // /api/videos/update-duration this session — dedupe so YT player reboots
+  // (autoplay retry, proxy fallback, tab focus regain) don't hammer the API.
+  const reportedDurationsRef = useRef(new Set());
   const COMMERCIALS_PER_BREAK = 3;
   
   const playerRef = useRef(null);
@@ -1204,14 +1208,37 @@ const LiveTV = () => {
             if (!isLive) {
               try {
                 const actualDuration = Math.floor(event.target.getDuration());
-                
-                // Report actual duration to backend for self-healing (doesn't trigger re-render)
-                if (actualDuration > 0 && currentVideo?.youtube_id) {
-                  videoCleanupAPI.updateSingleDuration(
-                    currentChannel?.id, 
-                    currentVideo.youtube_id, 
-                    actualDuration
-                  ).catch(() => {});
+
+                // Report actual duration to backend for self-healing.
+                // Dedupe: never send the same (channel, video, duration) combo
+                // twice in a session — previously this fired every time the YT
+                // player rebooted (autoplay, tab focus regain, proxy fallback,
+                // etc.) and hammered `/api/videos/update-duration`, which was
+                // the root cause of the periodic LiveTV backend timeouts.
+                if (
+                  actualDuration > 0 &&
+                  currentVideo?.youtube_id &&
+                  currentChannel?.id
+                ) {
+                  const dedupeKey = `${currentChannel.id}:${currentVideo.youtube_id}:${actualDuration}`;
+                  const knownDuration = currentVideo.duration;
+                  const durationChanged =
+                    !knownDuration ||
+                    knownDuration === 0 ||
+                    knownDuration === 180 ||
+                    knownDuration === 300 ||
+                    Math.abs(knownDuration - actualDuration) > 30;
+                  if (
+                    durationChanged &&
+                    !reportedDurationsRef.current.has(dedupeKey)
+                  ) {
+                    reportedDurationsRef.current.add(dedupeKey);
+                    videoCleanupAPI.updateSingleDuration(
+                      currentChannel.id,
+                      currentVideo.youtube_id,
+                      actualDuration
+                    ).catch(() => {});
+                  }
                 }
             } catch (e) {
               console.error('Error getting video info:', e);
