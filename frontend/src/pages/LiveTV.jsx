@@ -2,7 +2,13 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { channelsAPI, analyticsAPI, videoCleanupAPI, youtubeProxyAPI } from '../lib/api';
-import { getPrefetchedLiveSchedule, invalidateLiveSchedule } from '../lib/prefetch';
+import {
+  getPrefetchedLiveSchedule,
+  invalidateLiveSchedule,
+  pauseBackgroundFetches,
+  resumeBackgroundFetches,
+} from '../lib/prefetch';
+import { useVirtualList } from '../hooks/useVirtualList';
 import { Button } from '../components/ui/button';
 import { 
   ChevronUp, 
@@ -235,12 +241,63 @@ const LiveTV = () => {
   const playPauseOsdTimeoutRef = useRef(null);
   const seekTimeRef = useRef(0);
   const isMutedRef = useRef(false);
+  const channelListScrollRef = useRef(null); // For virtualized channel list
+
+  // Virtualized channel list — Fire TV Stick / Amazon Silk can't afford to
+  // mount 90+ channel buttons (each with a thumbnail img) at once. Only the
+  // rows currently in the viewport are rendered; the rest are collapsed to
+  // a single spacer div.
+  const CHANNEL_ROW_HEIGHT = 72; // px — must match the button's rendered height
+  const { startIndex: chStart, endIndex: chEnd, totalHeight: chTotalHeight, offsetTop: chOffset } =
+    useVirtualList({
+      containerRef: channelListScrollRef,
+      itemCount: channels.length,
+      itemHeight: CHANNEL_ROW_HEIGHT,
+      overscan: 4,
+      enabled: showChannelList,
+    });
 
   // Auto-hide controls after inactivity
   const CONTROLS_HIDE_DELAY = 3000;
   const isPausedRef = useRef(isPaused);
   const showControlsTriggerRef = useRef(() => {});
-  
+
+  // Suppress background prefetches while the LiveTV page is mounted +
+  // aggressively tear down every player / <video> element on unmount so the
+  // hardware decoder + JS heap are fully released on Fire TV Stick / Silk.
+  // Cleanup references the concrete refs declared later in this component —
+  // by the time the cleanup callback actually runs (on unmount), every ref
+  // above has been initialized, so the closure lookup is safe.
+  useEffect(() => {
+    pauseBackgroundFetches();
+    return () => {
+      resumeBackgroundFetches();
+      try { youtubePlayerRef.current?.destroy?.(); } catch (_) {}
+      youtubePlayerRef.current = null;
+      try { vimeoPlayerRef.current?.destroy?.(); } catch (_) {}
+      vimeoPlayerRef.current = null;
+      try { commercialYtRef.current?.destroy?.(); } catch (_) {}
+      commercialYtRef.current = null;
+      try { commercialVimeoRef.current?.destroy?.(); } catch (_) {}
+      commercialVimeoRef.current = null;
+
+      for (const ref of [videoRef, proxyVideoRef, commercialVideoRef]) {
+        const el = ref?.current;
+        if (!el) continue;
+        try {
+          el.pause();
+          el.removeAttribute('src');
+          el.load();
+        } catch (_) {}
+      }
+
+      if (channelInputTimeoutRef.current) clearTimeout(channelInputTimeoutRef.current);
+      if (osdTimeoutRef.current) clearTimeout(osdTimeoutRef.current);
+      if (playPauseOsdTimeoutRef.current) clearTimeout(playPauseOsdTimeoutRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Detect mobile screen resize
   useEffect(() => {
     const handleResize = () => {
@@ -1705,59 +1762,67 @@ const LiveTV = () => {
               </div>
             </div>
             
-            <div className="flex-1 overflow-y-auto">
-              {channels.map((channel, index) => {
-                const isActive = currentChannel?.id === channel.id;
-                
-                return (
-                  <button
-                    key={channel.id}
-                    onClick={() => handleChannelSelect(channel)}
-                    className={`w-full p-3 flex items-center gap-3 transition-colors ${
-                      isActive 
-                        ? 'bg-primary/20 border-l-2 border-primary' 
-                        : 'hover:bg-white/5 border-l-2 border-transparent'
-                    }`}
-                    data-testid={`channel-${channel.id}`}
-                  >
-                    <div className="relative w-12 h-12 rounded overflow-hidden bg-primary/20 flex-shrink-0">
-                      {channel.thumbnail && (
-                        <img 
-                          src={channel.thumbnail.startsWith('/api') 
-                            ? `${BACKEND_URL}${channel.thumbnail}` 
-                            : channel.thumbnail
-                          }
-                          alt={channel.name}
-                          className="w-full h-full object-cover"
-                          onError={(e) => { e.target.style.display = 'none'; }}
-                        />
-                      )}
-                      <div className="absolute inset-0 -z-10 flex items-center justify-center">
-                        <Tv size={20} className="text-primary/50" />
-                      </div>
-                      {!channel.thumbnail && (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <Tv size={20} className="text-primary/50" />
+            <div ref={channelListScrollRef} className="flex-1 overflow-y-auto">
+              <div style={{ height: chTotalHeight, position: 'relative' }}>
+                <div style={{ transform: `translateY(${chOffset}px)` }}>
+                  {channels.slice(chStart, chEnd + 1).map((channel, sliceIdx) => {
+                    const index = chStart + sliceIdx;
+                    const isActive = currentChannel?.id === channel.id;
+
+                    return (
+                      <button
+                        key={channel.id}
+                        onClick={() => handleChannelSelect(channel)}
+                        style={{ height: CHANNEL_ROW_HEIGHT }}
+                        className={`w-full p-3 flex items-center gap-3 transition-colors ${
+                          isActive
+                            ? 'bg-primary/20 border-l-2 border-primary'
+                            : 'hover:bg-white/5 border-l-2 border-transparent'
+                        }`}
+                        data-testid={`channel-${channel.id}`}
+                      >
+                        <div className="relative w-12 h-12 rounded overflow-hidden bg-primary/20 flex-shrink-0">
+                          {channel.thumbnail && (
+                            <img
+                              src={channel.thumbnail.startsWith('/api')
+                                ? `${BACKEND_URL}${channel.thumbnail}`
+                                : channel.thumbnail
+                              }
+                              alt={channel.name}
+                              loading="lazy"
+                              decoding="async"
+                              className="w-full h-full object-cover"
+                              onError={(e) => { e.target.style.display = 'none'; }}
+                            />
+                          )}
+                          <div className="absolute inset-0 -z-10 flex items-center justify-center">
+                            <Tv size={20} className="text-primary/50" />
+                          </div>
+                          {!channel.thumbnail && (
+                            <div className="w-full h-full flex items-center justify-center">
+                              <Tv size={20} className="text-primary/50" />
+                            </div>
+                          )}
+                          {isActive && (
+                            <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-pulse" />
+                          )}
                         </div>
-                      )}
-                      {isActive && (
-                        <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-pulse" />
-                      )}
-                    </div>
-                    <div className="flex-1 text-left min-w-0">
-                      <p className="font-medium text-sm truncate">{channel.name}</p>
-                      <p className="text-xs text-gray-500">
-                        {channel.is_live_stream ? (
-                          <span className="text-red-400 font-medium">LIVE STREAM</span>
-                        ) : (
-                          `${channel.videoCount} videos`
-                        )}
-                      </p>
-                    </div>
-                    <span className="text-xs text-gray-600">{index + 1}</span>
-                  </button>
-                );
-              })}
+                        <div className="flex-1 text-left min-w-0">
+                          <p className="font-medium text-sm truncate">{channel.name}</p>
+                          <p className="text-xs text-gray-500">
+                            {channel.is_live_stream ? (
+                              <span className="text-red-400 font-medium">LIVE STREAM</span>
+                            ) : (
+                              `${channel.videoCount} videos`
+                            )}
+                          </p>
+                        </div>
+                        <span className="text-xs text-gray-600">{index + 1}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
             
             <div className="p-3 border-t border-white/10 text-xs text-gray-500 hidden md:block">
@@ -1814,6 +1879,7 @@ const LiveTV = () => {
                 // MP4-hosted commercial - quieter than program audio
                 return (
                   <video
+                    key={`commercial-mp4-${cc?.id || currentCommercialIndex}`}
                     ref={commercialVideoRef}
                     src={cc?.url}
                     className="w-full h-full object-contain"
@@ -1926,6 +1992,7 @@ const LiveTV = () => {
           {currentVideo?.youtube_id && !isUploadedVideo && !isVimeoVideo && useProxyPlayer && proxyVideoUrl && (
             <div className="relative w-full h-full">
               <video
+                key={`proxy-${currentVideo.youtube_id}`}
                 ref={proxyVideoRef}
                 src={proxyVideoUrl}
                 className="w-full h-full object-contain"
@@ -1968,6 +2035,7 @@ const LiveTV = () => {
           {isUploadedVideo && currentVideo && (
             <div className="relative w-full h-full">
               <video
+                key={`uploaded-${currentVideo.video_id || currentVideo.video_url}`}
                 ref={videoRef}
                 src={
                   currentVideo.video_url?.startsWith('http') 

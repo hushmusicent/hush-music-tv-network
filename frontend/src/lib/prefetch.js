@@ -20,8 +20,13 @@ const FETCH_TIMEOUT_MS = 30 * 1000; // 30 s — matches backend Mongo/serverSele
 let _promise = null;
 let _resolvedAt = 0;
 let _resolvedData = null;
+let _paused = false; // When true, no new background fetches are fired.
 
 function fireFetch() {
+  // Suppress prefetch while a heavy consumer (e.g. Live TV playback) is
+  // active. The next getPrefetchedLiveSchedule() will still be honored, but
+  // we won't spend memory/network on speculative fetches in the background.
+  if (_paused) return null;
   const url = `${BACKEND_URL}/api/schedule/live`;
   _promise = axios.get(url, { timeout: FETCH_TIMEOUT_MS })
     .then((res) => {
@@ -43,6 +48,21 @@ if (BACKEND_URL && typeof window !== 'undefined') {
 }
 
 /**
+ * Suppress background prefetches (e.g. while the video player is active on
+ * low-memory devices like Fire TV Stick / Amazon Silk). In-flight fetches
+ * are not cancelled, but no new speculative fetches will be fired until
+ * `resumeBackgroundFetches` is called. Explicit `getPrefetchedLiveSchedule`
+ * calls still work — they'll bypass the paused flag if the cache is empty.
+ */
+export function pauseBackgroundFetches() {
+  _paused = true;
+}
+
+export function resumeBackgroundFetches() {
+  _paused = false;
+}
+
+/**
  * Returns the prefetched /api/schedule/live payload. If the cache is warm and
  * fresh (< TTL), resolves immediately. If a fetch is in-flight, awaits it.
  * If the cache is stale or the previous fetch failed, starts a new fetch.
@@ -51,7 +71,14 @@ export async function getPrefetchedLiveSchedule() {
   const isFresh = _resolvedData && (Date.now() - _resolvedAt) < TTL_MS;
   if (isFresh) return _resolvedData;
   if (_promise) return _promise;
-  return fireFetch();
+  // Bypass pause for explicit callers — they need the data now.
+  const wasPaused = _paused;
+  _paused = false;
+  try {
+    return await fireFetch();
+  } finally {
+    _paused = wasPaused;
+  }
 }
 
 /** Force refresh (e.g. after regenerating a schedule). */
@@ -63,6 +90,7 @@ export function invalidateLiveSchedule() {
 
 /** Warm the cache manually — useful after login state changes. */
 export function warmLiveSchedule() {
+  if (_paused) return;
   if (!_promise && (!_resolvedData || (Date.now() - _resolvedAt) >= TTL_MS)) {
     fireFetch();
   }

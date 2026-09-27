@@ -4,6 +4,7 @@ import { tvGuideAPI } from '../lib/api';
 import { Skeleton } from '../components/ui/skeleton';
 import { Calendar, Clock, ChevronLeft, ChevronRight, Radio, Play, Shuffle } from 'lucide-react';
 import { Button } from '../components/ui/button';
+import { useVirtualList } from '../hooks/useVirtualList';
 
 // Seeded random function for consistent shuffling across all viewers
 const seededRandom = (seed) => {
@@ -52,25 +53,25 @@ const generateChannelSchedule = (videos, randomPlay = false) => {
 
   while (currentSecond < endOfDay) {
     const positionInPlaylist = currentSecond % totalDuration;
-    
+
     // Find which video is at this position
     let accumulated = 0;
     for (let i = 0; i < playlistVideos.length; i++) {
       const video = playlistVideos[i];
       const videoDuration = video.duration || 300;
-      
+
       if (accumulated + videoDuration > positionInPlaylist) {
         // This video is playing at currentSecond
         const videoStartInPlaylist = accumulated;
         const offsetIntoVideo = positionInPlaylist - videoStartInPlaylist;
         const remainingDuration = videoDuration - offsetIntoVideo;
-        
+
         const startTime = new Date(startOfDay);
         startTime.setSeconds(currentSecond);
-        
+
         const endTime = new Date(startOfDay);
         endTime.setSeconds(currentSecond + remainingDuration);
-        
+
         schedule.push({
           video,
           startTime,
@@ -78,7 +79,7 @@ const generateChannelSchedule = (videos, randomPlay = false) => {
           startSeconds: currentSecond,
           durationSeconds: remainingDuration
         });
-        
+
         currentSecond += remainingDuration;
         break;
       }
@@ -89,20 +90,28 @@ const generateChannelSchedule = (videos, randomPlay = false) => {
   return schedule;
 };
 
+// Fixed height for each channel row — must match `min-h-[80px]` + padding.
+const ROW_HEIGHT = 96;
+// Height of the vertical scroll container that holds the channel rows.
+// Constraining this lets us virtualize on scrollTop instead of window scroll,
+// which is what Fire TV Stick / Amazon Silk needs to hold DOM node count flat.
+const ROWS_VIEWPORT_HEIGHT = 640;
+
 const TVGuide = () => {
   const [guideData, setGuideData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentTime, setCurrentTime] = useState(new Date());
-  const scrollRef = useRef(null);
+  const scrollRef = useRef(null); // Horizontal timeline scroll
+  const rowsScrollRef = useRef(null); // Vertical channel-rows scroll (virtualized)
 
   useEffect(() => {
     loadGuide();
-    
+
     // Update current time every minute
     const interval = setInterval(() => {
       setCurrentTime(new Date());
     }, 60000);
-    
+
     return () => clearInterval(interval);
   }, []);
 
@@ -135,6 +144,30 @@ const TVGuide = () => {
   const PIXELS_PER_SECOND = 120 / 1800;
   const TOTAL_WIDTH = timeSlots.length * 120; // 48 slots * 120px
 
+  // Cache generated schedules per channel — regenerating on every render for
+  // 89 channels × ~500 slots was one of the biggest per-render costs.
+  const scheduleCache = useMemo(() => {
+    const cache = new Map();
+    for (const ch of guideData) {
+      cache.set(ch.channel_id, generateChannelSchedule(ch.videos, ch.random_play));
+    }
+    return cache;
+  }, [guideData]);
+
+  // Windowed rendering — only mount the channel rows currently in view.
+  const {
+    startIndex: rowStart,
+    endIndex: rowEnd,
+    totalHeight: rowsTotalHeight,
+    offsetTop: rowsOffset,
+  } = useVirtualList({
+    containerRef: rowsScrollRef,
+    itemCount: guideData.length,
+    itemHeight: ROW_HEIGHT,
+    overscan: 3,
+    enabled: !loading && guideData.length > 0,
+  });
+
   const scrollLeft = () => {
     if (scrollRef.current) {
       scrollRef.current.scrollBy({ left: -400, behavior: 'smooth' });
@@ -154,8 +187,115 @@ const TVGuide = () => {
     }
   };
 
+  const renderChannelRow = (channel, absoluteIndex) => {
+    const schedule = scheduleCache.get(channel.channel_id) || [];
+
+    return (
+      <div
+        key={channel.channel_id}
+        style={{ height: ROW_HEIGHT }}
+        className="flex border-b border-white/5 hover:bg-white/5 transition-colors"
+        data-testid={`tv-guide-row-${channel.channel_id}`}
+      >
+        {/* Channel Name */}
+        <div className="w-48 flex-shrink-0 p-4 bg-surface sticky left-0 z-10 border-r border-white/10">
+          <Link to={`/watch/${channel.channel_id}`} className="block group">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded bg-primary/20 flex items-center justify-center">
+                <Radio size={18} className="text-primary" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h4 className="font-medium text-sm truncate group-hover:text-primary transition-colors">
+                  {channel.channel_name}
+                </h4>
+                <div className="flex items-center gap-1">
+                  {channel.is_24_7 && (
+                    <span className="text-[10px] text-live">24/7</span>
+                  )}
+                  {channel.random_play && (
+                    <Shuffle size={10} className="text-purple-400" />
+                  )}
+                </div>
+              </div>
+            </div>
+          </Link>
+        </div>
+
+        {/* Schedule - positioned by actual time */}
+        <div className="flex-1 overflow-x-auto hide-scrollbar">
+          <div
+            className="relative"
+            style={{ width: `${TOTAL_WIDTH}px`, height: ROW_HEIGHT }}
+          >
+            {schedule.length > 0 ? (
+              schedule.map((item, index) => {
+                const leftPosition = item.startSeconds * PIXELS_PER_SECOND;
+                const width = Math.max(item.durationSeconds * PIXELS_PER_SECOND, 60); // Min 60px
+                const isNowPlaying = currentSeconds >= item.startSeconds &&
+                                     currentSeconds < (item.startSeconds + item.durationSeconds);
+
+                // Skip everything outside a ~4h window around "now" — the
+                // program-block DOM was the second biggest cost after the
+                // channel row count. Users can horizontally scroll to hydrate
+                // more if needed; we redraw once per minute anyway.
+                const HYDRATION_WINDOW = 4 * 3600;
+                if (item.startSeconds + item.durationSeconds < currentSeconds - HYDRATION_WINDOW) return null;
+                if (item.startSeconds > currentSeconds + HYDRATION_WINDOW) return null;
+
+                const startTimeStr = item.startTime.toLocaleTimeString([], {
+                  hour: '2-digit',
+                  minute: '2-digit'
+                });
+
+                return (
+                  <div
+                    key={`${item.video.id}-${index}`}
+                    className={`absolute top-0 bottom-0 p-2 border-r border-white/5 flex flex-col justify-center ${
+                      isNowPlaying
+                        ? 'bg-primary/20 border-l-2 border-l-primary z-10'
+                        : 'hover:bg-white/5'
+                    }`}
+                    style={{
+                      left: `${leftPosition}px`,
+                      width: `${width}px`,
+                    }}
+                  >
+                    <Link to={`/watch/${channel.channel_id}`} className="block h-full">
+                      <div className="flex items-start gap-1">
+                        {isNowPlaying && (
+                          <div className="p-1 bg-primary rounded flex-shrink-0">
+                            <Play size={8} fill="white" />
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[10px] text-gray-400 mb-0.5">
+                            {startTimeStr}
+                          </p>
+                          <p className="text-xs font-medium truncate leading-tight">
+                            {item.video.title}
+                          </p>
+                          <p className="text-[10px] text-gray-500">
+                            {Math.floor((item.video.duration || 300) / 60)}:{((item.video.duration || 300) % 60).toString().padStart(2, '0')}
+                          </p>
+                        </div>
+                      </div>
+                    </Link>
+                  </div>
+                );
+              })
+            ) : (
+              <div className="flex items-center justify-center w-full h-full text-gray-500 text-sm">
+                No schedule available
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
-    <div className="min-h-screen overflow-y-auto px-6 md:px-12 lg:px-16 py-8" data-testid="tv-guide-page">
+    <div className="min-h-screen px-6 md:px-12 lg:px-16 py-8" data-testid="tv-guide-page">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
         <div>
@@ -235,7 +375,7 @@ const TVGuide = () => {
             </div>
           </div>
 
-          {/* Channel Rows */}
+          {/* Channel Rows — virtualized */}
           {loading ? (
             <div className="space-y-0">
               {Array(6).fill(0).map((_, i) => (
@@ -250,112 +390,19 @@ const TVGuide = () => {
               ))}
             </div>
           ) : guideData.length > 0 ? (
-            <div>
-              {guideData.map((channel) => {
-                // Generate the full schedule for this channel based on actual durations
-                const schedule = generateChannelSchedule(channel.videos, channel.random_play);
-                
-                return (
-                  <div
-                    key={channel.channel_id}
-                    className="flex border-b border-white/5 hover:bg-white/5 transition-colors"
-                  >
-                    {/* Channel Name */}
-                    <div className="w-48 flex-shrink-0 p-4 bg-surface sticky left-0 z-10 border-r border-white/10">
-                      <Link
-                        to={`/watch/${channel.channel_id}`}
-                        className="block group"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded bg-primary/20 flex items-center justify-center">
-                            <Radio size={18} className="text-primary" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <h4 className="font-medium text-sm truncate group-hover:text-primary transition-colors">
-                              {channel.channel_name}
-                            </h4>
-                            <div className="flex items-center gap-1">
-                              {channel.is_24_7 && (
-                                <span className="text-[10px] text-live">24/7</span>
-                              )}
-                              {channel.random_play && (
-                                <Shuffle size={10} className="text-purple-400" />
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      </Link>
-                    </div>
-
-                    {/* Schedule - positioned by actual time */}
-                    <div className="flex-1 overflow-x-auto hide-scrollbar">
-                      <div
-                        className="relative min-h-[80px]"
-                        style={{ width: `${TOTAL_WIDTH}px` }}
-                      >
-                        {schedule.length > 0 ? (
-                          schedule.map((item, index) => {
-                            const leftPosition = item.startSeconds * PIXELS_PER_SECOND;
-                            const width = Math.max(item.durationSeconds * PIXELS_PER_SECOND, 60); // Min 60px
-                            const isNowPlaying = currentSeconds >= item.startSeconds && 
-                                                 currentSeconds < (item.startSeconds + item.durationSeconds);
-
-                            // Format time for display
-                            const startTimeStr = item.startTime.toLocaleTimeString([], { 
-                              hour: '2-digit', 
-                              minute: '2-digit' 
-                            });
-
-                            return (
-                              <div
-                                key={`${item.video.id}-${index}`}
-                                className={`absolute top-0 bottom-0 p-2 border-r border-white/5 flex flex-col justify-center ${
-                                  isNowPlaying
-                                    ? 'bg-primary/20 border-l-2 border-l-primary z-10'
-                                    : 'hover:bg-white/5'
-                                }`}
-                                style={{ 
-                                  left: `${leftPosition}px`, 
-                                  width: `${width}px`,
-                                  minHeight: '80px'
-                                }}
-                              >
-                                <Link
-                                  to={`/watch/${channel.channel_id}`}
-                                  className="block h-full"
-                                >
-                                  <div className="flex items-start gap-1">
-                                    {isNowPlaying && (
-                                      <div className="p-1 bg-primary rounded flex-shrink-0">
-                                        <Play size={8} fill="white" />
-                                      </div>
-                                    )}
-                                    <div className="flex-1 min-w-0">
-                                      <p className="text-[10px] text-gray-400 mb-0.5">
-                                        {startTimeStr}
-                                      </p>
-                                      <p className="text-xs font-medium truncate leading-tight">
-                                        {item.video.title}
-                                      </p>
-                                      <p className="text-[10px] text-gray-500">
-                                        {Math.floor((item.video.duration || 300) / 60)}:{((item.video.duration || 300) % 60).toString().padStart(2, '0')}
-                                      </p>
-                                    </div>
-                                  </div>
-                                </Link>
-                              </div>
-                            );
-                          })
-                        ) : (
-                          <div className="flex items-center justify-center w-full h-full text-gray-500 text-sm">
-                            No schedule available
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+            <div
+              ref={rowsScrollRef}
+              className="overflow-y-auto"
+              style={{ maxHeight: ROWS_VIEWPORT_HEIGHT }}
+              data-testid="tv-guide-rows"
+            >
+              <div style={{ height: rowsTotalHeight, position: 'relative' }}>
+                <div style={{ transform: `translateY(${rowsOffset}px)` }}>
+                  {guideData.slice(rowStart, rowEnd + 1).map((channel, sliceIdx) =>
+                    renderChannelRow(channel, rowStart + sliceIdx)
+                  )}
+                </div>
+              </div>
             </div>
           ) : (
             <div className="p-12 text-center">

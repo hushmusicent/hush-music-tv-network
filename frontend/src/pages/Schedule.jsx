@@ -21,6 +21,7 @@ import { Button } from '../components/ui/button';
 import axios from 'axios';
 import YouTube from 'react-youtube';
 import { getPrefetchedLiveSchedule } from '../lib/prefetch';
+import { useVirtualList } from '../hooks/useVirtualList';
 
 const api = axios.create({
   baseURL: process.env.REACT_APP_BACKEND_URL,
@@ -67,6 +68,24 @@ const Schedule = () => {
   const playerRef = useRef(null);
 
   const hoursToShow = ZOOM_LEVELS[zoomLevel].hours;
+
+  // Virtualize the channel-rows list so Fire TV Stick / Amazon Silk don't
+  // mount 89 rows (each with a thumbnail + up to 40 timeline blocks) at once.
+  // Rows are 72px tall (p-3 padding around a 48px thumbnail).
+  const ROW_HEIGHT = 72;
+  const rowsContainerRef = useRef(null);
+  const {
+    startIndex: scheduleRowsStart,
+    endIndex: scheduleRowsEnd,
+    offsetTop: scheduleRowsOffset,
+  } = useVirtualList({
+    containerRef: rowsContainerRef,
+    itemCount: schedules.length,
+    itemHeight: ROW_HEIGHT,
+    overscan: 3,
+    enabled: schedules.length > 0,
+    useWindow: true,
+  });
 
   // Calculate visible hour range based on zoom level
   useEffect(() => {
@@ -469,15 +488,24 @@ const Schedule = () => {
           </div>
         )}
 
-        {/* Channel Rows */}
-        <div className="divide-y divide-white/5">
-          {schedules.map((schedule) => {
+        {/* Channel Rows — virtualized against the window scroll so only
+            the rows currently in view are mounted. Keeps DOM node count flat
+            for Fire TV Stick / Silk regardless of channel count. */}
+        <div
+          ref={rowsContainerRef}
+          className="relative"
+          style={{ height: schedules.length * ROW_HEIGHT }}
+          data-testid="schedule-rows-container"
+        >
+          <div style={{ transform: `translateY(${scheduleRowsOffset}px)` }} className="divide-y divide-white/5">
+            {schedules.slice(scheduleRowsStart, scheduleRowsEnd + 1).map((schedule) => {
             const currentVideo = getCurrentVideo(schedule);
             const isLive = currentVideo !== null;
             
             return (
               <div 
                 key={schedule.channel_id} 
+                style={{ height: ROW_HEIGHT }}
                 className="flex hover:bg-white/[0.02] transition-colors"
                 data-testid={`schedule-channel-${schedule.channel_id}`}
               >
@@ -492,6 +520,8 @@ const Schedule = () => {
                       <img 
                         src={schedule.channel_thumbnail} 
                         alt={schedule.channel_name}
+                        loading="lazy"
+                        decoding="async"
                         className="w-12 h-12 rounded object-cover"
                       />
                     ) : (
@@ -584,7 +614,8 @@ const Schedule = () => {
                 <div className="w-10 flex-shrink-0" />
               </div>
             );
-          })}
+            })}
+          </div>
         </div>
 
         {/* Empty State */}
