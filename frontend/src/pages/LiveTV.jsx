@@ -380,6 +380,20 @@ const LiveTV = () => {
 
   const vimeoPlayerRef = useRef(null);
 
+  // Explicit teardown helper for the primary Vimeo player. Reused by both
+  // the main Vimeo effect below (channel switch) and any early-return path
+  // so we never leave a live iframe attached across a channel change.
+  const destroyVimeoPlayer = useCallback(() => {
+    if (vimeoPlayerRef.current) {
+      try { vimeoPlayerRef.current.pause?.(); } catch (_) {}
+      try { vimeoPlayerRef.current.unload?.(); } catch (_) {}
+      try { vimeoPlayerRef.current.destroy(); } catch (_) {}
+      vimeoPlayerRef.current = null;
+    }
+    const container = document.getElementById('vimeo-player');
+    if (container) container.innerHTML = '';
+  }, []);
+
   // Load channels and playlists on mount, set session start time
   const hasInitialized = useRef(false);
   useEffect(() => {
@@ -773,6 +787,10 @@ const LiveTV = () => {
   // defined so React's TDZ doesn't crash on the deps array.
   useEffect(() => {
     if (!isVimeoVideo || !currentVideo?.vimeo_id) {
+      // No Vimeo playback needed — kill any orphaned player from a previous
+      // Vimeo channel so its iframe doesn't linger during YT / uploaded
+      // playback.
+      destroyVimeoPlayer();
       setVimeoLoading(false);
       return;
     }
@@ -792,10 +810,8 @@ const LiveTV = () => {
         handle = setTimeout(attach, 200);
         return;
       }
-      if (vimeoPlayerRef.current) {
-        try { vimeoPlayerRef.current.destroy(); } catch (e) {}
-        vimeoPlayerRef.current = null;
-      }
+      // Ensure any previous instance is torn down before we mount a new one.
+      destroyVimeoPlayer();
       try {
         const player = new window.Vimeo.Player(container, {
           id: currentVideo.vimeo_id,
@@ -855,10 +871,7 @@ const LiveTV = () => {
     return () => {
       cancelled = true;
       if (handle) clearTimeout(handle);
-      if (vimeoPlayerRef.current) {
-        try { vimeoPlayerRef.current.destroy(); } catch (e) {}
-        vimeoPlayerRef.current = null;
-      }
+      destroyVimeoPlayer();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isVimeoVideo, currentVideo?.vimeo_id]);
@@ -927,9 +940,13 @@ const LiveTV = () => {
       cancelled = true;
       if (handle) clearTimeout(handle);
       if (commercialVimeoRef.current) {
+        try { commercialVimeoRef.current.pause?.(); } catch (_) {}
+        try { commercialVimeoRef.current.unload?.(); } catch (_) {}
         try { commercialVimeoRef.current.destroy(); } catch (e) {}
         commercialVimeoRef.current = null;
       }
+      const container = document.getElementById('commercial-vimeo-player');
+      if (container) container.innerHTML = '';
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isCommercialBreak, currentCommercialIndex, commercialBreakVideos]);
@@ -1003,9 +1020,13 @@ const LiveTV = () => {
       cancelled = true;
       if (handle) clearTimeout(handle);
       if (commercialYtRef.current) {
+        try { commercialYtRef.current.pauseVideo?.(); } catch (_) {}
+        try { commercialYtRef.current.stopVideo?.(); } catch (_) {}
         try { commercialYtRef.current.destroy(); } catch (e) {}
         commercialYtRef.current = null;
       }
+      const container = document.getElementById('commercial-youtube-player');
+      if (container) container.innerHTML = '';
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isCommercialBreak, currentCommercialIndex, commercialBreakVideos]);
@@ -1170,19 +1191,42 @@ const LiveTV = () => {
 
   // Initialize YouTube player when video changes
   useEffect(() => {
+    // Local per-effect teardown — always destroys the current YT player and
+    // wipes the `#youtube-player` container so React removing the outer
+    // conditional block after this doesn't orphan a live iframe (which
+    // otherwise keeps its postMessage listeners alive and leaks memory
+    // every channel switch on Silk / Fire TV Stick).
+    const destroyPlayer = () => {
+      if (youtubePlayerRef.current) {
+        try {
+          // Pause first so the decoder frees frames before .destroy() —
+          // some Fire TV builds hold the last decoded frame if we skip this.
+          try { youtubePlayerRef.current.pauseVideo?.(); } catch (_) {}
+          try { youtubePlayerRef.current.stopVideo?.(); } catch (_) {}
+          youtubePlayerRef.current.destroy();
+        } catch (e) {}
+        youtubePlayerRef.current = null;
+      }
+      const container = document.getElementById('youtube-player');
+      if (container) container.innerHTML = '';
+    };
+
     const videoId = currentVideo?.youtube_id;
-    if (!videoId || isUploadedVideo) return;
-    
+    // If the new video is not a YouTube video (uploaded / vimeo / nothing),
+    // tear the previous YT player down NOW instead of leaving it alive
+    // until the parent conditional unmounts (which is what caused the leak).
+    if (!videoId || isUploadedVideo) {
+      destroyPlayer();
+      return;
+    }
+
     // Reset proxy state
     setUseProxyPlayer(false);
     setProxyVideoUrl(null);
-    
-    if (youtubePlayerRef.current) {
-      try {
-        youtubePlayerRef.current.destroy();
-      } catch (e) {}
-      youtubePlayerRef.current = null;
-    }
+
+    // Switching between two YouTube videos — destroy the previous instance
+    // before wiring up the new one.
+    destroyPlayer();
 
     let errorTimeout = null;
     let playbackCheckTimeout = null;
@@ -1378,12 +1422,33 @@ const LiveTV = () => {
     createPlayer(isLive ? 'https://www.youtube.com' : 'https://www.youtube-nocookie.com');
 
     return () => {
+      // Always tear down the YT player when this effect re-runs or when
+      // the LiveTV page unmounts. Prior versions only cleared timers here,
+      // which orphaned the iframe + its postMessage listeners every time
+      // the user switched from a YT channel to a non-YT channel.
+      destroyPlayer();
       if (errorTimeout) clearTimeout(errorTimeout);
       if (playbackCheckTimeout) clearTimeout(playbackCheckTimeout);
       if (ageRestrictionFallbackTimeout) clearTimeout(ageRestrictionFallbackTimeout);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentVideo?.youtube_id, currentVideo?.video_id, isUploadedVideo]);
+
+  // Proxy `<video>` decoder release on channel/video switch. Without this,
+  // Silk / Fire TV Stick can keep the previous stream's demuxer buffered
+  // for several minutes after the element unmounts.
+  useEffect(() => {
+    if (!useProxyPlayer) return;
+    const v = proxyVideoRef.current;
+    if (!v) return;
+    return () => {
+      try {
+        v.pause();
+        v.removeAttribute('src');
+        v.load();
+      } catch (_) {}
+    };
+  }, [useProxyPlayer, currentVideo?.youtube_id]);
 
   // Handle uploaded video playback — serialized seek-then-play to avoid
   // hardware-decoder races on Android Chrome (frozen video / running audio).
@@ -1444,6 +1509,16 @@ const LiveTV = () => {
 
     return () => {
       cancelled = true;
+      // Aggressively release the HTMLMediaElement's decoder + buffered
+      // ranges on channel/video switch so Fire TV Stick / Amazon Silk
+      // don't accumulate hardware decoder allocations across channel
+      // changes. `removeAttribute('src') + load()` is the browser-standard
+      // way to tell the media pipeline "we're done with this stream".
+      try {
+        video.pause();
+        video.removeAttribute('src');
+        video.load();
+      } catch (_) {}
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentVideo?.video_id, currentVideo?.video_url, isUploadedVideo]);

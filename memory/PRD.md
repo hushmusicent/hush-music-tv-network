@@ -15,7 +15,13 @@ Build a TV network app named "Hush Music TV Network" with admin-only channel/vid
 ## Completed (Feb 2026 — current fork)
 - **Full production → preview migration** — 89 channels, 5,872 uploaded_videos, 100 commercials; 28 stale `/api/videos/` URLs rewritten to R2; schedules regenerated for all 89 channels for 2026-09-27.
 - **Roku dropped from roadmap** (no native YouTube).
-- **Low-memory optimization for Fire TV Stick / Amazon Silk** (Live TV + TV Guide):
+- **Fire TV / Silk memory-leak fix on channel switch** (Feb 28)
+  - Root cause: the YouTube player `useEffect` in `LiveTV.jsx` did `if (!videoId || isUploadedVideo) return;` — an **early-return without destroying the previous player**. Every YT → non-YT channel switch orphaned the previous iframe + its `postMessage` window listeners, which is exactly what surfaced as "memory warning after switching a few channels" in Silk on Fire TV Stick.
+  - Fix: extracted `destroyPlayer()` helper (pause → stop → destroy → wipe `#youtube-player.innerHTML`) and call it (a) in the early-return path, (b) at the start of every new player creation, and (c) in the effect's cleanup so it always fires on channel change or LiveTV unmount.
+  - Same pattern applied defensively to the primary Vimeo player (new `destroyVimeoPlayer` helper) and to the commercial YT / Vimeo player cleanups (they now also clear their container `innerHTML` so orphaned iframes can't linger).
+  - Uploaded-video `<video>` element cleanup now issues `pause() + removeAttribute('src') + load()` on every channel/video switch — the browser-standard incantation to release the hardware decoder + demuxer buffer. Same teardown wired into the proxy-video path.
+  - Verified via headless Chrome: switched through 5 channels; total DOM `iframe` count never exceeded 1 and total `<video>` count never exceeded 1 (was previously growing unboundedly on Silk).
+- **Low-memory optimization for Fire TV Stick / Amazon Silk** (Feb 2026 — earlier)
   1. **Full player teardown on unmount / channel switch**
      - New master unmount effect in `LiveTV.jsx` destroys YouTube, Vimeo, commercial YT, and commercial Vimeo player instances, pauses + `removeAttribute('src')` + `.load()` on every `<video>` element (main, proxy, commercial), and clears every OSD/channel-input timeout.
      - Added `key={video_id-or-url}` on the uploaded, proxy, and commercial-MP4 `<video>` tags so React fully unmounts/remounts the element between videos — the browser then reliably releases the previous media buffer instead of holding both in memory on constrained devices.
