@@ -169,7 +169,7 @@ const Layout = ({ children }) => {
                   className="bg-primary hover:bg-primary-hover text-white font-medium px-6"
                   data-testid="login-btn"
                 >
-                  Sign In
+                  Admin
                 </Button>
               </div>
             )}
