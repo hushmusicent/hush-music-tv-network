@@ -39,5 +39,48 @@ def main():
     else:
         print("\nNothing to do - all patches already applied.")
 
+
+PATCHES.append(("video normalize cfr",
+    """        # If already H.264, just remux with faststart
+        if video_codec in ('h264', 'hevc', 'h265'):
+            logger.info("Video is H.264/HEVC - remuxing with faststart")
+            result = subprocess.run(
+                ['ffmpeg', '-y', '-i', input_path, '-c', 'copy', '-movflags', '+faststart', output_path],
+                capture_output=True, timeout=600
+            )""",
+    """        # Check for VFR and resolution issues that cause freeze/desync
+        needs_reencode = False
+        try:
+            probe2 = subprocess.run(
+                ['ffprobe', '-v', 'error', '-select_streams', 'v:0',
+                 '-show_entries', 'stream=avg_frame_rate,r_frame_rate,height',
+                 '-of', 'csv=p=0', input_path],
+                capture_output=True, text=True, timeout=30
+            )
+            parts = probe2.stdout.strip().split(',')
+            if len(parts) >= 3:
+                afr, rfr, h = parts[0], parts[1], parts[2]
+                # VFR detection: avg != real frame rate
+                if afr != rfr:
+                    logger.info(f"VFR detected ({afr} vs {rfr}) - will normalize")
+                    needs_reencode = True
+                try:
+                    if int(h) > 1080:
+                        logger.info(f"Resolution {h}p > 1080p - will downscale")
+                        needs_reencode = True
+                except ValueError:
+                    pass
+        except Exception as e:
+            logger.warning(f"VFR check failed: {e}")
+
+        # If already H.264 and no issues, just remux with faststart
+        if video_codec in ('h264', 'hevc', 'h265') and not needs_reencode:
+            logger.info("Video is H.264/HEVC - remuxing with faststart")
+            result = subprocess.run(
+                ['ffmpeg', '-y', '-i', input_path, '-c', 'copy', '-movflags', '+faststart', output_path],
+                capture_output=True, timeout=600
+            )"""
+))
+
 if __name__ == "__main__":
     main()
