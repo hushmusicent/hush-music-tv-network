@@ -124,8 +124,8 @@ const VideoPlayer = ({ videos = [], channelName = '', isLive = true, startIndex 
   }
 
   // Build video URL for uploaded videos
-  const uploadedVideoUrl = currentVideo.video_url 
-    ? `${BACKEND_URL}${currentVideo.video_url}`
+  const uploadedVideoUrl = currentVideo.video_url
+    ? (currentVideo.video_url.startsWith('http') ? currentVideo.video_url : `${BACKEND_URL}${currentVideo.video_url}`)
     : null;
 
   // YouTube embed URL with autoplay, loop, and live seek position

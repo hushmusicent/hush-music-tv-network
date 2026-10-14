@@ -76,6 +76,9 @@ function App() {
                   <Route path="/bulk-thumbnails" element={<BulkThumbnails />} />
                   <Route path="/youtube-settings" element={<YouTubeSettings />} />
                   <Route path="/commercials" element={<Commercials />} />
+                  <Route path="/guide" element={<Schedule />} />
+                  <Route path="/library" element={<Browse />} />
+                  <Route path="/admin" element={<Dashboard />} />
                 </Routes>
               </Layout>
             }

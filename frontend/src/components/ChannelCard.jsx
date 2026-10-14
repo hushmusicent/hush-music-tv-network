@@ -177,7 +177,7 @@ const ChannelCard = ({ channel, onDelete, showMenu = false }) => {
             </span>
             <span className="flex items-center gap-1">
               <Radio size={12} />
-              {channel.videos?.length || 0} videos
+              {channel.videos_count ?? channel.videos?.length ?? 0} videos
             </span>
           </div>
         </div>
