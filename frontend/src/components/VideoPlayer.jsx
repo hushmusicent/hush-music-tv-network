@@ -45,15 +45,28 @@ const VideoPlayer = ({ videos = [], channelName = '', isLive = true, startIndex 
     }
   }, [isPlaying, isMuted, isUploadedVideo]);
 
+  // Don't skip on playback errors - log and stay on current video
+  const handleVideoError = useCallback(() => {
+    const v = videoRef.current;
+    console.error('Video playback error, holding on current video:', v?.currentSrc, v?.error);
+  }, []);
+
   // Auto-advance to next video
   const handleVideoEnd = useCallback(() => {
+    const v = videoRef.current;
+    // Only auto-advance if the video actually played a meaningful amount.
+    // Guards against premature 'ended' from bad metadata or load errors.
+    if (v && v.duration && v.currentTime < Math.max(5, v.duration * 0.9)) {
+      console.warn('Video ended prematurely, not advancing:', v.currentSrc);
+      return;
+    }
     if (videos.length > 1) {
       setCurrentIndex((prev) => (prev + 1) % videos.length);
       setCurrentSeekTime(0);
-    } else if (videoRef.current) {
+    } else if (v) {
       // Loop single video
-      videoRef.current.currentTime = 0;
-      videoRef.current.play().catch(() => {});
+      v.currentTime = 0;
+      v.play().catch(() => {});
     }
   }, [videos.length]);
 
@@ -151,6 +164,7 @@ const VideoPlayer = ({ videos = [], channelName = '', isLive = true, startIndex 
           autoPlay={isPlaying}
           muted={isMuted}
           onEnded={handleVideoEnd}
+           onError={handleVideoError}
           playsInline
           data-testid="uploaded-video-element"
         />
