@@ -82,5 +82,27 @@ PATCHES.append(("video normalize cfr",
             )"""
 ))
 
+
+PATCHES.append(("video safe encode settings",
+    """            result = subprocess.run(
+                ['ffmpeg', '-y', '-i', input_path,
+                 '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
+                 '-c:a', 'aac', '-b:a', '128k',
+                 '-movflags', '+faststart', output_path],
+                capture_output=True, timeout=1800  # 30 min for large files
+            )""",
+    """            result = subprocess.run(
+                ['ffmpeg', '-y', '-i', input_path,
+                 '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
+                 '-profile:v', 'high', '-level', '4.0',
+                 '-vsync', 'cfr', '-async', '1',
+                 '-g', '60', '-keyint_min', '30',
+                 '-vf', "scale='min(1920,iw)':-2",
+                 '-c:a', 'aac', '-b:a', '128k',
+                 '-movflags', '+faststart', output_path],
+                capture_output=True, timeout=1800  # 30 min for large files
+            )"""
+))
+
 if __name__ == "__main__":
     main()
