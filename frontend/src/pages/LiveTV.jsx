@@ -2232,7 +2232,7 @@ const LiveTV = () => {
 
           {/* Now Playing OSD - Responsive */}
           {currentChannel && currentVideo && (
-            <div className={`${isFullscreen ? 'fixed' : 'absolute'} ${isMobile ? 'top-12 right-2 max-w-[200px] p-2' : 'top-4 right-4 max-w-sm p-3'} bg-black/70 backdrop-blur-sm rounded-lg z-40 transition-opacity duration-300 ${controlsVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`} data-testid="now-playing-osd">
+            <div className={`${isFullscreen ? 'fixed' : 'absolute'} ${isMobile ? 'top-12 right-2 max-w-[200px] p-2' : 'top-4 right-4 max-w-sm p-3'} bg-black/70 backdrop-blur-sm rounded-lg overflow-hidden z-40 transition-opacity duration-300 ${controlsVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`} data-testid="now-playing-osd">
               <div className="flex items-center gap-2 mb-1 md:mb-2">
                 {isPaused ? (
                   <>
@@ -2262,7 +2262,7 @@ const LiveTV = () => {
               <p className={`font-medium ${isMobile ? 'text-xs' : 'text-sm'}`}>{currentChannel.name}</p>
               <p className={`${isMobile ? 'text-[10px]' : 'text-xs'} text-gray-400 truncate mt-1`}>{currentVideo.title}</p>
               {currentVideo.duration && !isCurrentChannelLiveStream && (
-                <p className={`${isMobile ? 'text-[10px]' : 'text-xs'} text-gray-500 mt-1`}>
+                <p className={`${isMobile ? 'text-[10px]' : 'text-xs'} text-gray-500 mt-1 truncate`}>
                   Duration: {Math.floor(currentVideo.duration / 60)}:{(currentVideo.duration % 60).toString().padStart(2, '0')}
                 </p>
               )}
