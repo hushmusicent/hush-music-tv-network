@@ -29,12 +29,6 @@ const Home = () => {
 
   const loadData = async () => {
     try {
-      // Seed data first
-      try {
-        await seedAPI.seed();
-      } catch (e) {
-        // Already seeded, ignore
-      }
 
       const [channelsRes, categoriesRes] = await Promise.all([
         channelsAPI.getFeatured(),
