@@ -22,17 +22,38 @@ let _resolvedAt = 0;
 let _resolvedData = null;
 let _paused = false; // When true, no new background fetches are fired.
 
+// Retry config for backend outages (e.g. nightly maintenance window)
+const MAX_RETRIES = 20;
+const RETRY_BASE_MS = 15000; // 15s, backs off; covers ~15min outage
+
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+async function fetchWithRetry(url, attempt = 0) {
+  try {
+    const res = await axios.get(url, { timeout: FETCH_TIMEOUT_MS });
+    return res.data;
+  } catch (err) {
+    if (attempt >= MAX_RETRIES) throw err;
+    const delay = Math.min(RETRY_BASE_MS * Math.pow(1.5, attempt), 300000);
+    console.warn(`Schedule fetch failed (attempt ${attempt + 1}), retrying in ${Math.round(delay/1000)}s...`);
+    await sleep(delay);
+    return fetchWithRetry(url, attempt + 1);
+  }
+}
+
 function fireFetch() {
   // Suppress prefetch while a heavy consumer (e.g. Live TV playback) is
   // active. The next getPrefetchedLiveSchedule() will still be honored, but
   // we won't spend memory/network on speculative fetches in the background.
   if (_paused) return null;
   const url = `${BACKEND_URL}/api/schedule/live`;
-  _promise = axios.get(url, { timeout: FETCH_TIMEOUT_MS })
-    .then((res) => {
-      _resolvedData = res.data;
+  _promise = fetchWithRetry(url)
+    .then((data) => {
+      _resolvedData = data;
       _resolvedAt = Date.now();
-      return res.data;
+      return data;
     })
     .catch((err) => {
       // Drop the promise so callers will trigger a fresh fetch
