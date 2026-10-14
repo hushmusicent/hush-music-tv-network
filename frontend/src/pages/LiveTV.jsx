@@ -2011,9 +2011,10 @@ const LiveTV = () => {
                     autoPlay
                     muted={isMuted}
                     playsInline
+                    preload="auto"
                     onLoadedData={(e) => { try { e.target.volume = 0.6; } catch (_) {} }}
                     onEnded={handleCommercialEnded}
-                    onError={handleCommercialEnded}
+                    onError={(e) => { console.error('Commercial playback error, holding:', cc?.url, e.target?.error); }}
                   />
                 );
               })()}
