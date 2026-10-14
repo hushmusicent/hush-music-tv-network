@@ -2011,7 +2011,7 @@ const LiveTV = () => {
                     autoPlay
                     muted={isMuted}
                     playsInline
-                    preload="auto"
+                    preload="metadata"
                     onLoadedData={(e) => { try { e.target.volume = 0.6; } catch (_) {} }}
                     onEnded={handleCommercialEnded}
                     onError={(e) => { console.error('Commercial playback error, holding:', cc?.url, e.target?.error); }}
@@ -2177,7 +2177,7 @@ const LiveTV = () => {
                   return s > 0 ? `${base}#t=${s}` : base;
                 })()}
                 className="w-full h-full object-contain"
-                preload="auto"
+                preload="metadata"
                 autoPlay
                 muted={isMuted}
                 playsInline
