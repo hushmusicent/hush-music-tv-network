@@ -451,7 +451,30 @@ const LiveTV = () => {
     return () => clearInterval(trackInterval);
   }, [currentChannel]);
 
-  const loadChannelsAndPlaylists = async () => {
+  // Midnight rollover: the schedule is loaded once on mount and never
+  // refreshed, so a TV left open (or a browser tab restored by the TV)
+  // keeps playing the day it was opened on — at midnight the clock wraps
+  // to 00:00 of that SAME old schedule, i.e. the same shows, every night.
+  // Every 30s, if Eastern today no longer matches the loaded schedule's
+  // date, reload the schedules and stay on the channel being watched.
+  const reloadingForRolloverRef = useRef(false);
+  useEffect(() => {
+    if (!scheduleDate) return;
+    const rolloverInterval = setInterval(() => {
+      if (reloadingForRolloverRef.current) return;
+      const todayEastern = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+      if (todayEastern !== scheduleDate) {
+        reloadingForRolloverRef.current = true;
+        invalidateLiveSchedule();
+        loadChannelsAndPlaylists(currentChannel?.id).finally(() => {
+          reloadingForRolloverRef.current = false;
+        });
+      }
+    }, 30000);
+    return () => clearInterval(rolloverInterval);
+  }, [scheduleDate, currentChannel?.id]);
+
+  const loadChannelsAndPlaylists = async (preserveChannelId) => {
     try {
       setLoading(true);
       setLoadError(null);
@@ -517,11 +540,14 @@ const LiveTV = () => {
       setChannels(channelList);
       
       // Respect ?channel=<id> query param (e.g. coming from TV Guide page).
+      // A midnight-rollover reload passes preserveChannelId so the viewer
+      // stays on the channel they were watching instead of jumping to #1.
       // Fallback to first channel if param is missing or invalid.
       if (channelList.length > 0) {
         const params = new URLSearchParams(window.location.search);
         const wantedId = params.get('channel');
-        const target = wantedId ? channelList.find((c) => c.id === wantedId) : null;
+        const preserved = preserveChannelId ? channelList.find((c) => c.id === preserveChannelId) : null;
+        const target = preserved || (wantedId ? channelList.find((c) => c.id === wantedId) : null);
         selectChannel(target || channelList[0], playlistMap, scheduleMap, Date.now());
       }
     } catch (error) {
@@ -1155,17 +1181,29 @@ const LiveTV = () => {
     const newFailedIds = new Set(failedVideoIds);
     if (currentVideo?.youtube_id) newFailedIds.add(currentVideo.youtube_id);
     
-    // For scheduled channels, use schedule
+    // For scheduled channels, use schedule. Advance to the NEXT slot after
+    // the failed one — the old code took playableSlots[0], i.e. the day's
+    // FIRST video (00:00), so every failed video in the evening bounced
+    // the viewer back to the morning's videos: the "same few videos" loop.
     if (schedule && schedule.length > 0) {
-      const playableSlots = schedule.filter(v => !newFailedIds.has(v.youtube_id));
-      if (playableSlots.length === 0) {
+      const currentSlotIndex = schedule.findIndex(v => v.video_id === currentVideo?.video_id);
+      let nextSlotIndex = currentSlotIndex + 1;
+      while (nextSlotIndex < schedule.length && newFailedIds.has(schedule[nextSlotIndex].youtube_id)) {
+        nextSlotIndex++;
+      }
+      if (nextSlotIndex >= schedule.length) {
+        nextSlotIndex = 0;
+        while (nextSlotIndex < schedule.length && newFailedIds.has(schedule[nextSlotIndex].youtube_id)) {
+          nextSlotIndex++;
+        }
+      }
+      if (nextSlotIndex >= schedule.length) {
         toast.error('No playable videos on this channel');
         return;
       }
-      const nextVideo = playableSlots[0];
-      const actualIndex = schedule.findIndex(v => v.video_id === nextVideo.video_id);
+      const nextVideo = schedule[nextSlotIndex];
       console.log('[SCHEDULED] Skipping to:', nextVideo.title);
-      setCurrentVideoIndex(actualIndex);
+      setCurrentVideoIndex(nextSlotIndex);
       setCurrentVideo(nextVideo);
       setSeekTime(0);
       return;
